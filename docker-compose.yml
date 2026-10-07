@@ -1,0 +1,15 @@
+services:
+  gm-agent:
+    build: .
+    image: ghcr.io/tommyhgunz14/saygmagent:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    ports:
+      - "8787:8787"
+    volumes:
+      - gm-data:/data
+
+volumes:
+  gm-data:

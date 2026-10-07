@@ -1,0 +1,16 @@
+{
+  "name": "saygm-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GM Agent — a personal agent on top of the SayGM gateway with Ditto memory, pluggable engines (OpenCode / Claude Agent SDK) and its own web UI.",
+  "scripts": {
+    "setup": "npm --prefix server ci && npm --prefix web ci",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "build": "npm --prefix web run build && npm --prefix server run build",
+    "start": "node --env-file-if-exists=.env server/dist/index.js",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix web run typecheck"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
