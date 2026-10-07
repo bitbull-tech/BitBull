@@ -16,7 +16,7 @@ OpenCode-vs-Agent-SDK proposal.
 
 ## Quick start (local)
 
-Requires Node 22+.
+Requires Node 22.13+ (uses Node's built-in SQLite, so nothing needs compiling).
 
 ```bash
 git clone https://github.com/tommyhgunz14/SayGMAgent.git

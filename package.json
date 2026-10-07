@@ -11,6 +11,6 @@
     "typecheck": "npm --prefix server run typecheck && npm --prefix web run typecheck"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   }
 }

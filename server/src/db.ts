@@ -1,10 +1,10 @@
-import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { paths, type EngineId } from "./config.js";
 
-export const db = new Database(paths.db);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+// Node's built-in SQLite: no native module to compile, works on Windows/macOS/Linux as-is.
+export const db = new DatabaseSync(paths.db);
+db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS sessions (
@@ -52,10 +52,10 @@ export interface MessageRow {
 
 export const sessions = {
   list(): SessionRow[] {
-    return db.prepare("SELECT * FROM sessions ORDER BY updated_at DESC").all() as SessionRow[];
+    return db.prepare("SELECT * FROM sessions ORDER BY updated_at DESC").all() as unknown as SessionRow[];
   },
   get(id: string): SessionRow | undefined {
-    return db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as SessionRow | undefined;
+    return db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as SessionRow | undefined;
   },
   create(input: { title?: string; engine: EngineId; model: string }): SessionRow {
     const now = Date.now();
@@ -70,7 +70,7 @@ export const sessions = {
     };
     db.prepare(
       "INSERT INTO sessions (id,title,engine,model,engine_session_id,created_at,updated_at) VALUES (@id,@title,@engine,@model,@engine_session_id,@created_at,@updated_at)",
-    ).run(row);
+    ).run({ ...row });
     return row;
   },
   update(id: string, patch: Partial<Pick<SessionRow, "title" | "model" | "engine_session_id">>) {
@@ -79,7 +79,7 @@ export const sessions = {
     const next = { ...cur, ...patch, updated_at: Date.now() };
     db.prepare(
       "UPDATE sessions SET title=@title, model=@model, engine_session_id=@engine_session_id, updated_at=@updated_at WHERE id=@id",
-    ).run(next);
+    ).run({ id: next.id, title: next.title, model: next.model, engine_session_id: next.engine_session_id, updated_at: next.updated_at });
     return next;
   },
   delete(id: string) {
@@ -91,13 +91,13 @@ export const messages = {
   list(sessionId: string): MessageRow[] {
     return db
       .prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC")
-      .all(sessionId) as MessageRow[];
+      .all(sessionId) as unknown as MessageRow[];
   },
   add(m: Omit<MessageRow, "id" | "created_at">): MessageRow {
     const row: MessageRow = { ...m, id: randomUUID(), created_at: Date.now() };
     db.prepare(
       "INSERT INTO messages (id,session_id,role,content,model,tools_json,usage_json,created_at) VALUES (@id,@session_id,@role,@content,@model,@tools_json,@usage_json,@created_at)",
-    ).run(row);
+    ).run({ ...row });
     return row;
   },
 };
