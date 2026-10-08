@@ -43,12 +43,18 @@ function providerFor(m: { api?: ModelApi; family: ModelInfo["family"] }) {
 }
 
 function buildConfig(models: ModelInfo[]) {
-  type Entry = { name: string; limit?: { context: number; output: number } };
+  type Entry = {
+    name: string;
+    limit?: { context: number; output: number };
+    cost?: { input: number; output: number; cache_read?: number };
+  };
   const byProvider: Record<string, Record<string, Entry>> = {};
   for (const m of models) {
     const entry: Entry = {
       name: m.name,
       ...(m.contextLength ? { limit: { context: m.contextLength, output: Math.min(32000, m.contextLength) } } : {}),
+      // Live SayGM prices ($/Mtok) so OpenCode's own cost tracking is right
+      ...(m.price ? { cost: { input: m.price.input, output: m.price.output, ...(m.price.cacheRead ? { cache_read: m.price.cacheRead } : {}) } } : {}),
     };
     (byProvider[providerFor(m)] ??= {})[m.id] = entry;
   }
@@ -215,7 +221,13 @@ export const opencodeEngine: AgentEngine = {
           const m = p.info;
           if (m?.role === "user") userMsgs.add(m.id);
           if (m?.role === "assistant") {
-            usage = { inputTokens: m.tokens?.input, outputTokens: m.tokens?.output, costUsd: m.cost };
+            // Count cached prompt tokens too, otherwise cached turns show "2 in"
+            const t = m.tokens ?? {};
+            usage = {
+              inputTokens: (t.input ?? 0) + (t.cache?.read ?? 0) + (t.cache?.write ?? 0),
+              outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
+              costUsd: m.cost,
+            };
             if (m.error) out.push({ type: "error", message: m.error.data?.message ?? m.error.name ?? "Model error" });
           }
           break;

@@ -33,6 +33,43 @@ export interface Model {
   id: string
   name: string
   family: 'anthropic' | 'openai' | 'google' | 'open' | 'other'
+  api: 'anthropic' | 'responses' | 'google' | 'chat'
+  provider?: string
+  tier?: string
+  confidential?: boolean
+  vision?: boolean
+  tools?: boolean
+  contextLength?: number
+  price?: { input: number; output: number; cacheRead?: number }
+  retail?: { input: number; output: number }
+  savingsPct?: number
+}
+
+export interface SettingRow {
+  env: string
+  label: string
+  value: string
+  secret?: boolean
+  isDefault: boolean
+  hint?: string
+}
+export interface SettingGroup {
+  id: string
+  title: string
+  rows: SettingRow[]
+}
+export interface Status {
+  saygm: { ok: boolean; models?: number; ms?: number; error?: string }
+  ditto: { ok: boolean; tools?: number; error?: string }
+  skills: { name: string; description: string }[]
+  workspace: string
+  systemPromptFound: boolean
+  node: string
+}
+export interface Uploaded {
+  name: string
+  path: string
+  size: number
 }
 
 export interface AppConfig {
@@ -53,6 +90,9 @@ export type AgentEvent =
 const TOKEN_KEY = 'gm-agent-token'
 export const getToken = () => {
   try { return localStorage.getItem(TOKEN_KEY) ?? '' } catch { return '' }
+}
+export const clearToken = () => {
+  try { localStorage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
 }
 export const setToken = (t: string) => {
   try { localStorage.setItem(TOKEN_KEY, t) } catch { /* ignore */ }
@@ -84,12 +124,24 @@ export const api = {
   skills: () => req<{ skills: { name: string; description: string }[] }>('/api/skills'),
   syncSkills: () => req<{ skills: { name: string }[] }>('/api/skills/sync', { method: 'POST' }),
 
+  settings: () => req<{ groups: SettingGroup[] }>('/api/settings'),
+  status: () => req<Status>('/api/status'),
+  refreshModels: () => req<{ models: Model[] }>('/api/models/refresh', { method: 'POST' }),
+  async upload(id: string, files: File[]): Promise<Uploaded[]> {
+    const fd = new FormData()
+    for (const f of files) fd.append('file', f)
+    const res = await fetch(`/api/sessions/${id}/files`, { method: 'POST', headers: { authorization: `Bearer ${getToken()}` }, body: fd })
+    if (res.status === 401) throw new Unauthorized('unauthorized')
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Upload failed (${res.status})`)
+    return (await res.json()).files
+  },
+
   /** POST + read the SSE stream manually (EventSource can't POST). */
-  async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void) {
+  async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void, attachments: string[] = []) {
     const res = await fetch(`/api/sessions/${id}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ message, model }),
+      body: JSON.stringify({ message, model, attachments }),
     })
     if (res.status === 401) throw new Unauthorized('unauthorized')
     if (!res.ok || !res.body) throw new Error(`${res.status} ${await res.text()}`)

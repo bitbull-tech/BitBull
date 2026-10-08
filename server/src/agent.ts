@@ -5,6 +5,7 @@ import { archiveTurn } from "./ditto.js";
 import { claudeEngine } from "./engines/claude.js";
 import { opencodeEngine } from "./engines/opencode.js";
 import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
+import { estimateCost } from "./models.js";
 
 export const engines: Record<EngineId, AgentEngine> = {
   opencode: opencodeEngine,
@@ -38,6 +39,7 @@ export async function* runTurn(
   session: SessionRow,
   prompt: string,
   model: string,
+  attachments: string[] = [],
 ): AsyncGenerator<AgentEvent & { messageId?: string }> {
   if (running.has(session.id)) {
     yield { type: "error", message: "This session is already running a turn." };
@@ -48,7 +50,19 @@ export async function* runTurn(
   running.set(session.id, ctrl);
 
   const isFirst = messages.list(session.id).length === 0;
-  messages.add({ session_id: session.id, role: "user", content: prompt, model, tools_json: null, usage_json: null });
+  // Attachments live in the workspace; tell the agent where, and keep a record in history.
+  const files = attachments.filter((a) => /^uploads\/[\w.\- /]+$/.test(a) && !a.includes(".."));
+  const attachNote = files.length
+    ? `\n\nAttached files (in your workspace, read them with your tools):\n${files.map((f) => `- ${f}`).join("\n")}`
+    : "";
+  messages.add({
+    session_id: session.id,
+    role: "user",
+    content: prompt,
+    model,
+    tools_json: files.length ? JSON.stringify({ attachments: files }) : null,
+    usage_json: null,
+  });
   if (isFirst) sessions.update(session.id, { title: titleFrom(prompt) });
   if (model !== session.model) sessions.update(session.id, { model });
 
@@ -61,7 +75,7 @@ export async function* runTurn(
     for await (const ev of engine.run({
       engineSessionId,
       model,
-      prompt,
+      prompt: prompt + attachNote,
       systemPrompt: systemPrompt(),
       signal: ctrl.signal,
     })) {
@@ -79,6 +93,11 @@ export async function* runTurn(
     yield { type: "error", message: err instanceof Error ? err.message : String(err) };
   } finally {
     running.delete(session.id);
+  }
+
+  // Engines don't know SayGM's prices; estimate from the live price list.
+  if (usage && !usage.costUsd && (usage.inputTokens || usage.outputTokens)) {
+    usage = { ...usage, costUsd: await estimateCost(model, usage.inputTokens, usage.outputTokens) };
   }
 
   if (engineSessionId && engineSessionId !== session.engine_session_id) {

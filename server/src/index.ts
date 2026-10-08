@@ -1,18 +1,19 @@
 import { timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { assertConfig, config, type EngineId } from "./config.js";
+import { assertConfig, config, paths, type EngineId } from "./config.js";
 import "./log.js";
 import { abortRun, engines, isRunning, runTurn } from "./agent.js";
 import { messages, sessions } from "./db.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
-import { listModels } from "./models.js";
+import { listModels, publicModels } from "./models.js";
+import { describeSettings, status } from "./settings.js";
 import { listSkills, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -47,13 +48,18 @@ app.get("/api/config", async (c) =>
   }),
 );
 
-app.get("/api/models", async (c) => c.json({ models: await listModels(c.req.query("refresh") === "1") }));
+app.get("/api/models", async (c) => c.json({ models: await publicModels(c.req.query("refresh") === "1") }));
 
 app.post("/api/models/refresh", async (c) => {
-  const models = await listModels(true);
+  await listModels(true);
   await reloadOpencode();
-  return c.json({ models });
+  return c.json({ models: await publicModels() });
 });
+
+/** Effective configuration (secrets masked) for the Settings panel. */
+app.get("/api/settings", (c) => c.json({ groups: describeSettings() }));
+/** Live connection checks that cost no model tokens. */
+app.get("/api/status", async (c) => c.json(await status()));
 
 app.get("/api/skills", (c) => c.json({ skills: listSkills() }));
 app.post("/api/skills/sync", async (c) => c.json({ skills: await syncSkills() }));
@@ -142,7 +148,37 @@ app.post("/api/sessions/:id/abort", (c) => {
   return c.json({ ok: true });
 });
 
-const SendSchema = z.object({ message: z.string().min(1), model: z.string().optional() });
+const MAX_UPLOAD = 25 * 1024 * 1024;
+const safeName = (n: string) => n.replace(/[^\w.\- ]+/g, "_").replace(/^\.+/, "").slice(0, 120) || "file";
+
+/** Upload files into the agent's workspace so any engine/model can read them with its tools. */
+app.post("/api/sessions/:id/files", async (c) => {
+  const s = sessions.get(c.req.param("id"));
+  if (!s) return c.json({ error: "not found" }, 404);
+  const body = await c.req.parseBody({ all: true });
+  const files = ([] as unknown[]).concat(body["file"] ?? []).filter((f): f is File => f instanceof File);
+  if (!files.length) return c.json({ error: "no files" }, 400);
+  const rel = path.join("uploads", s.id.slice(0, 8));
+  const dir = path.join(paths.workspace, rel);
+  mkdirSync(dir, { recursive: true });
+  const saved: Array<{ name: string; path: string; size: number }> = [];
+  for (const f of files) {
+    if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over 25 MB` }, 413);
+    let name = safeName(f.name);
+    for (let i = 1; existsSync(path.join(dir, name)); i++) name = safeName(f.name).replace(/(\.[^.]*)?$/, `-${i}$1`);
+    writeFileSync(path.join(dir, name), Buffer.from(await f.arrayBuffer()));
+    saved.push({ name: f.name, path: path.posix.join("uploads", s.id.slice(0, 8), name), size: f.size });
+  }
+  console.log(`[upload] ${saved.length} file(s) -> ${rel}`);
+  return c.json({ files: saved });
+});
+
+const SendSchema = z.object({
+  message: z.string().min(1),
+  model: z.string().optional(),
+  /** Workspace-relative paths returned by the upload endpoint */
+  attachments: z.array(z.string()).max(20).optional(),
+});
 
 /** Streaming turn (Server-Sent Events). Used by the web UI. */
 app.post("/api/sessions/:id/messages", async (c) => {
@@ -150,7 +186,7 @@ app.post("/api/sessions/:id/messages", async (c) => {
   if (!s) return c.json({ error: "not found" }, 404);
   const body = SendSchema.parse(await c.req.json());
   return streamSSE(c, async (stream) => {
-    for await (const ev of runTurn(s, body.message, body.model ?? s.model)) {
+    for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments)) {
       await stream.writeSSE({ event: ev.type, data: JSON.stringify(ev) });
     }
   });
@@ -174,7 +210,7 @@ app.post("/api/v1/chat", async (c) => {
   const tools: string[] = [];
   const errors: string[] = [];
   let usage: unknown;
-  for await (const ev of runTurn(s, body.message, body.model ?? s.model)) {
+  for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments)) {
     if (ev.type === "text") text += ev.delta;
     if (ev.type === "tool_start") tools.push(ev.name);
     if (ev.type === "error") errors.push(ev.message);
