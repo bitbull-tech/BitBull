@@ -45,7 +45,7 @@ export async function dittoCall(name: string, args: Record<string, unknown>) {
     return await c.callTool({ name, arguments: args });
   } catch (err) {
     client = null; // force reconnect next time
-    console.error(`[ditto] ${name} failed:`, err instanceof Error ? err.message : err);
+    console.error(`[ditto] ${name} failed:`, err instanceof Error ? `${err.name}: ${err.message}` : err);
     return null;
   }
 }
@@ -97,5 +97,23 @@ export async function listDittoTools(): Promise<string[]> {
   } catch {
     client = null;
     return [];
+  }
+}
+
+/** Fresh connection attempt that reports the real error (used by /api/debug). */
+export async function probeDitto() {
+  if (!dittoEnabled()) return { enabled: false };
+  try {
+    const c = new Client({ name: "saygm-agent-probe", version: "0.1.0" });
+    const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), {
+      requestInit: { headers: dittoMcpHeaders() },
+    });
+    await c.connect(transport);
+    const { tools } = await c.listTools();
+    await c.close();
+    return { enabled: true, ok: true, tools: tools.map((t) => t.name) };
+  } catch (e) {
+    const err = e as Error & { code?: unknown; cause?: unknown };
+    return { enabled: true, ok: false, error: `${err.name}: ${err.message}`, code: err.code, cause: String(err.cause ?? "") };
   }
 }

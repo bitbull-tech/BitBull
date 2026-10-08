@@ -1,8 +1,9 @@
+import { createServer } from "node:net";
 import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
 import { config, paths, ROOT } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
-import { listModels, type ModelInfo } from "../models.js";
+import { listModels, type ModelApi, type ModelInfo } from "../models.js";
 import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
 
 /**
@@ -13,8 +14,13 @@ import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
  * same regardless of model.
  */
 
-const PROVIDER_OPENAI = "saygm";
-const PROVIDER_ANTHROPIC = "saygm-anthropic";
+/** One OpenCode provider per SayGM API shape, so every model speaks its native protocol. */
+const PROVIDERS: Record<ModelApi, { id: string; npm: string; name: string; baseURL: () => string }> = {
+  anthropic: { id: "saygm-anthropic", npm: "@ai-sdk/anthropic", name: "SayGM · Anthropic", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1` },
+  responses: { id: "saygm-openai", npm: "@ai-sdk/openai", name: "SayGM · OpenAI", baseURL: () => config.saygm.openaiBaseUrl },
+  google: { id: "saygm-google", npm: "@ai-sdk/google", name: "SayGM · Google", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1beta` },
+  chat: { id: "saygm", npm: "@ai-sdk/openai-compatible", name: "SayGM", baseURL: () => config.saygm.openaiBaseUrl },
+};
 
 // Make the bundled `opencode` binary resolvable and keep its state in DATA_DIR.
 process.env.PATH = `${path.join(ROOT, "server", "node_modules", ".bin")}${path.delimiter}${process.env.PATH ?? ""}`;
@@ -30,44 +36,38 @@ let starting: Promise<Running> | null = null;
 const listeners = new Map<string, Set<Listener>>();
 let activeRuns = 0;
 
-function providerFor(m: { family: ModelInfo["family"] }) {
-  return config.agent.opencodeClaudeNative && m.family === "anthropic" ? PROVIDER_ANTHROPIC : PROVIDER_OPENAI;
+function providerFor(m: { api?: ModelApi; family: ModelInfo["family"] }) {
+  let api: ModelApi = m.api ?? "chat";
+  if (api === "anthropic" && !config.agent.opencodeClaudeNative) api = "chat";
+  return PROVIDERS[api].id;
 }
 
 function buildConfig(models: ModelInfo[]) {
-  const openaiModels: Record<string, { name: string; limit?: { context: number; output: number } }> = {};
-  const anthropicModels: typeof openaiModels = {};
+  type Entry = { name: string; limit?: { context: number; output: number } };
+  const byProvider: Record<string, Record<string, Entry>> = {};
   for (const m of models) {
-    const entry = {
+    const entry: Entry = {
       name: m.name,
       ...(m.contextLength ? { limit: { context: m.contextLength, output: Math.min(32000, m.contextLength) } } : {}),
     };
-    (providerFor(m) === PROVIDER_ANTHROPIC ? anthropicModels : openaiModels)[m.id] = entry;
+    (byProvider[providerFor(m)] ??= {})[m.id] = entry;
   }
   const allow = config.agent.permissionMode === "bypassPermissions";
-  const def = models.find((m) => m.id === config.agent.defaultModel) ?? models[0];
-  const small = models.find((m) => m.id === config.agent.smallModel) ?? def;
+  const def = models.find((m) => m.id === config.agent.defaultModel) ?? models.find((m) => m.api === "anthropic") ?? models[0];
+  const small = models.find((m) => m.id === config.agent.smallModel) ?? models.find((m) => /haiku|mini|flash/i.test(m.id)) ?? def;
+  const provider: Record<string, unknown> = {};
+  for (const p of Object.values(PROVIDERS)) {
+    if (!byProvider[p.id]) continue;
+    provider[p.id] = { npm: p.npm, name: p.name, options: { baseURL: p.baseURL(), apiKey: config.saygm.apiKey }, models: byProvider[p.id] };
+  }
   return {
     $schema: "https://opencode.ai/config.json",
     autoupdate: false,
     share: "disabled" as const,
     model: def ? `${providerFor(def)}/${def.id}` : undefined,
     small_model: small ? `${providerFor(small)}/${small.id}` : undefined,
-    enabled_providers: [PROVIDER_OPENAI, PROVIDER_ANTHROPIC],
-    provider: {
-      [PROVIDER_OPENAI]: {
-        npm: "@ai-sdk/openai-compatible",
-        name: "SayGM",
-        options: { baseURL: config.saygm.openaiBaseUrl, apiKey: config.saygm.apiKey },
-        models: openaiModels,
-      },
-      [PROVIDER_ANTHROPIC]: {
-        npm: "@ai-sdk/anthropic",
-        name: "SayGM (Anthropic)",
-        options: { baseURL: `${config.saygm.anthropicBaseUrl}/v1`, apiKey: config.saygm.apiKey },
-        models: anthropicModels,
-      },
-    },
+    enabled_providers: Object.keys(provider),
+    provider,
     mcp: config.ditto.apiKey
       ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
       : {},
@@ -78,6 +78,20 @@ function buildConfig(models: ModelInfo[]) {
       external_directory: "deny",
     },
   };
+}
+
+/** A free localhost port, so a leftover OpenCode from a previous run can never block startup. */
+function freePort(preferred: number): Promise<number> {
+  const tryPort = (port: number) =>
+    new Promise<number>((resolve, reject) => {
+      const srv = createServer();
+      srv.once("error", reject);
+      srv.listen(port, "127.0.0.1", () => {
+        const p = (srv.address() as { port: number }).port;
+        srv.close(() => resolve(p));
+      });
+    });
+  return tryPort(preferred).catch(() => tryPort(0));
 }
 
 async function start(force = false): Promise<Running> {
@@ -91,7 +105,7 @@ async function start(force = false): Promise<Running> {
     const models = await listModels(force);
     const { client, server: srv } = await createOpencode({
       hostname: "127.0.0.1",
-      port: config.agent.opencodePort,
+      port: await freePort(config.agent.opencodePort),
       timeout: 30000,
       config: buildConfig(models) as any,
     });
@@ -164,7 +178,7 @@ export const opencodeEngine: AgentEngine = {
       s = await start(true); // new model appeared on SayGM — reload provider config
     }
     const models = await listModels();
-    const info = models.find((m) => m.id === input.model) ?? { family: "other" as const };
+    const info = models.find((m) => m.id === input.model) ?? { family: "other" as const, api: "chat" as const };
     const dir = { directory: paths.workspace };
 
     let sessionId = input.engineSessionId;
@@ -182,7 +196,14 @@ export const opencodeEngine: AgentEngine = {
     const toolsStarted = new Set<string>();
     let usage: Usage = {};
 
+    let lastTextPart: string | null = null;
     const emitText = (partID: string, kind: string, delta: string) => {
+      if (!delta) return;
+      if (kind !== "reasoning") {
+        // Separate consecutive text blocks (e.g. before and after a tool call)
+        if (lastTextPart && lastTextPart !== partID) out.push({ type: "text", delta: "\n\n" });
+        lastTextPart = partID;
+      }
       emitted.set(partID, (emitted.get(partID) ?? 0) + delta.length);
       out.push(kind === "reasoning" ? { type: "thinking", delta } : { type: "text", delta });
     };
@@ -222,6 +243,14 @@ export const opencodeEngine: AgentEngine = {
             }
             if (st.status === "completed") out.push({ type: "tool_end", id: part.callID, output: String(st.output).slice(0, 4000) });
             if (st.status === "error") out.push({ type: "tool_end", id: part.callID, output: st.error, isError: true });
+          }
+          break;
+        }
+        case "session.status": {
+          const st = p.status;
+          if (st?.type === "retry") {
+            out.push({ type: "error", message: `Model call failed, OpenCode retrying (attempt ${st.attempt}): ${st.message}` });
+            if (st.attempt >= 2) void s.client.session.abort({ path: { id: sid }, query: dir });
           }
           break;
         }
@@ -271,6 +300,9 @@ export const opencodeEngine: AgentEngine = {
 export async function reloadOpencode() {
   if (activeRuns === 0) await start(true);
 }
+
+// Don't leave an orphaned `opencode serve` behind when this process exits (tsx watch restarts, Ctrl+C).
+process.once("exit", () => server?.close());
 
 export function stopOpencode() {
   server?.close();

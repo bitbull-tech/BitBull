@@ -58,7 +58,9 @@ export default function App() {
       setAuthed(e instanceof Unauthorized ? false : true)
     }
   }, [])
-  useEffect(() => void boot(), [boot])
+  useEffect(() => {
+    void boot()
+  }, [boot])
 
   if (authed === null) return <div className="center muted">Loading…</div>
   if (!authed || !cfg) return <Login onDone={boot} />
@@ -248,7 +250,11 @@ function Chat({
     })
   }, [session.id, guard])
 
-  useEffect(() => endRef.current?.scrollIntoView({ block: 'end' }), [msgs])
+  useEffect(() => {
+    // Block body on purpose: newer Chromium returns a Promise from scrollIntoView,
+    // and React would treat a returned value as a cleanup function.
+    endRef.current?.scrollIntoView({ block: 'end' })
+  }, [msgs])
 
   const patchLast = (fn: (m: ViewMessage) => ViewMessage) =>
     setMsgs((all) => [...all.slice(0, -1), fn(all[all.length - 1])])

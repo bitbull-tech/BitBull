@@ -7,9 +7,10 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { assertConfig, config, type EngineId } from "./config.js";
+import "./log.js";
 import { abortRun, engines, isRunning, runTurn } from "./agent.js";
 import { messages, sessions } from "./db.js";
-import { dittoEnabled, listDittoTools } from "./ditto.js";
+import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels } from "./models.js";
 import { listSkills, syncSkills } from "./skills.js";
@@ -56,6 +57,49 @@ app.post("/api/models/refresh", async (c) => {
 
 app.get("/api/skills", (c) => c.json({ skills: listSkills() }));
 app.post("/api/skills/sync", async (c) => c.json({ skills: await syncSkills() }));
+/** Connectivity self-test: what works, what doesn't, and the exact error. */
+app.get("/api/debug", async (c) => {
+  const auth = { Authorization: `Bearer ${config.saygm.apiKey}`, "content-type": "application/json" };
+  const probe = async (name: string, url: string, body?: unknown, headers: Record<string, string> = auth) => {
+    try {
+      const res = await fetch(url, { method: body ? "POST" : "GET", headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
+      const text = await res.text();
+      return { name, status: res.status, body: text.slice(0, 400) };
+    } catch (e) {
+      return { name, error: e instanceof Error ? `${e.name}: ${e.message} ${(e as any).cause ?? ""}` : String(e) };
+    }
+  };
+  const tool = { type: "function", function: { name: "noop", description: "noop", parameters: { type: "object", properties: {} } } };
+  const results = await Promise.all([
+    probe("saygm models", `${config.saygm.openaiBaseUrl}/models`),
+    probe("saygm chat+tools gpt-5.5", `${config.saygm.openaiBaseUrl}/chat/completions`, { model: "gpt-5.5", messages: [{ role: "user", content: "say ok" }], tools: [tool], max_completion_tokens: 50 }),
+    probe("saygm responses+tools gpt-5.5", `${config.saygm.openaiBaseUrl}/responses`, { model: "gpt-5.5", input: "say ok", reasoning: { effort: "low" }, tools: [{ type: "function", name: "noop", parameters: { type: "object", properties: {} } }], max_output_tokens: 50 }),
+    probe("saygm anthropic messages", `${config.saygm.anthropicBaseUrl}/v1/messages`, { model: "claude-haiku-4-5", max_tokens: 20, messages: [{ role: "user", content: "say ok" }] }, { "x-api-key": config.saygm.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" }),
+  ]);
+  const gem = { contents: [{ role: "user", parts: [{ text: "say ok" }] }] };
+  const gk = { "x-goog-api-key": config.saygm.apiKey, "content-type": "application/json" };
+  const root = config.saygm.anthropicBaseUrl;
+  results.push(
+    ...(await Promise.all([
+      probe("gemini v1beta x-goog", `${root}/v1beta/models/gemini-3.5-flash:generateContent`, gem, gk),
+      probe("gemini v1 x-goog", `${root}/v1/models/gemini-3.5-flash:generateContent`, gem, gk),
+      probe("gemini v1beta bearer", `${root}/v1beta/models/gemini-3.5-flash:generateContent`, gem),
+      probe("gemini chat.completions", `${config.saygm.openaiBaseUrl}/chat/completions`, { model: "gemini-3.5-flash", messages: [{ role: "user", content: "say ok" }] }),
+    ])),
+  );
+  const ditto = await probeDitto();
+  const dittoInit = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "probe", version: "1" } } };
+  const dh = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+  (ditto as any).variants = await Promise.all([
+    probe("ditto bearer", config.ditto.mcpUrl, dittoInit, { ...dh, Authorization: `Bearer ${config.ditto.apiKey}` }),
+    probe("ditto x-api-key", config.ditto.mcpUrl, dittoInit, { ...dh, "x-api-key": config.ditto.apiKey }),
+    probe("ditto router models", "https://router.heyditto.ai/v1/models", undefined, { Authorization: `Bearer ${config.ditto.apiKey}` }),
+  ]);
+  const out = { saygm: results, ditto };
+  console.log("[debug]", JSON.stringify(out));
+  return c.json(out);
+});
+
 app.get("/api/ditto/tools", async (c) => c.json({ tools: await listDittoTools() }));
 
 // ---------- sessions ----------

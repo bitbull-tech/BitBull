@@ -2,6 +2,7 @@ import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent
 import { config, paths } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
 import type { AgentEngine, AgentEvent, RunInput } from "./types.js";
+import { listModels } from "../models.js";
 
 /**
  * Host env minus any Anthropic/Claude credentials, so a logged-in Claude Code
@@ -28,6 +29,12 @@ export const claudeEngine: AgentEngine = {
   label: "Claude Agent SDK",
 
   async *run(input: RunInput): AsyncIterable<AgentEvent> {
+    const m = (await listModels()).find((x) => x.id === input.model);
+    if (m && m.api !== "anthropic") {
+      yield { type: "error", message: `${input.model} isn't served on SayGM's Anthropic API, so the Claude Agent SDK engine can't use it. Start an OpenCode chat for this model.` };
+      yield { type: "done", engineSessionId: input.engineSessionId ?? "" };
+      return;
+    }
     const abort = new AbortController();
     input.signal.addEventListener("abort", () => abort.abort(), { once: true });
 
