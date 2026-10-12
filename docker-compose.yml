@@ -1,15 +1,86 @@
+# GM Agent in a sandbox.
+#   docker compose up -d --build     → UI + API on http://localhost:8787
+#   docker compose logs -f gm-agent  → server output (also in data/logs/server.log)
+#   docker compose logs -f egress    → every outbound request, allowed or refused
+#
+# The agent's shell, files and tools run inside gm-agent as an unprivileged user.
+# It can read and write only the data folder (mounted at /data). Its network is
+# internal: no internet and no route to your home network or Windows. The only way
+# out is the egress proxy, which allows just the domains in egress/allowlist.txt.
+#
+#   browser ──127.0.0.1:8787──▶ gateway ──▶ gm-agent ──▶ egress ──allowlist──▶ internet
+#                                           (sandbox network, internal)
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  init: true
+  restart: unless-stopped
+
 services:
   gm-agent:
+    <<: *hardening
     build: .
-    image: ghcr.io/tommyhgunz14/saygmagent:latest
-    restart: unless-stopped
+    image: saygmagent:local
+    container_name: gm-agent
     env_file: .env
     environment:
       DATA_DIR: /data
-    ports:
-      - "8787:8787"
+      HOST: 0.0.0.0
+      # Bind mounts on Docker Desktop don't support SQLite's WAL shared memory reliably
+      SQLITE_JOURNAL: DELETE
+      # All outbound traffic via the allowlist proxy (Node, OpenCode, curl, git, npm, pip)
+      HTTP_PROXY: http://egress:3128
+      HTTPS_PROXY: http://egress:3128
+      http_proxy: http://egress:3128
+      https_proxy: http://egress:3128
+      NO_PROXY: localhost,127.0.0.1,::1
+      no_proxy: localhost,127.0.0.1,::1
+      NODE_USE_ENV_PROXY: "1"
     volumes:
-      - gm-data:/data
+      - ${GM_DATA_DIR:-./data}:/data
+    networks: [sandbox]
+    depends_on: [egress]
+    tmpfs:
+      - /tmp:size=1g
+    pids_limit: 512
+    mem_limit: ${GM_MEMORY:-6g}
+    cpus: ${GM_CPUS:-4}
 
-volumes:
-  gm-data:
+  egress:
+    <<: *hardening
+    build: ./egress
+    image: saygmagent-egress:local
+    container_name: gm-egress
+    volumes:
+      - ./egress/allowlist.txt:/etc/squid/allowlist.txt:ro
+    tmpfs:
+      - /tmp
+      - /var/spool/squid
+      - /var/log/squid
+      - /run
+    networks: [sandbox, outside]
+    pids_limit: 128
+    mem_limit: 256m
+
+  gateway:
+    <<: *hardening
+    build: ./egress
+    image: saygmagent-egress:local
+    container_name: gm-gateway
+    command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:gm-agent:8787"]
+    # Only reachable from this computer. Put a reverse proxy with HTTPS in front to expose it.
+    ports:
+      - "127.0.0.1:${GM_PORT:-8787}:8787"
+    networks: [sandbox, outside]
+    depends_on: [egress, gm-agent]
+    pids_limit: 128
+    mem_limit: 128m
+
+networks:
+  # No internet, no host, no LAN: containers here can only talk to each other
+  sandbox:
+    internal: true
+  outside: {}

@@ -9,12 +9,13 @@ import { z } from "zod";
 import { assertConfig, config, paths, type EngineId } from "./config.js";
 import "./log.js";
 import { abortRun, engines, isRunning, runTurn } from "./agent.js";
-import { messages, sessions } from "./db.js";
+import { messages, projects, sessions, workspaceFor } from "./db.js";
+import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
 import { describeSettings, status } from "./settings.js";
-import { listSkills, syncSkills } from "./skills.js";
+import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
 
@@ -108,6 +109,53 @@ app.get("/api/debug", async (c) => {
 
 app.get("/api/ditto/tools", async (c) => c.json({ tools: await listDittoTools() }));
 
+// ---------- projects ----------
+const ProjectSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  description: z.string().max(2000).optional(),
+  instructions: z.string().max(20000).optional(),
+  color: z.string().max(20).optional(),
+  integrations: z.array(z.enum(["atlas", "four04"])).optional(),
+});
+const projectOut = (p: ReturnType<typeof projects.get>) =>
+  p && { ...p, integrations: projects.integrations(p), workspace: workspaceFor(p) };
+
+app.get("/api/projects", (c) => c.json({ projects: projects.list().map(projectOut) }));
+
+app.post("/api/projects", async (c) => {
+  const body = ProjectSchema.parse(await c.req.json());
+  const p = projects.create(body);
+  mirrorSkillsInto(workspaceFor(p));
+  console.log(`[projects] created "${p.name}" -> ${p.dir}`);
+  return c.json({ project: projectOut(p) }, 201);
+});
+
+app.patch("/api/projects/:id", async (c) => {
+  const body = ProjectSchema.partial().parse(await c.req.json());
+  const p = projects.update(c.req.param("id"), body);
+  return p ? c.json({ project: projectOut(p) }) : c.json({ error: "not found" }, 404);
+});
+
+/** Deletes the project record only: its chats become unfiled and its workspace folder stays on disk. */
+app.delete("/api/projects/:id", (c) => {
+  projects.delete(c.req.param("id"));
+  return c.json({ ok: true });
+});
+
+// ---------- integrations ----------
+app.get("/api/integrations", async (c) =>
+  c.json({
+    integrations: integrations().map(({ mcp, env, ...rest }) => ({
+      ...rest,
+      hasMcp: !!mcp,
+      env: env.map((e) => ({ key: e.key, label: e.label, set: !!e.value, value: e.secret ? (e.value ? `${e.value.slice(0, 4)}…${e.value.slice(-4)}` : "") : e.value })),
+    })),
+    atlasWorkflows: atlasWorkflows(),
+    likenessPolicy: config.heritage.likenessPolicy,
+  }),
+);
+app.get("/api/integrations/status", async (c) => c.json({ integrations: await probeIntegrations() }));
+
 // ---------- sessions ----------
 const EngineSchema = z.string().refine((e) => e in engines, { message: "unknown engine" });
 
@@ -115,12 +163,18 @@ app.get("/api/sessions", (c) => c.json({ sessions: sessions.list() }));
 
 app.post("/api/sessions", async (c) => {
   const body = z
-    .object({ engine: EngineSchema.optional(), model: z.string().optional(), title: z.string().optional() })
+    .object({
+      engine: EngineSchema.optional(),
+      model: z.string().optional(),
+      title: z.string().optional(),
+      projectId: z.string().nullable().optional(),
+    })
     .parse(await c.req.json().catch(() => ({})));
   const s = sessions.create({
     engine: (body.engine ?? config.agent.defaultEngine) as EngineId,
     model: body.model ?? config.agent.defaultModel,
     title: body.title,
+    projectId: body.projectId && projects.get(body.projectId) ? body.projectId : null,
   });
   return c.json({ session: s }, 201);
 });
@@ -132,9 +186,20 @@ app.get("/api/sessions/:id", (c) => {
 });
 
 app.patch("/api/sessions/:id", async (c) => {
-  const body = z.object({ title: z.string().min(1).optional() }).parse(await c.req.json());
-  const s = sessions.update(c.req.param("id"), body);
-  return s ? c.json({ session: s }) : c.json({ error: "not found" }, 404);
+  const body = z
+    .object({ title: z.string().min(1).optional(), projectId: z.string().nullable().optional() })
+    .parse(await c.req.json());
+  const cur = sessions.get(c.req.param("id"));
+  if (!cur) return c.json({ error: "not found" }, 404);
+  const patch: Parameters<typeof sessions.update>[1] = {};
+  if (body.title) patch.title = body.title;
+  if (body.projectId !== undefined && body.projectId !== cur.project_id) {
+    if (body.projectId && !projects.get(body.projectId)) return c.json({ error: "unknown project" }, 400);
+    patch.project_id = body.projectId;
+    // New workspace = new engine session; the next turn replays history as context
+    patch.engine_session_id = null;
+  }
+  return c.json({ session: sessions.update(cur.id, patch) });
 });
 
 app.delete("/api/sessions/:id", (c) => {
@@ -159,7 +224,7 @@ app.post("/api/sessions/:id/files", async (c) => {
   const files = ([] as unknown[]).concat(body["file"] ?? []).filter((f): f is File => f instanceof File);
   if (!files.length) return c.json({ error: "no files" }, 400);
   const rel = path.join("uploads", s.id.slice(0, 8));
-  const dir = path.join(paths.workspace, rel);
+  const dir = path.join(workspaceFor(projects.get(s.project_id)), rel);
   mkdirSync(dir, { recursive: true });
   const saved: Array<{ name: string; path: string; size: number }> = [];
   for (const f of files) {
@@ -178,6 +243,8 @@ const SendSchema = z.object({
   model: z.string().optional(),
   /** Workspace-relative paths returned by the upload endpoint */
   attachments: z.array(z.string()).max(20).optional(),
+  /** Read-only planning turn */
+  plan: z.boolean().optional(),
 });
 
 /** Streaming turn (Server-Sent Events). Used by the web UI. */
@@ -186,7 +253,7 @@ app.post("/api/sessions/:id/messages", async (c) => {
   if (!s) return c.json({ error: "not found" }, 404);
   const body = SendSchema.parse(await c.req.json());
   return streamSSE(c, async (stream) => {
-    for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments)) {
+    for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments, { plan: body.plan })) {
       await stream.writeSSE({ event: ev.type, data: JSON.stringify(ev) });
     }
   });
@@ -197,20 +264,23 @@ app.post("/api/sessions/:id/messages", async (c) => {
  * curl -H "Authorization: Bearer $APP_TOKEN" -d '{"message":"hi"}' https://host/api/v1/chat
  */
 app.post("/api/v1/chat", async (c) => {
-  const body = SendSchema.extend({ sessionId: z.string().optional(), engine: EngineSchema.optional() }).parse(
-    await c.req.json(),
-  );
+  const body = SendSchema.extend({
+    sessionId: z.string().optional(),
+    engine: EngineSchema.optional(),
+    projectId: z.string().optional(),
+  }).parse(await c.req.json());
   const s =
     (body.sessionId && sessions.get(body.sessionId)) ||
     sessions.create({
       engine: (body.engine ?? config.agent.defaultEngine) as EngineId,
       model: body.model ?? config.agent.defaultModel,
+      projectId: body.projectId && projects.get(body.projectId) ? body.projectId : null,
     });
   let text = "";
   const tools: string[] = [];
   const errors: string[] = [];
   let usage: unknown;
-  for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments)) {
+  for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments, { plan: body.plan })) {
     if (ev.type === "text") text += ev.delta;
     if (ev.type === "tool_start") tools.push(ev.name);
     if (ev.type === "error") errors.push(ev.message);

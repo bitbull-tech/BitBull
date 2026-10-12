@@ -1,5 +1,14 @@
 # GM Agent — architecture & engine proposal
 
+> Visual version with diagrams: **GM Platform Blueprint** (claude.ai artifact, Oct 2026).
+
+## End goal
+
+A system for building custom historical and hereditary experiences (cinematic shorts,
+documentary sequences, playable scenes) from people's own photos, film and documents,
+combining SayGM models, Atlas / 404.xyz media generation, agentic coding assistance and
+Ditto memory, under the grounding rule from the WW2 Heritage Framework decision record.
+
 ## Goals
 
 1. A personal agent that sits on **SayGM** (one key, 60+ models, switch any time).
@@ -113,3 +122,52 @@ tested against a local mock of SayGM (both OpenAI and Anthropic shapes). First r
   If it wants `Authorization: Bearer`, set `SAYGM_ANTHROPIC_AUTH=bearer`; if the path
   differs, change `SAYGM_ANTHROPIC_BASE_URL`.
 - Ditto tool names (`save_memory`, `search_memories`, …) match Ditto's current MCP server.
+
+## Projects (Oct 2026)
+
+- A **project** groups chats, files and instructions. Each project has its own workspace
+  folder (`DATA_DIR/projects/<slug>-<id>`), instructions injected into every turn, a colour,
+  and a list of enabled integrations.
+- Engines run with `cwd` = the project workspace. OpenCode events are subscribed per
+  directory; the Agent SDK gets `cwd` directly.
+- Moving a chat between projects resets the engine session; the next turn replays the
+  conversation from local history ("recap"), so nothing is lost.
+- Ditto archives are tagged `project:<name>`.
+
+## Integrations harness
+
+`server/src/integrations.ts` is a registry: each entry declares its env vars, an optional
+MCP endpoint and a live probe. Projects opt in; engines receive only the enabled MCPs
+(OpenCode registers all and disables the rest per prompt with `tools: {"<id>_*": false}`).
+
+| Env | Purpose |
+|---|---|
+| `ATLAS_API_KEY`, `ATLAS_MCP_URL` | Atlas MCP (alpha): projects, platform agent, exported APIs |
+| `ATLAS_WORKFLOWS_DIR` | Exported workflow specs, run by `tools/atlas-run.mjs` (upload → execute_async → poll → download) |
+| `FOUR04_API_BASE`, `FOUR04_API_KEY`, `FOUR04_MCP_URL` | Reserved for 404.xyz; no public API yet (plugins only) |
+| `HERITAGE_LIKENESS_POLICY` | `ground-only` (default) or `private-likeness`, injected into every turn |
+| `ENABLE_WEB_SEARCH`, `ENABLE_LSP` | OpenCode websearch (Exa) and experimental LSP tool |
+
+## Coding parity with Claude Code
+
+Engine-provided: read/write/edit/apply_patch/glob/grep, bash, subagents (`task`), todo list,
+webfetch/websearch, AGENTS.md/CLAUDE.md, compaction. Added in this pass: plan mode
+(read-only `gm-plan` agent / Agent SDK plan mode), todo checklist in the UI, ten skills
+(`coding-workflow`, `git-workflow`, `verify-changes`, `code-review`, `debug-systematically`,
+`repo-onboarding`, `project-recall`, `archive-ingest`, `heritage-experience`, `atlas-studio`).
+Gaps: per-action approvals (the `question` tool is disabled because nothing can answer it),
+diff/undo UI over OpenCode snapshots, slash commands and hooks, images passed as vision
+parts, adding arbitrary MCP servers from the UI.
+
+## Open decisions and risks
+
+1. **Likeness**: animating real people's photos conflicts with Rev 3's "reconstruct the
+   ground, never the man". Default is ground-only; private-likeness is opt-in.
+2. **Grounding is prompt-level today**; Rev 3 requires it in code. Next: a binding checker over
+   `experience/beats.json` and final captions, run server-side.
+3. **No sandbox**: bypassPermissions runs shell on the host. Containerise per project before
+   other users.
+4. **Privacy**: full-turn Ditto archiving includes data about living relatives; add a
+   per-project archive switch.
+5. **Atlas runner** needs one real exported spec to confirm field names.
+6. **Spend caps** for Atlas credits; **object storage** for media; **C2PA** labels.

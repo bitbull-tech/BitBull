@@ -6,8 +6,49 @@ export interface Session {
   engine: EngineId
   model: string
   engine_session_id: string | null
+  project_id: string | null
   created_at: number
   updated_at: number
+}
+
+export type IntegrationId = 'atlas' | 'four04'
+
+export interface Project {
+  id: string
+  name: string
+  description: string
+  instructions: string
+  color: string
+  integrations: IntegrationId[]
+  workspace: string
+  created_at: number
+  updated_at: number
+}
+
+export interface ProjectInput {
+  name: string
+  description?: string
+  instructions?: string
+  color?: string
+  integrations?: IntegrationId[]
+}
+
+export interface IntegrationInfo {
+  id: IntegrationId
+  name: string
+  blurb: string
+  docs: string
+  notes?: string
+  configured: boolean
+  hasMcp: boolean
+  env: { key: string; label: string; set: boolean; value: string }[]
+}
+export interface IntegrationStatus {
+  id: IntegrationId
+  ok: boolean
+  configured: boolean
+  detail: string
+  tools?: string[]
 }
 
 export interface ToolCall {
@@ -63,6 +104,7 @@ export interface Status {
   ditto: { ok: boolean; tools?: number; error?: string }
   skills: { name: string; description: string }[]
   workspace: string
+  sandbox?: { kind: string; shell: boolean; egress?: 'allowlist' | 'open' }
   systemPromptFound: boolean
   node: string
 }
@@ -115,8 +157,18 @@ export const api = {
   models: (refresh = false) => req<{ models: Model[] }>(`/api/models${refresh ? '?refresh=1' : ''}`),
   sessions: () => req<{ sessions: Session[] }>('/api/sessions'),
   session: (id: string) => req<{ session: Session; messages: Message[]; running: boolean }>(`/api/sessions/${id}`),
-  createSession: (engine: EngineId, model: string) =>
-    req<{ session: Session }>('/api/sessions', { method: 'POST', body: JSON.stringify({ engine, model }) }),
+  createSession: (engine: EngineId, model: string, projectId?: string | null) =>
+    req<{ session: Session }>('/api/sessions', { method: 'POST', body: JSON.stringify({ engine, model, projectId }) }),
+  moveSession: (id: string, projectId: string | null) =>
+    req<{ session: Session }>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ projectId }) }),
+  projects: () => req<{ projects: Project[] }>('/api/projects'),
+  createProject: (p: ProjectInput) => req<{ project: Project }>('/api/projects', { method: 'POST', body: JSON.stringify(p) }),
+  updateProject: (id: string, p: Partial<ProjectInput>) =>
+    req<{ project: Project }>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(p) }),
+  deleteProject: (id: string) => req(`/api/projects/${id}`, { method: 'DELETE' }),
+  integrations: () =>
+    req<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[]; likenessPolicy: string }>('/api/integrations'),
+  integrationStatus: () => req<{ integrations: IntegrationStatus[] }>('/api/integrations/status'),
   deleteSession: (id: string) => req(`/api/sessions/${id}`, { method: 'DELETE' }),
   renameSession: (id: string, title: string) =>
     req(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
@@ -137,11 +189,11 @@ export const api = {
   },
 
   /** POST + read the SSE stream manually (EventSource can't POST). */
-  async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void, attachments: string[] = []) {
+  async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void, attachments: string[] = [], plan = false) {
     const res = await fetch(`/api/sessions/${id}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ message, model, attachments }),
+      body: JSON.stringify({ message, model, attachments, plan }),
     })
     if (res.status === 401) throw new Unauthorized('unauthorized')
     if (!res.ok || !res.body) throw new Error(`${res.status} ${await res.text()}`)

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Session, type ToolCall, type Uploaded } from './api'
-import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconSend, IconStop, IconTool, IconX } from './icons'
+import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
+import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
 
 interface ViewMessage {
   id: string
@@ -15,6 +15,7 @@ interface ViewMessage {
   usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number }
   error?: string
   streaming?: boolean
+  plan?: boolean
 }
 
 function toView(m: Message): ViewMessage {
@@ -38,6 +39,13 @@ function toView(m: Message): ViewMessage {
   return { id: m.id, role: m.role, content: m.content, model: m.model, tools, attachments, usage }
 }
 
+const PROJECT_SUGGESTIONS = [
+  { title: 'Catalogue my uploads', text: 'Use the archive-ingest skill: catalogue everything in uploads/, extract what each item says with evidence, and list conflicts and questions for me.' },
+  { title: 'Plan a cinematic', text: 'Using the catalogue, propose a 90-second cinematic: beats, which shots use original images and which are reconstructions, and the grounding bindings for every line.' },
+  { title: 'Set up a codebase', text: 'Clone a repository into this project and onboard it: map the code, run the build and tests, and write AGENTS.md. Ask me for the URL.' },
+  { title: 'Catch me up', text: 'Catch me up on this project from memory and from the files in the workspace: where it stands and what is still open.' },
+]
+
 const SUGGESTIONS = [
   { title: 'Catch me up', text: 'Catch me up on my most recent projects from memory: where each one stands and what is still open.' },
   { title: 'Plan my day', text: 'Help me plan today. Ask me what is on my plate, then turn it into a prioritised schedule.' },
@@ -47,6 +55,7 @@ const SUGGESTIONS = [
 
 export function Chat({
   session,
+  project,
   cfg,
   model,
   modelInfo,
@@ -55,6 +64,7 @@ export function Chat({
   onTurnDone,
 }: {
   session: Session | null
+  project: Project | null
   cfg: AppConfig
   model: string
   modelInfo?: Model
@@ -69,6 +79,7 @@ export function Chat({
   const [pending, setPending] = useState<File[]>([])
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [plan, setPlan] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -161,9 +172,9 @@ export function Chat({
     setMsgs((all) => [
       ...all,
       { id: `u-${Date.now()}`, role: 'user', content: text, tools: [], attachments: paths },
-      { id: `a-${Date.now()}`, role: 'assistant', content: '', tools: [], model, streaming: true },
+      { id: `a-${Date.now()}`, role: 'assistant', content: '', tools: [], model, streaming: true, plan },
     ])
-    await guard(api.send(s.id, text, model, onEvent, paths))
+    await guard(api.send(s.id, text, model, onEvent, paths, plan))
     patchLast((m) => ({ ...m, streaming: false }))
     setBusy(false)
     onTurnDone()
@@ -199,13 +210,15 @@ export function Chat({
       >
         {empty ? (
           <div className="hero">
-            <div className="hero-mark">GM</div>
-            <h1>What are we working on?</h1>
+            <div className={`hero-mark ${project ? `pc-${project.color}` : ''}`}>{project ? project.name.slice(0, 2).toUpperCase() : 'GM'}</div>
+            <h1>{project ? project.name : 'What are we working on?'}</h1>
             <p>
-              Any SayGM model, one conversation. Memory lives in Ditto, so context follows you from model to model.
+              {project
+                ? project.description || 'Chats, files and instructions for this project live together. Attach photos, film and documents to get started.'
+                : 'Any SayGM model, one conversation. Memory lives in Ditto, so context follows you from model to model.'}
             </p>
             <div className="suggest">
-              {SUGGESTIONS.map((s) => (
+              {(project ? PROJECT_SUGGESTIONS : SUGGESTIONS).map((s) => (
                 <button
                   key={s.title}
                   className="suggest-card"
@@ -275,7 +288,7 @@ export function Chat({
                 void send()
               }
             }}
-            placeholder={`Message ${modelInfo?.name ?? model}…`}
+            placeholder={plan ? 'Describe what you want planned (read-only: nothing will be changed)…' : `Message ${modelInfo?.name ?? model}…`}
             rows={1}
           />
           <div className="composer-bar">
@@ -283,6 +296,14 @@ export function Chat({
               <IconClip />
             </button>
             <input ref={fileRef} type="file" multiple hidden onChange={(e) => (addFiles(e.target.files), (e.target.value = ''))} />
+            <button
+              type="button"
+              className={`toggle ${plan ? 'on' : ''}`}
+              onClick={() => setPlan((p) => !p)}
+              title="Plan mode: the agent investigates and proposes a plan without changing anything"
+            >
+              <IconPlan size={14} /> Plan
+            </button>
             {!session ? (
               <div className="seg mini" title="Engine for this chat">
                 {cfg.engines.map((en) => (
@@ -367,6 +388,7 @@ function MessageView({ m }: { m: ViewMessage }) {
       <div className="msg-body">
         <div className="msg-meta">
           <span className="model-chip">{m.model}</span>
+          {m.plan && <span className="tag plan-tag"><IconPlan size={11} /> Plan</span>}
           {m.streaming && <span className="typing"><i /><i /><i /></span>}
         </div>
         {m.thinking && (
@@ -377,6 +399,7 @@ function MessageView({ m }: { m: ViewMessage }) {
             <pre>{m.thinking}</pre>
           </details>
         )}
+        {todosOf(m.tools) && <TodoList todos={todosOf(m.tools)!} />}
         {m.tools.length > 0 && (
           <details className="fold tools" open={m.streaming}>
             <summary>
@@ -443,4 +466,35 @@ function toolArg(input: unknown) {
   const v = o.queries ?? o.query ?? o.filePath ?? o.file_path ?? o.path ?? o.command ?? o.pattern ?? o.url ?? o.content
   const s = Array.isArray(v) ? v.join(', ') : typeof v === 'string' ? v : ''
   return s.length > 70 ? s.slice(0, 67) + '…' : s
+}
+
+type Todo = { content: string; status: string; activeForm?: string }
+
+/** Latest todo list the agent wrote this turn (OpenCode todowrite / Claude TodoWrite). */
+function todosOf(tools: ToolCall[]): Todo[] | null {
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const t = tools[i]
+    if (!/^todo_?write$/i.test(t.name)) continue
+    const todos = (t.input as { todos?: Todo[] } | undefined)?.todos
+    if (Array.isArray(todos) && todos.length) return todos
+  }
+  return null
+}
+
+function TodoList({ todos }: { todos: Todo[] }) {
+  const done = todos.filter((t) => t.status === 'completed').length
+  return (
+    <div className="todos">
+      <div className="todos-head">
+        To-do · {done}/{todos.length}
+        <span className="todos-bar"><i style={{ width: `${(done / todos.length) * 100}%` }} /></span>
+      </div>
+      {todos.map((t, i) => (
+        <div key={i} className={`todo ${t.status}`}>
+          <span className="box">{t.status === 'completed' ? <IconCheck size={11} /> : null}</span>
+          <span>{t.status === 'in_progress' && t.activeForm ? t.activeForm : t.content}</span>
+        </div>
+      ))}
+    </div>
+  )
 }

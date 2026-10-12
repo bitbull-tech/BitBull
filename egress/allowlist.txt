@@ -1,0 +1,34 @@
+# Domains the GM Agent sandbox may reach. One per line; a leading dot also allows
+# subdomains (.saygm.com = saygm.com + api.saygm.com). Apply changes with:
+#   docker compose restart egress
+# Every domain here is somewhere a prompt-injected agent could send data, so keep it short.
+
+# Models, memory, creative services
+.saygm.com
+.heyditto.ai
+.atlas.design
+
+# OpenCode: config schema, model catalogue, web search (Exa)
+opencode.ai
+models.dev
+.exa.ai
+
+# Package registries (the agent installs project dependencies)
+registry.npmjs.org
+pypi.org
+files.pythonhosted.org
+
+# GitHub (clone, releases, raw files)
+github.com
+api.github.com
+codeload.github.com
+objects.githubusercontent.com
+raw.githubusercontent.com
+
+# Heritage research: uncomment the archives you want the agent to read
+# .nationalarchives.gov.uk
+# .cwgc.org
+# .iwm.org.uk
+# .rafmuseum.org.uk
+# .wikipedia.org
+# .wikimedia.org

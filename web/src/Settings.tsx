@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { api, type AppConfig, type SettingGroup, type Status } from './api'
+import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type Status } from './api'
 import { IconCheck, IconLogout, IconMonitor, IconMoon, IconRefresh, IconSun, IconX } from './icons'
 import type { ThemePref } from './theme'
 
-type Tab = 'status' | 'config' | 'appearance'
+type Tab = 'status' | 'integrations' | 'config' | 'appearance'
 
 export function Settings({
   cfg,
@@ -57,6 +57,7 @@ export function Settings({
           {(
             [
               ['status', 'Status'],
+              ['integrations', 'Integrations'],
               ['config', 'Configuration'],
               ['appearance', 'Appearance'],
             ] as const
@@ -86,6 +87,16 @@ export function Settings({
                   ok={status?.ditto.ok}
                   loading={!status}
                   detail={status?.ditto.ok ? `${status.ditto.tools} memory tools · archive: ${cfg.ditto.archive}` : status?.ditto.error ?? 'Not connected'}
+                />
+                <StatusCard
+                  title="Agent sandbox"
+                  ok={status ? status.sandbox?.kind !== 'none' : undefined}
+                  loading={!status}
+                  detail={
+                    status?.sandbox?.kind && status.sandbox.kind !== 'none'
+                      ? `${status.sandbox.kind} container · shell confined · internet: ${status.sandbox.egress === 'allowlist' ? 'allowlist only' : 'open'}`
+                      : 'Running on your computer · agent shell switched off. Start with docker compose to sandbox it.'
+                  }
                 />
               </div>
               <div className="row-actions">
@@ -137,10 +148,12 @@ export function Settings({
             </>
           )}
 
+          {tab === 'integrations' && <Integrations />}
+
           {tab === 'config' && (
             <>
               <p className="muted small">
-                What the server is running with right now. Change values in <code>.env</code> and restart <code>npm run dev</code>.
+                What the server is running with right now. Change values in <code>.env</code> and restart (<code>docker compose up -d</code>).
                 Secrets are masked.
               </p>
               {!groups && <p className="muted">Loading…</p>}
@@ -210,5 +223,78 @@ function StatusCard({ title, ok, loading, detail }: { title: string; ok?: boolea
       </div>
       <div className="status-detail">{loading ? 'Checking…' : detail}</div>
     </div>
+  )
+}
+
+function Integrations() {
+  const [info, setInfo] = useState<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[]; likenessPolicy: string } | null>(null)
+  const [live, setLive] = useState<IntegrationStatus[] | null>(null)
+  useEffect(() => {
+    void api.integrations().then(setInfo)
+    void api.integrationStatus().then((r) => setLive(r.integrations))
+  }, [])
+  if (!info) return <p className="muted">Loading…</p>
+  return (
+    <>
+      <p className="muted small">
+        External creative services the agent can use. Set the keys in <code>.env</code> and restart, then switch an integration on per project
+        (project settings). MCP tools only reach chats in projects that enable them.
+      </p>
+      {info.integrations.map((i) => {
+        const st = live?.find((l) => l.id === i.id)
+        return (
+          <section key={i.id} className="int-card">
+            <div className="int-head">
+              <div className={`status-card mini ${!st ? '' : st.ok ? 'ok' : i.configured ? 'bad' : ''}`}>
+                <span className="pulse" />
+              </div>
+              <div className="grow">
+                <b>{i.name}</b>
+                <div className="muted small">{i.blurb}</div>
+              </div>
+              <a className="btn" href={i.docs} target="_blank" rel="noreferrer">Docs</a>
+            </div>
+            <div className="int-status small">{st ? st.detail : 'Checking…'}</div>
+            <div className="cfg-table">
+              {i.env.map((e) => (
+                <div className="cfg-row" key={e.key}>
+                  <div className="cfg-label">{e.label}</div>
+                  <div className="cfg-val">
+                    <code>{e.set ? e.value || 'set' : '(not set)'}</code>
+                    <div className="cfg-env">{e.key}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {i.notes && <p className="muted small">{i.notes}</p>}
+            {i.id === 'atlas' && (
+              <>
+                <h3>Exported Atlas workflows</h3>
+                {info.atlasWorkflows.length ? (
+                  <ul className="skill-list">
+                    {info.atlasWorkflows.map((w) => (
+                      <li key={w.file}>
+                        <code>{w.file}</code>
+                        <span>{w.title}{w.inputs.length ? ` · inputs: ${w.inputs.join(', ')}` : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted small">None yet. In Atlas, export a workflow as an API and save its JSON into the workflows folder above.</p>
+                )}
+              </>
+            )}
+          </section>
+        )
+      })}
+      <h3>Heritage likeness policy</h3>
+      <p className="small">
+        <code>{info.likenessPolicy}</code> —{' '}
+        {info.likenessPolicy === 'private-likeness'
+          ? 'family photos may be animated in private, labelled projects with the uploader\'s confirmation.'
+          : 'real people appear only through their original images; generated video and 3D are used for the world around them.'}{' '}
+        Set <code>HERITAGE_LIKENESS_POLICY</code> in <code>.env</code>.
+      </p>
+    </>
   )
 }

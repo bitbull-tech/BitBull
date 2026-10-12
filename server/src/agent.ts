@@ -1,10 +1,11 @@
 import { readFileSync, existsSync } from "node:fs";
-import { config, type EngineId } from "./config.js";
-import { messages, sessions, type SessionRow } from "./db.js";
+import { config, shellAllowed, type EngineId } from "./config.js";
+import { messages, projects, sessions, workspaceFor, type ProjectRow, type SessionRow } from "./db.js";
 import { archiveTurn } from "./ditto.js";
 import { claudeEngine } from "./engines/claude.js";
 import { opencodeEngine } from "./engines/opencode.js";
 import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
+import { mcpServersFor, type IntegrationId } from "./integrations.js";
 import { estimateCost } from "./models.js";
 
 export const engines: Record<EngineId, AgentEngine> = {
@@ -14,8 +15,48 @@ export const engines: Record<EngineId, AgentEngine> = {
 
 const running = new Map<string, AbortController>();
 
-function systemPrompt() {
-  return existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : "";
+const LIKENESS_RULES: Record<string, string> = {
+  "ground-only":
+    "Likeness policy (ground-only): real, named people from uploads may only be shown through their original images (Ken Burns, parallax, restoration of the scan itself). Use generative image/video/3D for places, aircraft, ships, weather, crowds and period atmosphere: reconstruct the ground, never the person. Never synthesise the voice of a named individual.",
+  "private-likeness":
+    "Likeness policy (private-likeness): generative animation of a real person's photo is allowed only inside this private project, only from images the user uploaded and confirms they have rights to, and every output must be labelled as AI-generated. Never synthesise the voice of a named individual. Never invent facts about a named person: anything stated about them must come from an attached source.",
+};
+
+function systemPrompt(project?: ProjectRow | null) {
+  const parts = [existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : ""];
+  parts.push(
+    shellAllowed()
+      ? `\n## Environment\n\nYou run inside an isolated ${config.sandbox.kind} sandbox. Your shell and files are confined to it; the user's computer is not reachable.${config.sandbox.egressProxy ? " Internet access goes through an allowlist proxy: if a site or package host is refused (HTTP 403 from the proxy), tell the user which domain to add to egress/allowlist.txt instead of trying to work around it." : ""}`
+      : `\n## Environment\n\nShell commands are disabled in this environment (not sandboxed). Use file tools only, and tell the user if a task needs a shell.`,
+  );
+  parts.push(`\n## Heritage media\n\n${LIKENESS_RULES[config.heritage.likenessPolicy] ?? LIKENESS_RULES["ground-only"]}`);
+  if (project) {
+    parts.push(
+      `\n## Project: ${project.name}\n\nYour working directory is this project's workspace; keep all files for it there.` +
+        (project.description ? `\n\nAbout this project: ${project.description}` : "") +
+        (project.instructions ? `\n\nProject instructions (follow these):\n${project.instructions}` : "") +
+        `\n\nWhen saving memories about this project, include "Project: ${project.name}" in the memory text.`,
+    );
+  }
+  return parts.join("\n");
+}
+
+/**
+ * When the engine has no session to resume (first turn after moving a chat between
+ * projects, or after an engine reset), replay the conversation so far as context.
+ */
+function recap(sessionId: string, maxChars = 24000) {
+  const hist = messages.list(sessionId);
+  if (!hist.length) return "";
+  const lines: string[] = [];
+  let used = 0;
+  for (const m of [...hist].reverse()) {
+    const line = `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`;
+    if (used + line.length > maxChars) break;
+    lines.unshift(line);
+    used += line.length;
+  }
+  return `Conversation so far (restored from history):\n\n${lines.join("\n\n")}\n\n---\n\n`;
 }
 
 function titleFrom(text: string) {
@@ -40,6 +81,7 @@ export async function* runTurn(
   prompt: string,
   model: string,
   attachments: string[] = [],
+  opts: { plan?: boolean } = {},
 ): AsyncGenerator<AgentEvent & { messageId?: string }> {
   if (running.has(session.id)) {
     yield { type: "error", message: "This session is already running a turn." };
@@ -49,6 +91,11 @@ export async function* runTurn(
   const ctrl = new AbortController();
   running.set(session.id, ctrl);
 
+  const project = projects.get(session.project_id);
+  const cwd = workspaceFor(project);
+  const mcp = mcpServersFor(projects.integrations(project) as IntegrationId[]);
+  // No engine session to resume but history exists → give the model the transcript
+  const restore = !session.engine_session_id ? recap(session.id) : "";
   const isFirst = messages.list(session.id).length === 0;
   // Attachments live in the workspace; tell the agent where, and keep a record in history.
   const files = attachments.filter((a) => /^uploads\/[\w.\- /]+$/.test(a) && !a.includes(".."));
@@ -75,9 +122,12 @@ export async function* runTurn(
     for await (const ev of engine.run({
       engineSessionId,
       model,
-      prompt: prompt + attachNote,
-      systemPrompt: systemPrompt(),
+      prompt: restore + prompt + attachNote,
+      systemPrompt: systemPrompt(project),
       signal: ctrl.signal,
+      cwd,
+      mcp,
+      plan: opts.plan,
     })) {
       if (ev.type === "text") text += ev.delta;
       if (ev.type === "tool_start") tools.push({ id: ev.id, name: ev.name, input: ev.input });
@@ -122,6 +172,7 @@ export async function* runTurn(
       messageId: saved.id,
       engine: session.engine,
       model,
+      project: project?.name,
       user: prompt,
       assistant: text,
     });

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { config, paths } from "./config.js";
+import { config, paths, ROOT } from "./config.js";
+import { projects, workspaceFor } from "./db.js";
 import { backupSkill, dittoEnabled } from "./ditto.js";
 
 /**
@@ -44,13 +45,23 @@ export function listSkills(): SkillInfo[] {
     });
 }
 
-export async function syncSkills({ backup = true } = {}) {
-  const target = path.join(paths.workspace, ".claude", "skills");
+/** Copy repo skills into one workspace's .claude/skills (read by both engines). */
+export function mirrorSkillsInto(workspace: string) {
+  const target = path.join(workspace, ".claude", "skills");
   rmSync(target, { recursive: true, force: true });
   mkdirSync(target, { recursive: true });
   if (existsSync(config.skillsDir)) cpSync(config.skillsDir, target, { recursive: true });
+}
+
+// Helper scripts the skills call (e.g. tools/atlas-run.mjs) are reachable via $GM_TOOLS
+process.env.GM_TOOLS = path.join(ROOT, "tools");
+process.env.ATLAS_WORKFLOWS_DIR = config.integrations.atlas.workflowsDir;
+
+export async function syncSkills({ backup = true } = {}) {
+  const spaces = [paths.workspace, ...projects.list().map((p) => workspaceFor(p))];
+  for (const w of spaces) mirrorSkillsInto(w);
   const skills = listSkills();
-  console.log(`[skills] ${skills.length} skill(s) mirrored to workspace`);
+  console.log(`[skills] ${skills.length} skill(s) mirrored to ${spaces.length} workspace(s)`);
   if (backup && dittoEnabled()) {
     for (const s of skills) {
       await backupSkill(s.name, readFileSync(path.join(config.skillsDir, s.dir, "SKILL.md"), "utf8"), s.hash);

@@ -10,3 +10,18 @@ On every server start (and on `POST /api/skills/sync`) the folder is:
    of your long-term memory too.
 
 Git is the source of truth; Ditto is the backup/searchable copy.
+
+## What's here
+
+| Skill | Purpose |
+|---|---|
+| `coding-workflow` | Explore → plan → implement → verify loop for code changes |
+| `git-workflow` | Branching, commits, PRs, cloning into a project |
+| `verify-changes` | Find and run the project's build/test/lint, report honestly |
+| `code-review` | Verified, severity-ranked review of a diff or PR |
+| `debug-systematically` | Reproduce → hypothesise → isolate → fix → prove |
+| `repo-onboarding` | Map a repo and record it in `AGENTS.md` |
+| `project-recall` | Catch up on a project from Ditto memory |
+| `archive-ingest` | Catalogue uploaded photos/film/documents with source bindings |
+| `heritage-experience` | Build cinematic/interactive heritage experiences under the grounding + likeness rules |
+| `atlas-studio` | Generate video/images/3D via Atlas MCP and exported workflow APIs |

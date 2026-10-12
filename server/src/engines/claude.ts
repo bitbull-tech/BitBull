@@ -1,5 +1,5 @@
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { config, paths } from "../config.js";
+import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
 import type { AgentEngine, AgentEvent, RunInput } from "./types.js";
 import { listModels } from "../models.js";
@@ -45,18 +45,22 @@ export const claudeEngine: AgentEngine = {
 
     const options: Options = {
       model: input.model,
-      cwd: paths.workspace,
+      cwd: input.cwd,
       abortController: abort,
       includePartialMessages: true,
       // Loads skills from <workspace>/.claude/skills (synced from repo /skills)
       settingSources: ["project"],
       systemPrompt: { type: "preset", preset: "claude_code", append: input.systemPrompt },
-      permissionMode: config.agent.permissionMode as Options["permissionMode"],
-      allowDangerouslySkipPermissions: config.agent.permissionMode === "bypassPermissions",
+      // Plan mode = Claude Code's own read-only planning mode
+      permissionMode: (input.plan ? "plan" : shellAllowed() ? config.agent.permissionMode : "acceptEdits") as Options["permissionMode"],
+      allowDangerouslySkipPermissions: !input.plan && shellAllowed(),
+      // No sandbox: no shell. File edits stay inside the workspace (acceptEdits).
+      ...(shellAllowed() ? {} : { disallowedTools: ["Bash", "BashOutput", "KillShell"] }),
       ...(input.engineSessionId ? { resume: input.engineSessionId } : {}),
-      mcpServers: config.ditto.apiKey
-        ? { ditto: { type: "http", url: config.ditto.mcpUrl, headers: dittoMcpHeaders() } }
-        : {},
+      mcpServers: {
+        ...(config.ditto.apiKey ? { ditto: { type: "http" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders() } } : {}),
+        ...Object.fromEntries(Object.entries(input.mcp).map(([k, v]) => [k, { type: "http" as const, ...v }])),
+      },
       env: {
         ...cleanEnv(),
         ...authEnv,

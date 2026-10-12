@@ -1,8 +1,9 @@
 import { createServer } from "node:net";
 import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
-import { config, paths, ROOT } from "../config.js";
+import { config, paths, ROOT, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
+import { allIntegrationMcps, integrations } from "../integrations.js";
 import { listModels, type ModelApi, type ModelInfo } from "../models.js";
 import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
 
@@ -26,6 +27,17 @@ const PROVIDERS: Record<ModelApi, { id: string; npm: string; name: string; baseU
 process.env.PATH = `${path.join(ROOT, "server", "node_modules", ".bin")}${path.delimiter}${process.env.PATH ?? ""}`;
 process.env.XDG_DATA_HOME = paths.opencodeData;
 process.env.XDG_STATE_HOME = paths.opencodeData;
+// Optional built-in tools (read by the opencode process at startup)
+if (config.agent.webSearch) process.env.OPENCODE_ENABLE_EXA = "1";
+if (config.agent.lsp) process.env.OPENCODE_EXPERIMENTAL_LSP_TOOL = "true";
+
+/** Read-only planning agent (OpenCode's built-in "plan" agent asks for approvals, which this UI can't answer). */
+const PLAN_AGENT = "gm-plan";
+const PLAN_PROMPT = [
+  "You are in PLAN MODE. Investigate with read-only tools (read, grep, glob, webfetch, memory search) and produce a plan.",
+  "Do not edit files, write files or run commands that change anything.",
+  "Finish with: the goal as you understand it, findings, a numbered step-by-step plan with the files involved, risks, and open questions for the user.",
+].join(" ");
 
 type AnyEvent = { type: string; properties?: any };
 type Listener = (ev: AnyEvent) => void;
@@ -74,14 +86,35 @@ function buildConfig(models: ModelInfo[]) {
     small_model: small ? `${providerFor(small)}/${small.id}` : undefined,
     enabled_providers: Object.keys(provider),
     provider,
-    mcp: config.ditto.apiKey
-      ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
-      : {},
+    mcp: {
+      ...(config.ditto.apiKey
+        ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
+        : {}),
+      // Integration MCPs are registered once here and switched on/off per prompt by project
+      ...Object.fromEntries(
+        Object.entries(allIntegrationMcps()).map(([k, v]) => [k, { type: "remote" as const, url: v.url, headers: v.headers, oauth: false as const, timeout: 20000 }]),
+      ),
+    },
+    agent: {
+      [PLAN_AGENT]: {
+        description: "Read-only investigation and planning",
+        mode: "primary",
+        prompt: PLAN_PROMPT,
+        permission: { edit: "deny", bash: "deny" },
+      },
+    },
     permission: {
       edit: allow ? "allow" : "deny",
-      bash: allow ? "allow" : "deny",
+      // Shell only inside the sandbox (or when the host shell is explicitly allowed)
+      bash: shellAllowed() ? "allow" : "deny",
       webfetch: "allow",
-      external_directory: "deny",
+      // Second fence inside the sandbox: tools stay in the project workspace, plus the few shared paths skills need
+      external_directory: {
+        "*": "deny",
+        "/tmp/*": "allow",
+        [`${path.join(ROOT, "tools")}/*`]: "allow",
+        [`${config.integrations.atlas.workflowsDir}/*`]: "allow",
+      },
     },
   };
 }
@@ -117,7 +150,7 @@ async function start(force = false): Promise<Running> {
     });
     const s: Running = { client, close: () => srv.close(), models: new Set(models.map((m) => m.id)) };
     server = s;
-    void pumpEvents(s.client);
+    pumped.clear();
     console.log(`[opencode] server up at ${srv.url} with ${models.length} SayGM models`);
     return s;
   })();
@@ -128,10 +161,18 @@ async function start(force = false): Promise<Running> {
   }
 }
 
-async function pumpEvents(client: OpencodeClient) {
+/** OpenCode scopes events to a directory (= project workspace): one stream per directory in use. */
+const pumped = new Set<string>();
+function ensurePump(client: OpencodeClient, directory: string) {
+  if (pumped.has(directory)) return;
+  pumped.add(directory);
+  void pumpEvents(client, directory);
+}
+
+async function pumpEvents(client: OpencodeClient, directory: string) {
   while (server?.client === client) {
     try {
-      const events = await client.event.subscribe({ query: { directory: paths.workspace } });
+      const events = await client.event.subscribe({ query: { directory } });
       for await (const ev of events.stream as AsyncIterable<AnyEvent>) {
         const sid: string | undefined =
           ev.properties?.sessionID ?? ev.properties?.info?.sessionID ?? ev.properties?.part?.sessionID;
@@ -185,7 +226,8 @@ export const opencodeEngine: AgentEngine = {
     }
     const models = await listModels();
     const info = models.find((m) => m.id === input.model) ?? { family: "other" as const, api: "chat" as const };
-    const dir = { directory: paths.workspace };
+    const dir = { directory: input.cwd };
+    ensurePump(s.client, input.cwd);
 
     let sessionId = input.engineSessionId;
     if (!sessionId) {
@@ -292,6 +334,12 @@ export const opencodeEngine: AgentEngine = {
         body: {
           model: { providerID: providerFor(info), modelID: input.model },
           system: input.systemPrompt,
+          ...(input.plan ? { agent: PLAN_AGENT } : {}),
+          // question needs an interactive answer this UI can't give yet; integrations off unless the project enables them
+          tools: {
+            question: false,
+            ...Object.fromEntries(integrations().filter((i) => !input.mcp[i.id]).map((i) => [`${i.id}_*`, false])),
+          },
           parts: [{ type: "text", text: input.prompt }],
         },
       });

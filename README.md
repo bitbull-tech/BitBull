@@ -34,6 +34,51 @@ Production build without Docker:
 npm run build && npm start    # UI + API together on :8787
 ```
 
+## Run sandboxed (recommended)
+
+The agent can run shell commands, so it runs in a hardened container: an unprivileged
+user with no Linux capabilities, a read-only system, and only its data folder writable.
+Its network is internal. The only way out is an egress proxy that allows just the
+domains in [`egress/allowlist.txt`](egress/allowlist.txt), so the agent can't reach your
+home network, Windows, or any site you haven't listed. Outside the container the agent's
+shell is switched off (set `ALLOW_HOST_SHELL=true` only if you accept the risk).
+
+```
+browser ─127.0.0.1:8787─▶ gateway ─▶ gm-agent ─▶ egress (allowlist) ─▶ internet
+                                  └─ sandbox network: internal ─┘
+```
+
+```bash
+docker compose up -d --build      # UI + API on http://localhost:8787 (this computer only)
+docker compose logs -f gm-agent   # or read data/logs/server.log
+docker compose logs -f egress     # every outbound request, allowed or refused
+docker compose restart egress     # after editing egress/allowlist.txt
+docker compose down               # stop
+```
+
+Optional limits in `.env`: `GM_CPUS` (default 4), `GM_MEMORY` (default 6g), `GM_PORT`
+(default 8787), `GM_DATA_DIR` (default `./data`).
+
+### On Windows: a dedicated, locked-down WSL distro
+
+A normal WSL distro mounts every Windows drive and can launch Windows programs, so it is a
+thin wall. `scripts/gm-wsl/` creates a separate distro, `gm`, with Windows drive mounts
+and Windows interop switched off and Docker running with user-namespace remapping (a
+container escape lands as an unprivileged user that can't mount drives). Code and data
+live inside it; you keep editing and committing in your Windows checkout.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\setup.ps1              # once (uses Docker in your Ubuntu distro to get a clean image)
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\deploy.ps1             # ship code changes + rebuild
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -InstallAtLogin  # keep GM running, start at login
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -Stop
+```
+
+Admin inside it: `wsl -d gm -u root`. Chats and files: `\\wsl.localhost\gm\home\<you>\gm-data`
+(owned by the remapped container user; read them as root).
+
+`npm run dev` still works for UI development, with the agent's shell disabled.
+
 ## Run with Docker (any server)
 
 ```bash

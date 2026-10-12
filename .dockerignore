@@ -2,5 +2,7 @@
 **/dist
 data
 .env
+.env.*
+!.env.example
 .git
 *.log

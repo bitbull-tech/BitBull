@@ -7,13 +7,24 @@ RUN npm --prefix server ci && npm --prefix web ci
 COPY . .
 RUN npm --prefix web run build && npm --prefix server run build && npm --prefix server prune --omit=dev
 
-# ---------- runtime ----------
+# ---------- runtime (the agent's sandbox) ----------
 FROM node:22-bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates ripgrep curl && rm -rf /var/lib/apt/lists/*
+# Tools the agent and its skills use inside the sandbox: git, search, media + document handling
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git ripgrep python3 \
+      ffmpeg libimage-exiftool-perl poppler-utils tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
+    GM_SANDBOX=docker \
     DATA_DIR=/data \
     PORT=8787 \
-    HOME=/home/node
+    HOST=0.0.0.0 \
+    # Everything writable lives under /data so the root filesystem can be read-only
+    HOME=/data/home \
+    XDG_CACHE_HOME=/data/cache \
+    XDG_CONFIG_HOME=/data/config \
+    OPENCODE_DATA_DIR=/data/opencode-sandbox \
+    CLAUDE_DATA_DIR=/data/claude-sandbox
 WORKDIR /app
 COPY --from=build /app/server/package.json server/
 COPY --from=build /app/server/node_modules server/node_modules
@@ -21,8 +32,9 @@ COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/web/dist web/dist
 COPY agent agent
 COPY skills skills
-RUN mkdir -p /data && chown -R node:node /data /app
-# Non-root: the Claude Agent SDK refuses bypassPermissions as root
+COPY tools tools
+RUN mkdir -p /data && chown node:node /data
+# Non-root. The app and its code are root-owned and read-only to the agent.
 USER node
 VOLUME ["/data"]
 EXPOSE 8787

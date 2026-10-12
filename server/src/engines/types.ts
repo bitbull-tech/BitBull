@@ -24,6 +24,12 @@ export interface RunInput {
   prompt: string;
   systemPrompt: string;
   signal: AbortSignal;
+  /** Working directory for tools: the project's workspace (or the general one) */
+  cwd: string;
+  /** Integration MCP servers enabled for this chat's project */
+  mcp: Record<string, { url: string; headers: Record<string, string> }>;
+  /** Read-only planning turn: investigate and propose, change nothing */
+  plan?: boolean;
 }
 
 export interface AgentEngine {

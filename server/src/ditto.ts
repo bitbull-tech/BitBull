@@ -57,12 +57,13 @@ export async function archiveTurn(t: {
   messageId: string;
   engine: string;
   model: string;
+  project?: string;
   user: string;
   assistant: string;
 }) {
   if (config.ditto.archive === "off") return;
   const content = [
-    `Conversation "${t.sessionTitle}" (SayGM Agent, ${t.engine} / ${t.model})`,
+    `Conversation "${t.sessionTitle}"${t.project ? ` in project "${t.project}"` : ""} (SayGM Agent, ${t.engine} / ${t.model})`,
     "",
     `${config.ownerName}: ${t.user}`,
     "",
@@ -71,9 +72,9 @@ export async function archiveTurn(t: {
   await dittoCall("save_memory", {
     content: content.slice(0, 20000),
     source: config.ditto.source,
-    sourceContext: `session:${t.sessionId}`,
+    sourceContext: t.project ? `project:${t.project}` : `session:${t.sessionId}`,
     vendorId: `turn:${t.messageId}`,
-    metadata: { sessionId: t.sessionId, engine: t.engine, model: t.model, kind: "chat-turn" },
+    metadata: { sessionId: t.sessionId, engine: t.engine, model: t.model, project: t.project ?? null, kind: "chat-turn" },
   });
 }
 
