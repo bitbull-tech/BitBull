@@ -338,7 +338,15 @@ export const opencodeEngine: AgentEngine = {
           break;
         }
         case "session.idle": {
-          out.push({ type: "done", engineSessionId: sid, usage });
+          let total = usage;
+          for (const u of childUsage.values()) {
+            total = {
+              inputTokens: (total.inputTokens ?? 0) + (u.inputTokens ?? 0),
+              outputTokens: (total.outputTokens ?? 0) + (u.outputTokens ?? 0),
+              costUsd: (total.costUsd ?? 0) + (u.costUsd ?? 0),
+            };
+          }
+          out.push({ type: "done", engineSessionId: sid, usage: total });
           out.close();
           break;
         }
@@ -347,9 +355,23 @@ export const opencodeEngine: AgentEngine = {
 
     // Subagent sessions: forward their tool calls tagged with the parent task call
     const children = new Map<string, Listener>();
+    const childUsage = new Map<string, Usage>();
     const followChild = (childSid: string, parentCall: string) => {
       const seen = new Set<string>();
       const fn: Listener = (ev) => {
+        if (ev.type === "message.updated") {
+          // Subagent spend counts toward this turn's usage and cost
+          const m = ev.properties?.info;
+          if (m?.role === "assistant") {
+            const t = m.tokens ?? {};
+            childUsage.set(m.id, {
+              inputTokens: (t.input ?? 0) + (t.cache?.read ?? 0) + (t.cache?.write ?? 0),
+              outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
+              costUsd: m.cost ?? 0,
+            });
+          }
+          return;
+        }
         if (ev.type !== "message.part.updated") return;
         const part = ev.properties?.part;
         if (part?.type !== "tool") return;

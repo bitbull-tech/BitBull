@@ -67,8 +67,8 @@ export const config = {
        */
       token: env("GITHUB_TOKEN", env("GH_TOKEN", "")),
       /** Identity for the agent's commits (defaults to OWNER_NAME / GitHub noreply) */
-      userName: env("GIT_USER_NAME", ""),
-      userEmail: env("GIT_USER_EMAIL", ""),
+      userName: env("GIT_USER_NAME", env("GITHUB_USER_NAME", "")),
+      userEmail: env("GIT_USER_EMAIL", env("GITHUB_USER_EMAIL", "")),
     },
     four04: {
       /** 404.xyz (404—GEN text-to-3D). No public API documented yet: set these when 404 provides one. */
