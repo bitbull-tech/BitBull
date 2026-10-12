@@ -1,3 +1,4 @@
+import { errText } from "./models.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { config } from "./config.js";
@@ -45,7 +46,7 @@ export async function dittoCall(name: string, args: Record<string, unknown>) {
     return await c.callTool({ name, arguments: args });
   } catch (err) {
     client = null; // force reconnect next time
-    console.error(`[ditto] ${name} failed:`, err instanceof Error ? `${err.name}: ${err.message}` : err);
+    console.error(`[ditto] ${name} failed:`, errText(err));
     return null;
   }
 }

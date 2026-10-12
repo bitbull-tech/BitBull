@@ -8,6 +8,7 @@ import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
 import { mcpServersFor, type IntegrationId } from "./integrations.js";
 import { estimateCost } from "./models.js";
 import { subagentGuide } from "./subagents.js";
+import { record } from "./activity.js";
 
 export const engines: Record<EngineId, AgentEngine> = {
   opencode: opencodeEngine,
@@ -115,6 +116,20 @@ export async function* runTurn(
   if (isFirst) sessions.update(session.id, { title: titleFrom(prompt) });
   if (model !== session.model) sessions.update(session.id, { model });
 
+  const title = sessions.get(session.id)?.title ?? session.title;
+  const act = (e: Parameters<typeof record>[0]) => record({ sessionId: session.id, sessionTitle: title, ...e });
+  const short = (v: unknown) => {
+    const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
+    return s.length > 160 ? s.slice(0, 157) + "…" : s;
+  };
+  act({
+    level: "info",
+    source: "agent",
+    message: `Turn started · ${model} · ${session.engine}${opts.plan ? " · plan mode" : ""}${project ? ` · ${project.name}` : ""}`,
+    detail: prompt + attachNote,
+  });
+  const started = Date.now();
+
   let text = "";
   let usage: Usage | undefined;
   let engineSessionId = session.engine_session_id;
@@ -132,8 +147,26 @@ export async function* runTurn(
       plan: opts.plan,
     })) {
       if (ev.type === "text") text += ev.delta;
-      if (ev.type === "tool_start") tools.push({ id: ev.id, name: ev.name, input: ev.input, ...(ev.parent ? { parent: ev.parent } : {}) });
-      if (ev.type === "tool_end") Object.assign(tools.find((t) => t.id === ev.id) ?? {}, { output: ev.output, isError: ev.isError });
+      if (ev.type === "tool_start") {
+        tools.push({ id: ev.id, name: ev.name, input: ev.input, ...(ev.parent ? { parent: ev.parent } : {}) });
+        const isAgent = /^(task|agent)$/i.test(ev.name);
+        const inp = (ev.input ?? {}) as Record<string, unknown>;
+        act({
+          level: "info",
+          source: isAgent ? "subagent" : ev.parent ? "subagent" : "tool",
+          message: isAgent
+            ? `Subagent ${inp.subagent_type ?? ""} started: ${inp.description ?? ""}`
+            : `${ev.parent ? "↳ " : ""}${ev.name} ${short(inp.command ?? inp.filePath ?? inp.file_path ?? inp.path ?? inp.pattern ?? inp.url ?? inp.query ?? "")}`,
+          detail: JSON.stringify(ev.input ?? {}, null, 2),
+        });
+      }
+      if (ev.type === "tool_end") {
+        const t = tools.find((x) => x.id === ev.id);
+        Object.assign(t ?? {}, { output: ev.output, isError: ev.isError });
+        if (ev.isError) act({ level: "warn", source: ev.parent ? "subagent" : "tool", message: `${t?.name ?? "tool"} failed: ${short(ev.output)}`, detail: ev.output });
+        else if (t && /^(task|agent)$/i.test(t.name)) act({ level: "info", source: "subagent", message: `Subagent ${(t.input as { subagent_type?: string })?.subagent_type ?? ""} finished`, detail: ev.output });
+      }
+      if (ev.type === "error") act({ level: "error", source: session.engine, message: ev.message });
       if (ev.type === "done") {
         usage = ev.usage;
         if (ev.engineSessionId) engineSessionId = ev.engineSessionId;
@@ -142,7 +175,9 @@ export async function* runTurn(
       yield ev;
     }
   } catch (err) {
-    yield { type: "error", message: err instanceof Error ? err.message : String(err) };
+    const message = err instanceof Error ? err.message : String(err);
+    act({ level: "error", source: session.engine, message, detail: err instanceof Error ? err.stack : undefined });
+    yield { type: "error", message };
   } finally {
     running.delete(session.id);
   }
@@ -164,6 +199,13 @@ export async function* runTurn(
     usage_json: usage ? JSON.stringify(usage) : null,
   });
   sessions.update(session.id, {});
+  act({
+    level: "info",
+    source: "agent",
+    message: `Turn finished in ${((Date.now() - started) / 1000).toFixed(1)}s · ${tools.length} tool call${tools.length === 1 ? "" : "s"}${
+      usage ? ` · ${usage.inputTokens ?? 0} in / ${usage.outputTokens ?? 0} out${usage.costUsd ? ` · $${usage.costUsd.toFixed(4)}` : ""}` : ""
+    }${ctrl.signal.aborted ? " · stopped by user" : ""}`,
+  });
 
   // Fire-and-forget: long-term memory shouldn't slow the UI down.
   if (text.trim()) {

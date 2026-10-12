@@ -4,6 +4,7 @@ import { Chat } from './Chat'
 import { IconChevronRight, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
+import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
@@ -130,6 +131,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [filter, setFilter] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [status, setStatus] = useState<Status | null>(null)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const { unseen } = useActivity()
 
   const setModel = (id: string) => {
     setModelState(id)
@@ -148,7 +151,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         return await p
       } catch (e) {
         if (e instanceof Unauthorized) onUnauthorized()
-        else console.error(e)
+        else {
+          console.error(e)
+          reportLocal(e instanceof Error ? e.message : String(e), e instanceof Error ? e.stack : undefined)
+        }
       }
     },
     [onUnauthorized],
@@ -378,6 +384,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <span className={`dot ${status ? (status.saygm.ok ? 'ok' : 'bad') : 'run'}`} /> SayGM
             <span className={`dot ${status ? (status.ditto.ok ? 'ok' : 'bad') : 'run'}`} /> Ditto
           </button>
+          {unseen > 0 && (
+            <button className="act-badge" onClick={() => (clearToasts(), setActivityOpen(true))} title="Errors since you last looked">
+              {unseen} error{unseen > 1 ? 's' : ''}
+            </button>
+          )}
           {status?.sandbox && (
             <span
               className={`sandbox-pill ${status.sandbox.kind !== 'none' ? 'ok' : 'warn'}`}
@@ -443,7 +454,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           onCreate={createSession}
           onTurnDone={refreshSessions}
         />
+        <ActivityDock sessionId={active?.id} onOpenFull={() => (clearToasts(), setActivityOpen(true))} />
       </main>
+      {!activityOpen && <ErrorToasts onOpen={() => (clearToasts(), setActivityOpen(true))} />}
+      {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
 
       {settingsOpen && (
         <Settings

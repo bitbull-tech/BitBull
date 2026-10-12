@@ -121,7 +121,7 @@ export async function listModels(force = false): Promise<ModelInfo[]> {
     cache = { at: Date.now(), models };
     return models;
   } catch (err) {
-    console.error("[models]", err instanceof Error ? err.message : err);
+    console.error("[saygm] Couldn't load the SayGM model list:", errText(err));
     if (cache) return cache.models;
     // Minimal fallback so the app still boots offline
     const id = config.agent.defaultModel;
@@ -139,4 +139,12 @@ export async function estimateCost(modelId: string, inputTokens = 0, outputToken
 /** Model list for clients, without the raw gateway payload. */
 export async function publicModels(force = false) {
   return (await listModels(force)).map(({ raw: _raw, ...rest }) => rest);
+}
+
+/** fetch() errors hide the real reason (DNS, refused, TLS, proxy) in .cause */
+export function errText(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as Error & { cause?: unknown }).cause;
+  const c = cause instanceof Error ? `${(cause as Error & { code?: string }).code ?? cause.name}: ${cause.message}` : cause ? String(cause) : "";
+  return c ? `${err.message} (${c})` : err.message;
 }

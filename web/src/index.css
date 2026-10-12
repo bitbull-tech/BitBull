@@ -634,3 +634,48 @@ button.file-row:hover { background: var(--hover); }
 .agent-card pre.out { margin: 0; padding: 10px 14px; border-top: 1px solid var(--line); white-space: pre-wrap; font-size: 12.5px; max-height: 360px; overflow: auto; }
 .files-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; font-size: 13px; }
 @media (max-width: 640px) { .files-btn { padding: 0 8px; } }
+
+/* ---------- activity ---------- */
+.act-dock { flex: none; border-top: 1px solid var(--line); background: var(--panel); }
+.act-bar { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; font-size: 12.5px; cursor: pointer; user-select: none; }
+.act-bar:hover { background: var(--hover); }
+.act-bar .chev { transition: transform 0.15s; color: var(--muted); }
+.act-bar .chev.open, .act-line .chev.open { transform: rotate(90deg); }
+.act-last { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+.act-last.lv-error { color: var(--bad); }
+.act-last.lv-warn { color: var(--warn); }
+.act-badge { flex: none; border: none; border-radius: 999px; padding: 2px 9px; background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.act-badge:hover { background: color-mix(in srgb, var(--bad) 22%, transparent); }
+.act-body { border-top: 1px solid var(--line); }
+.act-filters { margin: 6px 10px; }
+.act-list { max-height: 240px; overflow: auto; font-family: var(--mono); font-size: 11.5px; }
+.act-list.full { max-height: none; flex: 1; min-height: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.act-row { border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.act-row.lv-error { background: color-mix(in srgb, var(--bad) 7%, transparent); }
+.act-row.lv-warn { background: color-mix(in srgb, var(--warn) 6%, transparent); }
+.act-line { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 4px 12px; border: none; background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.act-line:disabled { cursor: default; }
+.act-line:hover:not(:disabled) { background: var(--hover); }
+.act-time { color: var(--muted); flex: none; }
+.act-lv { flex: none; width: 38px; text-transform: uppercase; font-size: 10px; font-weight: 700; color: var(--muted); }
+.act-lv.lv-error, .lv-error-text { color: var(--bad); }
+.act-lv.lv-warn { color: var(--warn); }
+.act-src { flex: none; min-width: 64px; color: var(--accent); }
+.act-msg { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.act-chat { flex: none; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.act-detail { margin: 0 12px 8px 12px; padding: 8px 10px; background: var(--code-bg); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font-size: 11px; }
+.act-modal { max-width: 1100px; width: calc(100vw - 32px); height: calc(100vh - 64px); display: flex; flex-direction: column; }
+.act-modal .modal-head { gap: 12px; }
+.act-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 10px; }
+.act-tools input, .act-tools select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+.act-tools input { flex: 1; min-width: 200px; }
+.act-modal .act-list.full { margin: 0 20px; }
+.act-foot { padding: 8px 20px 14px; margin: 0; }
+.toasts { position: fixed; top: 64px; right: 14px; z-index: 60; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 28px)); }
+.toast { border-radius: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 30px rgb(0 0 0 / 0.18); animation: toast-in 0.18s ease-out; }
+.toast.err { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); border-left: 4px solid var(--bad); }
+.toast-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.toast-head b { color: var(--bad); }
+.toast-msg { font-size: 13px; margin: 4px 0 6px; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
+@keyframes toast-in { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (max-width: 640px) { .act-chat, .act-src { display: none; } }

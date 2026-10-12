@@ -43,14 +43,9 @@ domains in [`egress/allowlist.txt`](egress/allowlist.txt), so the agent can't re
 home network, Windows, or any site you haven't listed. Outside the container the agent's
 shell is switched off (set `ALLOW_HOST_SHELL=true` only if you accept the risk).
 
-```
-browser ─127.0.0.1:8787─▶ gateway ─▶ gm-agent ─▶ egress (allowlist) ─▶ internet
-                                  └─ sandbox network: internal ─┘
-```
-
 ```bash
 docker compose up -d --build      # UI + API on http://localhost:8787 (this computer only)
-docker compose logs -f gm-agent   # or read data/logs/server.log
+docker compose logs -f gm-agent   # or the Activity panel in the UI
 docker compose logs -f egress     # every outbound request, allowed or refused
 docker compose restart egress     # after editing egress/allowlist.txt
 docker compose down               # stop
@@ -59,25 +54,110 @@ docker compose down               # stop
 Optional limits in `.env`: `GM_CPUS` (default 4), `GM_MEMORY` (default 6g), `GM_PORT`
 (default 8787), `GM_DATA_DIR` (default `./data`).
 
-### On Windows: a dedicated, locked-down WSL distro
+On Windows, use the locked-down WSL distro (below) rather than your everyday Ubuntu.
+`npm run dev` still works for UI development, with the agent's shell disabled.
 
-A normal WSL distro mounts every Windows drive and can launch Windows programs, so it is a
-thin wall. `scripts/gm-wsl/` creates a separate distro, `gm`, with Windows drive mounts
-and Windows interop switched off and Docker running with user-namespace remapping (a
-container escape lands as an unprivileged user that can't mount drives). Code and data
-live inside it; you keep editing and committing in your Windows checkout.
+## What runs where
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\setup.ps1              # once (uses Docker in your Ubuntu distro to get a clean image)
-powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\deploy.ps1             # ship code changes + rebuild
-powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -InstallAtLogin  # keep GM running, start at login
-powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -Stop
+Three layers, from the outside in. Each only sees what the layer outside hands it.
+
+```
+Windows  ── D:\github\SayGMAgent (source, .env, git)      ── deploy.ps1 copies code + .env in ──┐
+                                                                                                 ▼
+WSL distro "gm" (no Windows drives, no Windows programs, Docker with userns-remap)
+   ~/SayGMAgent   code copy, replaced on every deploy
+   ~/gm-data      ALL live data (chats, workspaces, uploads, logs)  ── mounted as /data ──┐
+                                                                                         ▼
+Docker (network "sandbox" is internal: no internet, no LAN, no host)
+   gm-gateway  socat: 127.0.0.1:8787 on your PC → gm-agent:8787 (the only way in)
+   gm-agent    server + UI + agent engines; runs as uid 1000, read-only filesystem
+   gm-egress   squid allowlist proxy (the only way out)
 ```
 
-Admin inside it: `wsl -d gm -u root`. Chats and files: `\\wsl.localhost\gm\home\<you>\gm-data`
-(owned by the remapped container user; read them as root).
+### Outside Docker: Windows
 
-`npm run dev` still works for UI development, with the agent's shell disabled.
+| What | Where | Notes |
+|---|---|---|
+| Source code, git history | `D:\github\SayGMAgent` | You edit and commit here. GM never sees this folder. |
+| Secrets and settings | `D:\github\SayGMAgent\.env` | Never committed (`.gitignore`). Copied into `gm` by `deploy.ps1`. |
+| Scripts | `scripts\gm-wsl\setup.ps1`, `deploy.ps1`, `start.ps1` | One-time setup, ship changes, keep running. |
+| Start at login | Startup folder shortcut "GM Agent" | Created by `start.ps1 -InstallAtLogin`. |
+| The `gm` distro's disk | `%LOCALAPPDATA%\GM-WSL\disk` | A virtual disk holding everything in the next table. |
+| Old data from before the sandbox | `D:\github\SayGMAgent\data` | Copied into `gm` once at setup; no longer used. |
+
+### Outside Docker: inside the `gm` WSL distro
+
+| What | Where | Notes |
+|---|---|---|
+| Lockdown | `/etc/wsl.conf` | No drive mounts, no Windows interop, Docker started at boot. |
+| Docker Engine | `/etc/docker/daemon.json` | `userns-remap`: container users map to unprivileged IDs here. |
+| Deployed code + `.env` | `~/SayGMAgent` | Replaced on each deploy; don't edit here. |
+| **Live data** | `~/gm-data` | Owned by the remapped container user (mode 700). Read it as root: `wsl -d gm -u root`, or `\\wsl.localhost\gm\home\<you>\gm-data` from an admin tool. |
+
+### Inside Docker
+
+| Container | Image contents | Can write | Network |
+|---|---|---|---|
+| `gm-agent` | Node 22, built server + web UI, OpenCode, Claude Agent SDK, `agent/`, `skills/`, `subagents/`, `tools/`; git, gh, ripgrep, Python, ffmpeg, exiftool, poppler, tesseract | `/data` (= `~/gm-data`) and a 1 GB `/tmp` | `sandbox` only; HTTP(S) via `egress` |
+| `gm-egress` | squid; `egress/allowlist.txt` mounted read-only | nothing persistent | `sandbox` + `outside` |
+| `gm-gateway` | socat | nothing | `sandbox` + `outside`; publishes 127.0.0.1:8787 |
+
+`gm-agent` gets every variable in `.env` plus `HTTPS_PROXY=http://egress:3128`. Inside it,
+`HOME`, caches and both engines' state live under `/data`, because the rest of the
+filesystem is read-only.
+
+## Where your data goes
+
+Everything GM stores is under `/data` in the container (`~/gm-data` in the `gm` distro):
+
+```
+/data
+  agent.db                      chats, messages, tool calls, projects (SQLite)
+  workspace/                    workspace for chats outside projects
+  projects/<name>-<id>/         one workspace per project
+     uploads/<chat-id>/…        files attached in a chat
+     uploads/<folder>/…         folders dropped on a chat (structure kept)
+     <any folder>/…             files added with the Files dialog, cloned repos, agent output
+     .claude/skills/            skills mirrored in on start (don't edit; edit /skills in git)
+  integrations/atlas/workflows/ exported Atlas workflow specs (contain credentials)
+  logs/server.log               raw server output (secrets redacted)
+  logs/activity.jsonl           the Activity feed (secrets redacted)
+  home/ cache/ config/ opencode-sandbox/ claude-sandbox/   tool and engine state
+```
+
+How each kind of upload is captured:
+
+| You do | It lands in | Recorded in |
+|---|---|---|
+| Attach files in the composer (paperclip, paste, drop) | `<workspace>/uploads/<first 8 of chat id>/` | The message's attachment list in `agent.db`; the agent is told the paths |
+| Drop a folder on the chat | `<workspace>/uploads/<folder>/…` (dependency and build folders skipped) | Same; the folder path is attached to your next message |
+| Files dialog (top bar → Files) | `<workspace>/<folder you choose>/…`, structure kept; existing files kept unless you tick Replace | Activity log (`upload`) |
+| Ask the agent to clone or create files | Wherever it works in the workspace | Tool calls in the chat and Activity log |
+
+What leaves the machine, and what doesn't:
+
+- **Ditto** receives the *text* of each chat turn (`DITTO_ARCHIVE=turn`) and every skill.
+  It does not receive files.
+- **SayGM** receives the conversation sent to the model, including any file contents the
+  agent reads into it.
+- **GitHub** receives only what the agent commits and pushes.
+- **Files are not backed up anywhere else yet.** Back up `~/gm-data` (for example
+  `wsl -d gm -u root -- tar -czf - -C /home/<you> gm-data > gm-data.tgz`) until off-machine
+  storage is added (Hippius is planned).
+
+## On Windows: the locked-down WSL distro
+
+A normal WSL distro mounts every Windows drive and can launch Windows programs, so it is a
+thin wall. `scripts/gm-wsl/` creates a separate distro, `gm`, with both switched off and
+Docker running with user-namespace remapping (a container escape lands as an unprivileged
+user that can't mount drives).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\setup.ps1                 # once (uses Docker in your Ubuntu distro to get a clean image)
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\deploy.ps1                # ship code and .env changes, rebuild
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -InstallAtLogin  # keep GM running; start at login
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -Stop
+```
 
 ## Run with Docker (any server)
 
@@ -86,16 +166,17 @@ cp .env.example .env   # fill it in
 docker compose up -d --build
 ```
 
-State lives in the `gm-data` volume (`/data`). Put it behind HTTPS (Caddy, nginx or a
-Cloudflare Tunnel) before exposing it: the agent can run shell commands in its
-workspace.
+State lives in `./data` (or `GM_DATA_DIR`). Put it behind HTTPS (Caddy, nginx or a
+Cloudflare Tunnel) before exposing it: the agent can run shell commands in its workspace.
 
-CI (`.github/workflows/ci.yml`) typechecks, builds and publishes
-`ghcr.io/tommyhgunz14/saygmagent:latest` on every push to `main`, so a server only needs:
+## Activity and errors
 
-```bash
-docker run -d --env-file .env -p 8787:8787 -v gm-data:/data ghcr.io/tommyhgunz14/saygmagent:latest
-```
+The **Activity** bar under the chat (collapsed by default) shows the latest event and a red
+badge when something has failed. Expand it for recent activity (all, errors and warnings,
+or this chat); **Full log** opens everything with search, filters and download. Errors also
+pop up as alerts in the top-right corner and show as a badge in the sidebar. It records chat
+turns (model, time, tokens, cost), every tool call and subagent, uploads, Ditto and SayGM
+problems and server warnings. Stored in `data/logs/activity.jsonl`, secrets redacted.
 
 ## Subagents
 
@@ -116,7 +197,7 @@ Set `GITHUB_TOKEN` to a fine-grained token (`github_pat_…`, recommended, limit
 the agent needs) or a classic one (`ghp_…`). git gets it through a credential helper and the
 `gh` CLI through `GH_TOKEN`. Settings → Integrations shows who it signs in as.
 
-See [docs/GAPS.md](docs/GAPS.md) for what's still missing compared with other coding agents.
+See [docs/GAPS.md](docs/GAPS.md) for what's still missing compared with other coding agents, and [docs/STORAGE.md](docs/STORAGE.md) for the planned Hippius storage.
 
 ## API
 
@@ -131,6 +212,9 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `POST` | `/api/sessions/:id/messages` | Streaming turn (SSE): `text`, `thinking`, `tool_start`, `tool_end`, `error`, `done` |
 | `POST` | `/api/sessions/:id/abort` | Stop a running turn |
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
+| `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
+| `GET` | `/api/activity` | Activity events (`?after=&level=&sessionId=&limit=`) |
+| `GET` | `/api/activity/stream` | Live activity (SSE; `?token=` for EventSource) |
 
 ```bash
 curl -s https://gm.example.com/api/v1/chat \
@@ -150,6 +234,11 @@ server/src/
   engines/claude.ts    Claude Agent SDK engine (SayGM Anthropic endpoint)
   ditto.ts             Ditto MCP client (archive turns, back up skills)
   models.ts            SayGM model list
+  activity.ts          activity feed (memory + logs/activity.jsonl, SSE)
+  subagents.ts         subagent definitions for both engines
+subagents/<name>.md    subagents (reviewer, challenger, debugger, …)
+egress/                allowlist proxy for the sandbox
+scripts/gm-wsl/        Windows: locked-down WSL distro setup, deploy, start
 web/src/               React UI
 ```
 

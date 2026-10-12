@@ -15,6 +15,7 @@ import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
 import { describeSettings, status } from "./settings.js";
+import { recent, subscribe, type Level } from "./activity.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -61,6 +62,49 @@ app.post("/api/models/refresh", async (c) => {
 app.get("/api/settings", (c) => c.json({ groups: describeSettings() }));
 /** Live connection checks that cost no model tokens. */
 app.get("/api/status", async (c) => c.json(await status()));
+
+// ---------- activity feed ----------
+app.get("/api/activity", (c) => {
+  const q = c.req.query();
+  return c.json({
+    events: recent({
+      after: q.after ? Number(q.after) : undefined,
+      level: (q.level as Level) || undefined,
+      sessionId: q.sessionId || undefined,
+      limit: q.limit ? Math.min(2000, Number(q.limit)) : 500,
+    }),
+  });
+});
+
+/** Live activity (SSE). The UI keeps one of these open for the panel and error alerts. */
+app.get("/api/activity/stream", (c) =>
+  streamSSE(c, async (stream) => {
+    const after = Number(c.req.query("after") ?? 0);
+    for (const e of recent({ after, limit: 200 })) await stream.writeSSE({ data: JSON.stringify(e), id: String(e.id) });
+    let closed = false;
+    const queue: string[] = [];
+    let wake: (() => void) | null = null;
+    const off = subscribe((e) => {
+      queue.push(JSON.stringify(e));
+      wake?.();
+    });
+    stream.onAbort(() => {
+      closed = true;
+      off();
+      wake?.();
+    });
+    while (!closed) {
+      if (!queue.length) {
+        // heartbeat every 25s keeps proxies from closing the connection
+        await Promise.race([new Promise<void>((r) => (wake = r)), new Promise((r) => setTimeout(r, 25000))]);
+        wake = null;
+        if (!queue.length && !closed) await stream.writeSSE({ event: "ping", data: "" });
+        continue;
+      }
+      await stream.writeSSE({ data: queue.shift()! });
+    }
+  }),
+);
 
 app.get("/api/skills", (c) => c.json({ skills: listSkills() }));
 app.post("/api/skills/sync", async (c) => c.json({ skills: await syncSkills() }));
