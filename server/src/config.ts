@@ -70,6 +70,8 @@ export const config = {
       userName: env("GIT_USER_NAME", env("GITHUB_USER_NAME", "")),
       userEmail: env("GIT_USER_EMAIL", env("GITHUB_USER_EMAIL", "")),
     },
+    /** Taostats API key (Bittensor data). Sent raw in Authorization (no Bearer); v1 API only. */
+    taostats: { apiKey: env("TAOSTATS_API_KEY", "") },
     four04: {
       /** 404.xyz (404—GEN text-to-3D). No public API documented yet: set these when 404 provides one. */
       apiKey: env("FOUR04_API_KEY", ""),

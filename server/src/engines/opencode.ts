@@ -1,4 +1,4 @@
-import { listSubagents } from "../subagents.js";
+import { checkSubagentModels, listSubagents, READ_ONLY_BASH, subagentsSignature } from "../subagents.js";
 import { createServer } from "node:net";
 import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
@@ -43,7 +43,7 @@ const PLAN_PROMPT = [
 type AnyEvent = { type: string; properties?: any };
 type Listener = (ev: AnyEvent) => void;
 
-type Running = { client: OpencodeClient; close(): void; models: Set<string> };
+type Running = { client: OpencodeClient; close(): void; models: Set<string>; agents: string };
 let server: Running | null = null;
 let starting: Promise<Running> | null = null;
 const listeners = new Map<string, Set<Listener>>();
@@ -110,7 +110,8 @@ function buildConfig(models: ModelInfo[]) {
               ...(sm ? { model: `${providerFor(sm)}/${sm.id}` } : {}),
               permission: {
                 edit: a.access === "write" && allow ? "allow" : "deny",
-                bash: shellAllowed() ? "allow" : "deny",
+                // read-only agents: inspection and test commands only
+                bash: !shellAllowed() ? "deny" : a.access === "write" ? "allow" : READ_ONLY_BASH,
                 webfetch: "allow",
               },
             },
@@ -169,7 +170,8 @@ async function start(force = false): Promise<Running> {
       timeout: 30000,
       config: buildConfig(models) as any,
     });
-    const s: Running = { client, close: () => srv.close(), models: new Set(models.map((m) => m.id)) };
+    const s: Running = { client, close: () => srv.close(), models: new Set(models.map((m) => m.id)), agents: subagentsSignature() };
+    checkSubagentModels(s.models);
     server = s;
     pumped.clear();
     console.log(`[opencode] server up at ${srv.url} with ${models.length} SayGM models`);
@@ -242,8 +244,8 @@ export const opencodeEngine: AgentEngine = {
 
   async *run(input: RunInput): AsyncIterable<AgentEvent> {
     let s = await start();
-    if (!s.models.has(input.model) && activeRuns === 0) {
-      s = await start(true); // new model appeared on SayGM — reload provider config
+    if ((!s.models.has(input.model) || s.agents !== subagentsSignature()) && activeRuns === 0) {
+      s = await start(true); // new SayGM model or edited subagents — reload OpenCode's config
     }
     const models = await listModels();
     const info = models.find((m) => m.id === input.model) ?? { family: "other" as const, api: "chat" as const };

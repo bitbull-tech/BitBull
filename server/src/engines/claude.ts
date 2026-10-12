@@ -56,7 +56,8 @@ export const claudeEngine: AgentEngine = {
             prompt: a.prompt,
             // Only models SayGM serves on its Anthropic API can run in this engine
             model: sm && sm.api === "anthropic" ? sm.id : "inherit",
-            ...(a.access === "read" ? { disallowedTools: ["Write", "Edit", "MultiEdit", "NotebookEdit"] } : {}),
+            // read-only: no file edits and no shell (this engine can't limit shell to inspection commands)
+            ...(a.access === "read" ? { disallowedTools: ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "BashOutput", "KillShell"] } : {}),
           },
         ];
       }),

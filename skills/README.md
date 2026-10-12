@@ -25,3 +25,4 @@ Git is the source of truth; Ditto is the backup/searchable copy.
 | `archive-ingest` | Catalogue uploaded photos/film/documents with source bindings |
 | `heritage-experience` | Build cinematic/interactive heritage experiences under the grounding + likeness rules |
 | `atlas-studio` | Generate video/images/3D via Atlas MCP and exported workflow APIs |
+| `taostats-api` | Taostats v1 API (Bittensor data): auth, paging, RAO strings, old `/api/` → `/v1/` route map |

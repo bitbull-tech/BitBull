@@ -86,6 +86,16 @@ export function describeSettings() {
       ],
     },
     {
+      id: "taostats",
+      title: "Taostats",
+      rows: [
+        row("TAOSTATS_API_KEY", "API key", config.integrations.taostats.apiKey, {
+          secret: true,
+          hint: "Bittensor data via https://api.taostats.io/v1 (old /api/ routes stop on 9 Nov 2026). The agent reads it from its environment; see the taostats-api skill.",
+        }),
+      ],
+    },
+    {
       id: "atlas",
       title: "Atlas AI Studio",
       rows: [
