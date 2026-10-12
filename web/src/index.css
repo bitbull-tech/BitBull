@@ -600,3 +600,37 @@ code, pre, kbd { font-family: var(--mono); }
 .sandbox-pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .sandbox-pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .status-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+/* ---------- project files ---------- */
+.files-modal { max-width: 680px; }
+.files-crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 13px; margin-bottom: 6px; }
+.files-crumbs > span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.link { background: none; border: none; padding: 2px 4px; border-radius: 5px; color: var(--accent); font: inherit; cursor: pointer; }
+.link:hover { background: var(--accent-soft); }
+.files-list { border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow: auto; background: var(--panel); }
+.file-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; border: none; background: none; font: inherit; font-size: 13px; color: var(--text); text-align: left; border-bottom: 1px solid var(--line); }
+.file-row:last-child { border-bottom: none; }
+button.file-row { cursor: pointer; }
+button.file-row:hover { background: var(--hover); }
+.files-drop { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 22px 16px; border: 1.5px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13.5px; transition: border-color 0.15s, background 0.15s; }
+.files-drop.on { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.files-plan { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.files-plan .field { display: flex; flex-direction: column; gap: 6px; }
+.files-plan .field > span { font-size: 12.5px; font-weight: 600; }
+.files-plan .field input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.files-preview { margin: 0; padding-left: 18px; font-family: ui-monospace, monospace; font-size: 12px; }
+.todos-bar.wide { flex: none; width: 100%; height: 6px; }
+
+/* ---------- subagents ---------- */
+.agents { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; }
+.agent-card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.agent-card > summary { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; list-style: none; font-size: 13px; }
+.agent-card > summary::-webkit-details-marker { display: none; }
+.agent-card .agent-type { font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+.agent-card .agent-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-card .agent-steps { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.agent-card .tool-list { border-top: 1px solid var(--line); }
+.agent-card pre.out { margin: 0; padding: 10px 14px; border-top: 1px solid var(--line); white-space: pre-wrap; font-size: 12.5px; max-height: 360px; overflow: auto; }
+.files-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; font-size: 13px; }
+@media (max-width: 640px) { .files-btn { padding: 0 8px; } }

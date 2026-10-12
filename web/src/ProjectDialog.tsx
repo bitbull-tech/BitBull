@@ -105,7 +105,7 @@ export function ProjectDialog({
           <div className="field">
             <span>Integrations for this project</span>
             <div className="int-list">
-              {available.map((i) => (
+              {available.filter((i) => !i.global).map((i) => (
                 <label key={i.id} className={`int-row ${i.configured ? '' : 'off'}`}>
                   <input type="checkbox" checked={form.integrations?.includes(i.id) ?? false} onChange={() => toggle(i.id)} />
                   <div>

@@ -11,7 +11,7 @@ RUN npm --prefix web run build && npm --prefix server run build && npm --prefix 
 FROM node:22-bookworm-slim
 # Tools the agent and its skills use inside the sandbox: git, search, media + document handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git ripgrep python3 \
+      ca-certificates curl git gh ripgrep python3 \
       ffmpeg libimage-exiftool-perl poppler-utils tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
@@ -32,6 +32,7 @@ COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/web/dist web/dist
 COPY agent agent
 COPY skills skills
+COPY subagents subagents
 COPY tools tools
 RUN mkdir -p /data && chown node:node /data
 # Non-root. The app and its code are root-owned and read-only to the agent.

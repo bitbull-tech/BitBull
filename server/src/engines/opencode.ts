@@ -1,3 +1,4 @@
+import { listSubagents } from "../subagents.js";
 import { createServer } from "node:net";
 import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
@@ -96,6 +97,26 @@ function buildConfig(models: ModelInfo[]) {
       ),
     },
     agent: {
+      // Subagents for the task tool (several can run in parallel); see /subagents
+      ...Object.fromEntries(
+        listSubagents().map((a) => {
+          const sm = a.model === "inherit" ? undefined : models.find((m) => m.id === a.model);
+          return [
+            a.name,
+            {
+              description: a.description,
+              mode: "subagent",
+              prompt: a.prompt,
+              ...(sm ? { model: `${providerFor(sm)}/${sm.id}` } : {}),
+              permission: {
+                edit: a.access === "write" && allow ? "allow" : "deny",
+                bash: shellAllowed() ? "allow" : "deny",
+                webfetch: "allow",
+              },
+            },
+          ];
+        }),
+      ),
       [PLAN_AGENT]: {
         description: "Read-only investigation and planning",
         mode: "primary",
@@ -295,7 +316,10 @@ export const opencodeEngine: AgentEngine = {
               toolsStarted.add(part.callID);
               out.push({ type: "tool_start", id: part.callID, name: part.tool, input: st.input });
             }
-            if (st.status === "completed") out.push({ type: "tool_end", id: part.callID, output: String(st.output).slice(0, 4000) });
+            // A subagent started: follow its child session so its tool calls show under this card
+            const childSid = part.tool === "task" ? st.metadata?.sessionId : undefined;
+            if (childSid && !children.has(childSid)) followChild(childSid, part.callID);
+            if (st.status === "completed") out.push({ type: "tool_end", id: part.callID, output: String(st.output).slice(0, part.tool === "task" ? 20000 : 4000) });
             if (st.status === "error") out.push({ type: "tool_end", id: part.callID, output: st.error, isError: true });
           }
           break;
@@ -321,6 +345,31 @@ export const opencodeEngine: AgentEngine = {
       }
     };
 
+    // Subagent sessions: forward their tool calls tagged with the parent task call
+    const children = new Map<string, Listener>();
+    const followChild = (childSid: string, parentCall: string) => {
+      const seen = new Set<string>();
+      const fn: Listener = (ev) => {
+        if (ev.type !== "message.part.updated") return;
+        const part = ev.properties?.part;
+        if (part?.type !== "tool") return;
+        const st = part.state;
+        const id = `${childSid}:${part.callID}`;
+        if (!seen.has(id) && st.status !== "pending") {
+          seen.add(id);
+          out.push({ type: "tool_start", id, name: part.tool, input: st.input, parent: parentCall });
+        }
+        if (st.status === "completed") out.push({ type: "tool_end", id, output: String(st.output).slice(0, 1500), parent: parentCall });
+        if (st.status === "error") out.push({ type: "tool_end", id, output: st.error, isError: true, parent: parentCall });
+        // nested subagents
+        const grandchild = part.tool === "task" ? st.metadata?.sessionId : undefined;
+        if (grandchild && !children.has(grandchild)) followChild(grandchild, parentCall);
+      };
+      children.set(childSid, fn);
+      if (!listeners.has(childSid)) listeners.set(childSid, new Set());
+      listeners.get(childSid)!.add(fn);
+    };
+
     if (!listeners.has(sid)) listeners.set(sid, new Set());
     listeners.get(sid)!.add(onEvent);
     const onAbort = () => void s.client.session.abort({ path: { id: sid }, query: dir });
@@ -338,6 +387,8 @@ export const opencodeEngine: AgentEngine = {
           // question needs an interactive answer this UI can't give yet; integrations off unless the project enables them
           tools: {
             question: false,
+            // Plan mode stays read-only: no subagents (some of them can edit)
+            ...(input.plan ? { task: false } : {}),
             ...Object.fromEntries(integrations().filter((i) => !input.mcp[i.id]).map((i) => [`${i.id}_*`, false])),
           },
           parts: [{ type: "text", text: input.prompt }],
@@ -353,6 +404,7 @@ export const opencodeEngine: AgentEngine = {
       activeRuns--;
       input.signal.removeEventListener("abort", onAbort);
       listeners.get(sid)?.delete(onEvent);
+      for (const [c, fn] of children) listeners.get(c)?.delete(fn);
     }
   },
 };

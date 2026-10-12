@@ -134,6 +134,23 @@ export function Settings({
                 <p className="muted">No skills yet. Add folders under <code>skills/</code>.</p>
               )}
 
+              <h3>Subagents</h3>
+              {status?.subagents?.length ? (
+                <ul className="skill-list">
+                  {status.subagents.map((a) => (
+                    <li key={a.name}>
+                      <code>{a.name}</code>
+                      <span>
+                        <span className="tag">{a.access === 'write' ? 'can edit' : 'read-only'}</span>{' '}
+                        <span className="tag">{a.model === 'inherit' ? 'chat model' : a.model}</span> {a.description}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No subagents. Add definitions under <code>subagents/</code>.</p>
+              )}
+
               <h3>Runtime</h3>
               <dl className="kv">
                 <dt>Engines</dt>

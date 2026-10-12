@@ -3,6 +3,7 @@ import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type
 import { Chat } from './Chat'
 import { IconChevronRight, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
+import { FilesDialog } from './FilesDialog'
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
@@ -124,6 +125,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [navOpen, setNavOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [projectDialog, setProjectDialog] = useState<Project | 'new' | null>(null)
+  // Files dialog: a project, or 'general' for the workspace of unfiled chats
+  const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
   const [filter, setFilter] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [status, setStatus] = useState<Status | null>(null)
@@ -320,6 +323,16 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                     </button>
                     <button
                       className="icon-btn sm"
+                      title={`Files in ${p.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setFilesFor(p)
+                      }}
+                    >
+                      <IconFolder size={13} />
+                    </button>
+                    <button
+                      className="icon-btn sm"
                       title="Project settings"
                       onClick={(e) => {
                         e.stopPropagation()
@@ -414,6 +427,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               <span className="muted new-label">New chat</span>
             )}
           </div>
+          <button className="btn files-btn" title="Browse and add files and folders" onClick={() => setFilesFor(currentProject ?? 'general')}>
+            <IconFolder size={14} /> Files
+          </button>
           <ModelPicker models={models} value={model} onChange={setModel} />
         </header>
         <Chat
@@ -442,6 +458,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           onModelsRefreshed={() => void loadModels()}
         />
       )}
+      {filesFor && <FilesDialog project={filesFor === 'general' ? null : filesFor} onClose={() => setFilesFor(null)} />}
       {projectDialog && (
         <ProjectDialog
           project={projectDialog === 'new' ? null : projectDialog}

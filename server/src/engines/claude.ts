@@ -1,3 +1,4 @@
+import { listSubagents } from "../subagents.js";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
@@ -43,7 +44,26 @@ export const claudeEngine: AgentEngine = {
         ? { ANTHROPIC_AUTH_TOKEN: config.saygm.apiKey }
         : { ANTHROPIC_API_KEY: config.saygm.apiKey };
 
+    // Subagents (reviewer, challenger, …) via the SDK's Task/Agent tool
+    const models = await listModels();
+    const agents = Object.fromEntries(
+      listSubagents().map((a) => {
+        const sm = a.model === "inherit" ? undefined : models.find((x) => x.id === a.model);
+        return [
+          a.name,
+          {
+            description: a.description,
+            prompt: a.prompt,
+            // Only models SayGM serves on its Anthropic API can run in this engine
+            model: sm && sm.api === "anthropic" ? sm.id : "inherit",
+            ...(a.access === "read" ? { disallowedTools: ["Write", "Edit", "MultiEdit", "NotebookEdit"] } : {}),
+          },
+        ];
+      }),
+    );
+
     const options: Options = {
+      agents,
       model: input.model,
       cwd: input.cwd,
       abortController: abort,
@@ -99,7 +119,7 @@ export const claudeEngine: AgentEngine = {
             for (const block of msg.message.content) {
               if (block.type === "tool_use" && !openTools.has(block.id)) {
                 openTools.add(block.id);
-                yield { type: "tool_start", id: block.id, name: block.name, input: block.input };
+                yield { type: "tool_start", id: block.id, name: block.name, input: block.input, ...(msg.parent_tool_use_id ? { parent: msg.parent_tool_use_id } : {}) };
               } else if (block.type === "text" && !sawStreamText && !msg.parent_tool_use_id) {
                 // Fallback if the gateway doesn't stream partials
                 yield { type: "text", delta: block.text };
@@ -117,7 +137,13 @@ export const claudeEngine: AgentEngine = {
                     ? block.content.map((c) => ("text" in c ? c.text : "")).join("\n")
                     : String(block.content ?? "");
                   openTools.delete(block.tool_use_id);
-                  yield { type: "tool_end", id: block.tool_use_id, output: out.slice(0, 4000), isError: !!block.is_error };
+                  yield {
+                    type: "tool_end",
+                    id: block.tool_use_id,
+                    output: out.slice(0, 20000),
+                    isError: !!block.is_error,
+                    ...(msg.parent_tool_use_id ? { parent: msg.parent_tool_use_id } : {}),
+                  };
                 }
               }
             }

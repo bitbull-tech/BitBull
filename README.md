@@ -97,6 +97,27 @@ CI (`.github/workflows/ci.yml`) typechecks, builds and publishes
 docker run -d --env-file .env -p 8787:8787 -v gm-data:/data ghcr.io/tommyhgunz14/saygmagent:latest
 ```
 
+## Subagents
+
+The agent can start specialists in parallel, like Claude Code's Task tool: `reviewer`,
+`challenger`, `debugger`, `tester`, `worker` and `fact-checker`, defined in
+[`subagents/`](subagents/README.md). Their progress shows live under each reply. Give them
+a different model for a second opinion, e.g. `SUBAGENT_MODEL_REVIEWER=gpt-5.5`.
+
+## Files and folders
+
+**Files** (top bar, or the folder icon on a project) browses a project's workspace and adds
+local files or whole folders, keeping their structure and skipping `node_modules`, `.git`
+and build output. Folders dropped on the chat are uploaded to `uploads/` and attached.
+
+## GitHub
+
+Set `GITHUB_TOKEN` to a fine-grained token (`github_pat_…`, recommended, limited to the repos
+the agent needs) or a classic one (`ghp_…`). git gets it through a credential helper and the
+`gh` CLI through `GH_TOKEN`. Settings → Integrations shows who it signs in as.
+
+See [docs/GAPS.md](docs/GAPS.md) for what's still missing compared with other coding agents.
+
 ## API
 
 All routes need `Authorization: Bearer $APP_TOKEN`.

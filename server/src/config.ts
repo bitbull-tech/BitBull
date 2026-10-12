@@ -59,6 +59,17 @@ export const config = {
       /** Folder of exported-workflow JSON specs (they embed credentials; keep out of git) */
       workflowsDir: "",
     },
+    github: {
+      /**
+       * GitHub access for git push/pull/clone and the gh CLI. Accepts every token type:
+       * fine-grained PAT (github_pat_…, recommended: limit it to the repos the agent needs),
+       * classic PAT (ghp_…), OAuth (gho_…) and app tokens (ghu_/ghs_). GH_TOKEN works as an alias.
+       */
+      token: env("GITHUB_TOKEN", env("GH_TOKEN", "")),
+      /** Identity for the agent's commits (defaults to OWNER_NAME / GitHub noreply) */
+      userName: env("GIT_USER_NAME", ""),
+      userEmail: env("GIT_USER_EMAIL", ""),
+    },
     four04: {
       /** 404.xyz (404—GEN text-to-3D). No public API documented yet: set these when 404 provides one. */
       apiKey: env("FOUR04_API_KEY", ""),
@@ -103,10 +114,18 @@ export const config = {
     /** Route Claude models in OpenCode through SayGM's Anthropic endpoint (native caching/thinking). */
     opencodeClaudeNative: bool(env("OPENCODE_CLAUDE_NATIVE", "true")),
     opencodePort: Number(env("OPENCODE_PORT", "4096")),
+    /**
+     * Default model for subagents (reviewer, challenger, debugger…). "inherit" = same model as
+     * the chat. Per agent: SUBAGENT_MODEL_<NAME>, e.g. SUBAGENT_MODEL_REVIEWER=gpt-5.5.
+     */
+    subagentModel: env("SUBAGENT_MODEL", "inherit"),
   },
 
   dataDir: path.resolve(env("DATA_DIR", path.join(ROOT, "data"))),
   skillsDir: path.resolve(env("SKILLS_DIR", path.join(ROOT, "skills"))),
+  subagentsDir: path.resolve(env("SUBAGENTS_DIR", path.join(ROOT, "subagents"))),
+  /** Max size of one uploaded file (MB) */
+  uploadMaxMb: Number(env("UPLOAD_MAX_MB", "100")),
   promptFile: path.resolve(env("SYSTEM_PROMPT_FILE", path.join(ROOT, "agent", "SYSTEM.md"))),
   webDist: path.resolve(env("WEB_DIST", path.join(ROOT, "web", "dist"))),
 };
@@ -140,6 +159,45 @@ for (const k of ["HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME"]) {
     }
   }
 }
+
+/** What kind of GitHub token is configured (shown in Settings; never the token itself). */
+export function githubTokenKind(t = config.integrations.github.token) {
+  if (!t) return "none";
+  if (t.startsWith("github_pat_")) return "fine-grained PAT";
+  if (t.startsWith("ghp_")) return "classic PAT";
+  if (t.startsWith("gho_")) return "OAuth token";
+  if (t.startsWith("ghu_") || t.startsWith("ghs_")) return "GitHub App token";
+  return "token (unrecognised prefix)";
+}
+
+/**
+ * Hand the GitHub token to git and gh for every process the agent starts (they inherit
+ * this environment). git gets it through a credential helper for github.com only, so it
+ * never appears in remotes, command lines or .git/config.
+ */
+function applyGitEnv() {
+  const g = config.integrations.github;
+  const set: Array<[string, string]> = [];
+  if (g.token) {
+    process.env.GH_TOKEN = g.token;
+    process.env.GITHUB_TOKEN = g.token;
+    set.push([
+      "credential.https://github.com.helper",
+      '!f() { test "$1" = get && echo username=x-access-token && echo "password=$GITHUB_TOKEN"; }; f',
+    ]);
+  }
+  const name = g.userName || config.ownerName;
+  const email = g.userEmail;
+  if (name) set.push(["user.name", name]);
+  if (email) set.push(["user.email", email]);
+  set.push(["init.defaultBranch", "main"], ["safe.directory", "*"]);
+  process.env.GIT_CONFIG_COUNT = String(set.length);
+  set.forEach(([k, v], i) => {
+    process.env[`GIT_CONFIG_KEY_${i}`] = k;
+    process.env[`GIT_CONFIG_VALUE_${i}`] = v;
+  });
+}
+applyGitEnv();
 
 export function assertConfig() {
   const problems: string[] = [];

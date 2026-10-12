@@ -11,7 +11,7 @@ export interface Session {
   updated_at: number
 }
 
-export type IntegrationId = 'atlas' | 'four04'
+export type IntegrationId = 'atlas' | 'four04' | 'github'
 
 export interface Project {
   id: string
@@ -41,6 +41,7 @@ export interface IntegrationInfo {
   notes?: string
   configured: boolean
   hasMcp: boolean
+  global?: boolean
   env: { key: string; label: string; set: boolean; value: string }[]
 }
 export interface IntegrationStatus {
@@ -58,6 +59,8 @@ export interface ToolCall {
   output?: string
   isError?: boolean
   done?: boolean
+  /** Set on tool calls a subagent made: the id of its task call */
+  parent?: string
 }
 
 export interface Message {
@@ -103,6 +106,7 @@ export interface Status {
   saygm: { ok: boolean; models?: number; ms?: number; error?: string }
   ditto: { ok: boolean; tools?: number; error?: string }
   skills: { name: string; description: string }[]
+  subagents?: { name: string; description: string; access: 'read' | 'write'; model: string }[]
   workspace: string
   sandbox?: { kind: string; shell: boolean; egress?: 'allowlist' | 'open' }
   systemPromptFound: boolean
@@ -124,7 +128,7 @@ export interface AppConfig {
 export type AgentEvent =
   | { type: 'text'; delta: string }
   | { type: 'thinking'; delta: string }
-  | { type: 'tool_start'; id: string; name: string; input?: unknown }
+  | { type: 'tool_start'; id: string; name: string; input?: unknown; parent?: string }
   | { type: 'tool_end'; id: string; output?: string; isError?: boolean }
   | { type: 'done'; engineSessionId: string; usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number }; messageId?: string }
   | { type: 'error'; message: string }
@@ -187,6 +191,23 @@ export const api = {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Upload failed (${res.status})`)
     return (await res.json()).files
   },
+
+  /** Add files/folders to a project's workspace ("general" = the workspace for unfiled chats). */
+  async uploadProjectFiles(projectId: string, items: { file: File; path: string }[], target: string, overwrite = false) {
+    const fd = new FormData()
+    for (const it of items) {
+      fd.append('file', it.file)
+      fd.append('path', it.path)
+    }
+    fd.append('target', target)
+    if (overwrite) fd.append('overwrite', '1')
+    const res = await fetch(`/api/projects/${projectId}/files`, { method: 'POST', headers: { authorization: `Bearer ${getToken()}` }, body: fd })
+    if (res.status === 401) throw new Unauthorized('unauthorized')
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Upload failed (${res.status})`)
+    return (await res.json()) as { saved: string[]; skipped: string[] }
+  },
+  projectFiles: (projectId: string, dir = '') =>
+    req<{ dir: string; entries: { name: string; dir: boolean; size: number }[] }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
 
   /** POST + read the SSE stream manually (EventSource can't POST). */
   async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void, attachments: string[] = [], plan = false) {

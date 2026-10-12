@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { config, paths, shellAllowed } from "./config.js";
+import { config, githubTokenKind, paths, shellAllowed } from "./config.js";
 import { probeDitto } from "./ditto.js";
 import { listModels } from "./models.js";
 import { listSkills } from "./skills.js";
+import { listSubagents } from "./subagents.js";
 
 /**
  * Read-only view of the configuration the server is actually running with,
@@ -40,6 +41,8 @@ export function describeSettings() {
         row("ALLOW_HOST_SHELL", "Allow shell on host", config.sandbox.allowHostShell, { hint: "Only matters outside the sandbox. Leave false." }),
         row("AGENT_PERMISSION_MODE", "Permission mode", config.agent.permissionMode, { hint: "bypassPermissions lets the agent edit files and run shell in its workspace" }),
         row("OPENCODE_CLAUDE_NATIVE", "Claude via native Anthropic API", config.agent.opencodeClaudeNative),
+        row("SUBAGENT_MODEL", "Subagent model", config.agent.subagentModel, { hint: "inherit = same as the chat. Per agent: SUBAGENT_MODEL_REVIEWER=gpt-5.5 etc." }),
+        row("UPLOAD_MAX_MB", "Max upload size per file (MB)", config.uploadMaxMb),
         row("ENABLE_WEB_SEARCH", "Web search tool (OpenCode)", config.agent.webSearch, { hint: "Exa-backed websearch; no key needed" }),
         row("ENABLE_LSP", "LSP code intelligence (OpenCode)", config.agent.lsp, { hint: "Experimental: definitions, references, hover" }),
         row("OWNER_NAME", "Owner name", config.ownerName),
@@ -68,6 +71,18 @@ export function describeSettings() {
         row("DITTO_MCP_URL", "MCP server", config.ditto.mcpUrl),
         row("DITTO_ARCHIVE", "Archive every turn", config.ditto.archive, { hint: "turn = save each exchange; off = only facts the agent saves" }),
         row("DITTO_SOURCE", "Source label", config.ditto.source),
+      ],
+    },
+    {
+      id: "github",
+      title: "GitHub",
+      rows: [
+        row("GITHUB_TOKEN", `Token (${githubTokenKind()})`, config.integrations.github.token, {
+          secret: true,
+          hint: "Fine-grained (github_pat_…) recommended, limited to the repos the agent needs; classic (ghp_…) also works. GH_TOKEN is accepted too.",
+        }),
+        row("GIT_USER_NAME", "Commit author name", config.integrations.github.userName || config.ownerName),
+        row("GIT_USER_EMAIL", "Commit author email", config.integrations.github.userEmail),
       ],
     },
     {
@@ -125,6 +140,7 @@ export async function status() {
     saygm,
     ditto: d.enabled ? { ok: !!d.ok, tools: "tools" in d ? d.tools?.length : 0, error: "error" in d ? d.error : undefined } : { ok: false, error: "DITTO_API_KEY not set" },
     skills: listSkills().map((s) => ({ name: s.name, description: s.description })),
+    subagents: listSubagents().map((a) => ({ name: a.name, description: a.description, access: a.access, model: a.model })),
     workspace: paths.workspace,
     sandbox: { kind: config.sandbox.kind, shell: shellAllowed(), egress: config.sandbox.egressProxy ? "allowlist" : "open" },
     systemPromptFound: existsSync(config.promptFile),

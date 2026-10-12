@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { config } from "./config.js";
+import { config, githubTokenKind } from "./config.js";
 
 /**
  * Registry of external services the agent can be wired to. Each integration is a
@@ -11,7 +11,7 @@ import { config } from "./config.js";
  *
  * Adding a service = one entry here. Engines read `mcpServersFor(project)`.
  */
-export type IntegrationId = "atlas" | "four04";
+export type IntegrationId = "atlas" | "four04" | "github";
 
 export interface IntegrationDef {
   id: IntegrationId;
@@ -24,12 +24,30 @@ export interface IntegrationDef {
   mcp?: { url: string; headers: Record<string, string> };
   configured: boolean;
   notes?: string;
+  /** Applies to every chat (not switched per project) */
+  global?: boolean;
 }
 
 export function integrations(): IntegrationDef[] {
   const a = config.integrations.atlas;
   const f = config.integrations.four04;
+  const g = config.integrations.github;
   return [
+    {
+      id: "github",
+      name: "GitHub",
+      blurb: "Clone, pull, push and open PRs from the agent's shell (git + gh CLI).",
+      docs: "https://github.com/settings/personal-access-tokens",
+      env: [
+        { key: "GITHUB_TOKEN", label: `Token (${githubTokenKind()})`, secret: true, value: g.token },
+        { key: "GIT_USER_NAME", label: "Commit author name", value: g.userName || config.ownerName },
+        { key: "GIT_USER_EMAIL", label: "Commit author email", value: g.userEmail },
+      ],
+      configured: !!g.token,
+      global: true,
+      notes:
+        "Fine-grained tokens (github_pat_…) are recommended: grant only the repositories the agent works on, with Contents read/write (plus Pull requests if it should open PRs). Classic tokens (ghp_…) also work; give them the repo scope. The token reaches git through a credential helper and gh through GH_TOKEN; it is never written into a repository.",
+    },
     {
       id: "atlas",
       name: "Atlas AI Studio",
@@ -99,9 +117,29 @@ export function atlasWorkflows() {
 }
 
 /** Live check: connect to each configured MCP and list its tools. No credits spent. */
+async function probeGithub() {
+  const t = config.integrations.github.token;
+  if (!t) return { id: "github" as const, ok: false, configured: false, detail: "Not configured: set GITHUB_TOKEN in .env" };
+  try {
+    const res = await fetch("https://api.github.com/user", {
+      headers: { Authorization: `Bearer ${t}`, Accept: "application/vnd.github+json", "User-Agent": "gm-agent" },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { id: "github" as const, ok: false, configured: true, detail: `GitHub said ${res.status}: token invalid or expired` };
+    const u = (await res.json()) as { login?: string };
+    const scopes = res.headers.get("x-oauth-scopes");
+    const left = res.headers.get("x-ratelimit-remaining");
+    const access = scopes !== null ? `scopes: ${scopes || "none"}` : "repo access as set on the token";
+    return { id: "github" as const, ok: true, configured: true, detail: `Signed in as ${u.login} · ${githubTokenKind()} · ${access} · ${left} API calls left this hour` };
+  } catch (e) {
+    return { id: "github" as const, ok: false, configured: true, detail: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function probeIntegrations() {
   return Promise.all(
     integrations().map(async (i) => {
+      if (i.id === "github") return probeGithub();
       if (!i.mcp) return { id: i.id, ok: false, configured: i.configured, detail: i.configured ? "Configured (no MCP endpoint)" : "Not configured" };
       try {
         const c = new Client({ name: "gm-agent-probe", version: "0.1.0" });

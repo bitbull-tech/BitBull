@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
-import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
+import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
+import { filterItems, fromDrop, hasFolder, uploadItems } from './uploads'
 
 interface ViewMessage {
   id: string
@@ -80,6 +81,8 @@ export function Chat({
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [plan, setPlan] = useState(false)
+  // Folders dropped on the chat are uploaded right away; their paths go with the next message
+  const [folders, setFolders] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -123,7 +126,7 @@ export function Chat({
       case 'thinking':
         return patchLast((m) => ({ ...m, thinking: (m.thinking ?? '') + ev.delta }))
       case 'tool_start':
-        return patchLast((m) => ({ ...m, tools: [...m.tools, { id: ev.id, name: ev.name, input: ev.input }] }))
+        return patchLast((m) => ({ ...m, tools: [...m.tools, { id: ev.id, name: ev.name, input: ev.input, parent: ev.parent }] }))
       case 'tool_end':
         return patchLast((m) => ({
           ...m,
@@ -168,7 +171,8 @@ export function Chat({
     setInput('')
     setPending([])
     stickRef.current = true
-    const paths = uploaded.map((u) => u.path)
+    const paths = [...uploaded.map((u) => u.path), ...folders]
+    setFolders([])
     setMsgs((all) => [
       ...all,
       { id: `u-${Date.now()}`, role: 'user', content: text, tools: [], attachments: paths },
@@ -197,7 +201,23 @@ export function Chat({
       onDrop={(e) => {
         e.preventDefault()
         setDragging(false)
-        addFiles(e.dataTransfer.files)
+        if (!hasFolder(e.dataTransfer)) return addFiles(e.dataTransfer.files)
+        // Folders: upload now (keeping structure) into uploads/, attach the folder paths
+        void (async () => {
+          const { items, folders: tops } = await fromDrop(e.dataTransfer)
+          const keep = filterItems(items, true)
+          setNotice(`Uploading ${keep.length} files from ${tops.join(', ')}…`)
+          try {
+            await uploadItems(project?.id ?? 'general', keep, {
+              target: 'uploads',
+              onProgress: (d, t) => setNotice(`Uploading ${d}/${t} files from ${tops.join(', ')}…`),
+            })
+            setFolders((f) => [...f, ...tops.map((t) => `uploads/${t}`)])
+            setNotice(`Added ${keep.length} files (dependency/build folders skipped). Use the Files button for more options.`)
+          } catch (err) {
+            setNotice(err instanceof Error ? err.message : 'Upload failed')
+          }
+        })()
       }}
     >
       <div
@@ -260,8 +280,16 @@ export function Chat({
             void send()
           }}
         >
-          {pending.length > 0 && (
+          {(pending.length > 0 || folders.length > 0) && (
             <div className="chips">
+              {folders.map((f) => (
+                <span className="chip" key={f}>
+                  <IconFolder size={13} /> {f}
+                  <button type="button" onClick={() => setFolders((x) => x.filter((y) => y !== f))} aria-label={`Remove ${f}`}>
+                    <IconX size={12} />
+                  </button>
+                </span>
+              ))}
               {pending.map((f, i) => (
                 <span className="chip" key={`${f.name}-${i}`}>
                   <IconFile size={13} /> {f.name}
@@ -330,7 +358,7 @@ export function Chat({
             )}
           </div>
         </form>
-        {dragging && <div className="dropzone">Drop files to attach</div>}
+        {dragging && <div className="dropzone">Drop files or folders to attach</div>}
       </div>
     </div>
   )
@@ -381,7 +409,7 @@ function MessageView({ m }: { m: ViewMessage }) {
       </div>
     )
 
-  const running = m.tools.filter((t) => !t.done).length
+  const running = plainTools(m.tools).filter((t) => !t.done).length
   return (
     <div className="msg assistant">
       <div className="avatar">GM</div>
@@ -400,23 +428,22 @@ function MessageView({ m }: { m: ViewMessage }) {
           </details>
         )}
         {todosOf(m.tools) && <TodoList todos={todosOf(m.tools)!} />}
-        {m.tools.length > 0 && (
+        {agentsOf(m.tools).length > 0 && (
+          <div className="agents">
+            {agentsOf(m.tools).map((a) => (
+              <AgentCard key={a.id} call={a} steps={m.tools.filter((t) => t.parent === a.id)} live={!!m.streaming} />
+            ))}
+          </div>
+        )}
+        {plainTools(m.tools).length > 0 && (
           <details className="fold tools" open={m.streaming}>
             <summary>
-              <IconTool size={14} /> {m.tools.length} tool call{m.tools.length > 1 ? 's' : ''}
+              <IconTool size={14} /> {plainTools(m.tools).length} tool call{plainTools(m.tools).length > 1 ? 's' : ''}
               {running > 0 && <span className="muted"> · {running} running</span>}
             </summary>
             <div className="tool-list">
-              {m.tools.map((t) => (
-                <details key={t.id} className={`tool ${t.isError ? 'err' : ''}`}>
-                  <summary>
-                    <span className={`dot ${t.done ? (t.isError ? 'bad' : 'ok') : 'run'}`} />
-                    <span className="tool-name">{prettyTool(t.name)}</span>
-                    <span className="tool-arg">{toolArg(t.input)}</span>
-                  </summary>
-                  {t.input !== undefined && <pre>{JSON.stringify(t.input, null, 2)}</pre>}
-                  {t.output && <pre className="out">{t.output}</pre>}
-                </details>
+              {plainTools(m.tools).map((t) => (
+                <ToolRow key={t.id} t={t} />
               ))}
             </div>
           </details>
@@ -448,6 +475,60 @@ function MessageView({ m }: { m: ViewMessage }) {
         )}
       </div>
     </div>
+  )
+}
+
+const isAgentTool = (name: string) => /^(task|agent)$/i.test(name)
+const agentsOf = (tools: ToolCall[]) => tools.filter((t) => !t.parent && isAgentTool(t.name))
+const plainTools = (tools: ToolCall[]) => tools.filter((t) => !t.parent && !isAgentTool(t.name))
+
+function ToolRow({ t }: { t: ToolCall }) {
+  return (
+    <details className={`tool ${t.isError ? 'err' : ''}`}>
+      <summary>
+        <span className={`dot ${t.done ? (t.isError ? 'bad' : 'ok') : 'run'}`} />
+        <span className="tool-name">{prettyTool(t.name)}</span>
+        <span className="tool-arg">{toolArg(t.input)}</span>
+      </summary>
+      {t.input !== undefined && <pre>{JSON.stringify(t.input, null, 2)}</pre>}
+      {t.output && <pre className="out">{t.output}</pre>}
+    </details>
+  )
+}
+
+/** A subagent run: its type, brief, live steps and final report. */
+function AgentCard({ call, steps, live }: { call: ToolCall; steps: ToolCall[]; live: boolean }) {
+  const inp = (call.input ?? {}) as { subagent_type?: string; description?: string; prompt?: string }
+  const runningSteps = steps.filter((s) => !s.done).length
+  return (
+    <details className="agent-card" open={live && !call.done}>
+      <summary>
+        <span className={`dot ${call.done ? (call.isError ? 'bad' : 'ok') : 'run'}`} />
+        <span className="agent-type">{inp.subagent_type ?? 'agent'}</span>
+        <span className="agent-desc">{inp.description ?? ''}</span>
+        <span className="agent-steps">
+          {steps.length} step{steps.length === 1 ? '' : 's'}
+          {!call.done && runningSteps > 0 ? ' · working' : ''}
+        </span>
+      </summary>
+      {inp.prompt && (
+        <details className="tool">
+          <summary>
+            <span className="tool-name">Brief</span>
+            <span className="tool-arg">{inp.prompt.slice(0, 80)}</span>
+          </summary>
+          <pre>{inp.prompt}</pre>
+        </details>
+      )}
+      {steps.length > 0 && (
+        <div className="tool-list">
+          {steps.map((t) => (
+            <ToolRow key={t.id} t={t} />
+          ))}
+        </div>
+      )}
+      {call.output && <pre className="out">{call.output}</pre>}
+    </details>
   )
 }
 

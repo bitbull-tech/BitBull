@@ -7,6 +7,7 @@ import { opencodeEngine } from "./engines/opencode.js";
 import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
 import { mcpServersFor, type IntegrationId } from "./integrations.js";
 import { estimateCost } from "./models.js";
+import { subagentGuide } from "./subagents.js";
 
 export const engines: Record<EngineId, AgentEngine> = {
   opencode: opencodeEngine,
@@ -22,13 +23,14 @@ const LIKENESS_RULES: Record<string, string> = {
     "Likeness policy (private-likeness): generative animation of a real person's photo is allowed only inside this private project, only from images the user uploaded and confirms they have rights to, and every output must be labelled as AI-generated. Never synthesise the voice of a named individual. Never invent facts about a named person: anything stated about them must come from an attached source.",
 };
 
-function systemPrompt(project?: ProjectRow | null) {
+function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) {
   const parts = [existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : ""];
   parts.push(
     shellAllowed()
       ? `\n## Environment\n\nYou run inside an isolated ${config.sandbox.kind} sandbox. Your shell and files are confined to it; the user's computer is not reachable.${config.sandbox.egressProxy ? " Internet access goes through an allowlist proxy: if a site or package host is refused (HTTP 403 from the proxy), tell the user which domain to add to egress/allowlist.txt instead of trying to work around it." : ""}`
       : `\n## Environment\n\nShell commands are disabled in this environment (not sandboxed). Use file tools only, and tell the user if a task needs a shell.`,
   );
+  parts.push(subagentGuide(engine));
   parts.push(`\n## Heritage media\n\n${LIKENESS_RULES[config.heritage.likenessPolicy] ?? LIKENESS_RULES["ground-only"]}`);
   if (project) {
     parts.push(
@@ -98,7 +100,7 @@ export async function* runTurn(
   const restore = !session.engine_session_id ? recap(session.id) : "";
   const isFirst = messages.list(session.id).length === 0;
   // Attachments live in the workspace; tell the agent where, and keep a record in history.
-  const files = attachments.filter((a) => /^uploads\/[\w.\- /]+$/.test(a) && !a.includes(".."));
+  const files = attachments.filter((a) => /^uploads\/[^\0\n]+$/.test(a) && !a.split("/").includes(".."));
   const attachNote = files.length
     ? `\n\nAttached files (in your workspace, read them with your tools):\n${files.map((f) => `- ${f}`).join("\n")}`
     : "";
@@ -116,21 +118,21 @@ export async function* runTurn(
   let text = "";
   let usage: Usage | undefined;
   let engineSessionId = session.engine_session_id;
-  const tools: Array<{ id: string; name: string; input?: unknown; output?: string; isError?: boolean }> = [];
+  const tools: Array<{ id: string; name: string; input?: unknown; output?: string; isError?: boolean; parent?: string }> = [];
 
   try {
     for await (const ev of engine.run({
       engineSessionId,
       model,
       prompt: restore + prompt + attachNote,
-      systemPrompt: systemPrompt(project),
+      systemPrompt: systemPrompt(project, session.engine),
       signal: ctrl.signal,
       cwd,
       mcp,
       plan: opts.plan,
     })) {
       if (ev.type === "text") text += ev.delta;
-      if (ev.type === "tool_start") tools.push({ id: ev.id, name: ev.name, input: ev.input });
+      if (ev.type === "tool_start") tools.push({ id: ev.id, name: ev.name, input: ev.input, ...(ev.parent ? { parent: ev.parent } : {}) });
       if (ev.type === "tool_end") Object.assign(tools.find((t) => t.id === ev.id) ?? {}, { output: ev.output, isError: ev.isError });
       if (ev.type === "done") {
         usage = ev.usage;

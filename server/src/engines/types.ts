@@ -6,8 +6,9 @@
 export type AgentEvent =
   | { type: "text"; delta: string }
   | { type: "thinking"; delta: string }
-  | { type: "tool_start"; id: string; name: string; input?: unknown }
-  | { type: "tool_end"; id: string; output?: string; isError?: boolean }
+  // parent = id of the subagent (task) tool call this tool ran under
+  | { type: "tool_start"; id: string; name: string; input?: unknown; parent?: string }
+  | { type: "tool_end"; id: string; output?: string; isError?: boolean; parent?: string }
   | { type: "done"; engineSessionId: string; usage?: Usage }
   | { type: "error"; message: string };
 

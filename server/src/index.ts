@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -213,8 +213,87 @@ app.post("/api/sessions/:id/abort", (c) => {
   return c.json({ ok: true });
 });
 
-const MAX_UPLOAD = 25 * 1024 * 1024;
+const MAX_UPLOAD = config.uploadMaxMb * 1024 * 1024;
 const safeName = (n: string) => n.replace(/[^\w.\- ]+/g, "_").replace(/^\.+/, "").slice(0, 120) || "file";
+
+/** Workspace of a project id, or the general workspace for "general". */
+function workspaceOf(id: string) {
+  if (id === "general") return paths.workspace;
+  const p = projects.get(id);
+  return p ? workspaceFor(p) : null;
+}
+
+/**
+ * A safe path inside the workspace from user-supplied relative segments ("my-repo/src/a.ts").
+ * Drops "..", ".", empty and drive-letter segments; refuses the engines' own .claude/.opencode dirs.
+ */
+function safeRel(...parts: string[]) {
+  const segs = parts
+    .join("/")
+    .split(/[\\/]+/)
+    .map((x) => x.replace(/[\u0000-\u001f<>:"|?*]/g, "_").trim())
+    .filter((x) => x && x !== "." && x !== ".." && !/^[a-zA-Z]:$/.test(x));
+  if (segs[0] === ".claude" || segs[0] === ".opencode") return null;
+  return segs.join("/");
+}
+
+/**
+ * Add local files or whole folders to a project's workspace, keeping their folder structure.
+ * multipart: file (repeated), path (repeated, relative path for each file), target (folder, default "uploads").
+ * The UI sends folders in batches, so each request stays small.
+ */
+app.post("/api/projects/:id/files", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const body = await c.req.parseBody({ all: true });
+  const files = ([] as unknown[]).concat(body["file"] ?? []).filter((f): f is File => f instanceof File);
+  const rels = ([] as unknown[]).concat(body["path"] ?? []).map(String);
+  const target = safeRel(String(body["target"] ?? "uploads")) ?? "uploads";
+  const overwrite = String(body["overwrite"] ?? "") === "1";
+  if (!files.length) return c.json({ error: "no files" }, 400);
+  const saved: string[] = [];
+  const skipped: string[] = [];
+  for (const [i, f] of files.entries()) {
+    if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over ${config.uploadMaxMb} MB` }, 413);
+    const rel = safeRel(target, rels[i] || f.name);
+    if (!rel) return c.json({ error: "invalid path" }, 400);
+    const abs = path.join(ws, rel);
+    if (!abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
+    if (existsSync(abs) && !overwrite) {
+      skipped.push(rel);
+      continue;
+    }
+    mkdirSync(path.dirname(abs), { recursive: true });
+    writeFileSync(abs, Buffer.from(await f.arrayBuffer()));
+    saved.push(rel);
+  }
+  console.log(`[upload] ${saved.length} file(s) -> ${target} (${skipped.length} existing skipped)`);
+  return c.json({ saved, skipped });
+});
+
+/** List one folder of a project's workspace (for the Files panel and picking an upload target). */
+app.get("/api/projects/:id/files", (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const rel = safeRel(c.req.query("dir") ?? "") ?? "";
+  const abs = path.join(ws, rel);
+  if (abs !== ws && !abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
+  if (!existsSync(abs)) return c.json({ dir: rel, entries: [] });
+  const entries = readdirSync(abs, { withFileTypes: true })
+    .filter((d) => !(rel === "" && (d.name === ".claude" || d.name === ".opencode")))
+    .map((d) => {
+      const isDir = d.isDirectory();
+      let size = 0;
+      try {
+        if (!isDir) size = statSync(path.join(abs, d.name)).size;
+      } catch {
+        /* vanished */
+      }
+      return { name: d.name, dir: isDir, size };
+    })
+    .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+  return c.json({ dir: rel, entries });
+});
 
 /** Upload files into the agent's workspace so any engine/model can read them with its tools. */
 app.post("/api/sessions/:id/files", async (c) => {
@@ -228,7 +307,7 @@ app.post("/api/sessions/:id/files", async (c) => {
   mkdirSync(dir, { recursive: true });
   const saved: Array<{ name: string; path: string; size: number }> = [];
   for (const f of files) {
-    if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over 25 MB` }, 413);
+    if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over ${config.uploadMaxMb} MB` }, 413);
     let name = safeName(f.name);
     for (let i = 1; existsSync(path.join(dir, name)); i++) name = safeName(f.name).replace(/(\.[^.]*)?$/, `-${i}$1`);
     writeFileSync(path.join(dir, name), Buffer.from(await f.arrayBuffer()));
