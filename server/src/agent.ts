@@ -8,7 +8,7 @@ import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
 import { mcpServersFor, type IntegrationId } from "./integrations.js";
 import { estimateCost } from "./models.js";
 import { subagentGuide } from "./subagents.js";
-import { record } from "./activity.js";
+import { record, redact } from "./activity.js";
 
 export const engines: Record<EngineId, AgentEngine> = {
   opencode: opencodeEngine,
@@ -146,6 +146,11 @@ export async function* runTurn(
       mcp,
       plan: opts.plan,
     })) {
+      // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
+      if (ev.type === "text" || ev.type === "thinking") ev.delta = redact(ev.delta);
+      if (ev.type === "tool_start" && ev.input !== undefined) ev.input = JSON.parse(redact(JSON.stringify(ev.input)));
+      if (ev.type === "tool_end" && ev.output) ev.output = redact(ev.output);
+      if (ev.type === "error") ev.message = redact(ev.message);
       if (ev.type === "text") text += ev.delta;
       if (ev.type === "tool_start") {
         tools.push({ id: ev.id, name: ev.name, input: ev.input, ...(ev.parent ? { parent: ev.parent } : {}) });
@@ -190,6 +195,7 @@ export async function* runTurn(
   if (engineSessionId && engineSessionId !== session.engine_session_id) {
     sessions.update(session.id, { engine_session_id: engineSessionId });
   }
+  text = redact(text); // a secret split across two stream chunks is caught here
   const saved = messages.add({
     session_id: session.id,
     role: "assistant",

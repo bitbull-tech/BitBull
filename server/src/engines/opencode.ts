@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { checkSubagentModels, listSubagents, READ_ONLY_BASH, subagentsSignature } from "../subagents.js";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -82,6 +83,8 @@ function buildConfig(models: ModelInfo[]) {
   return {
     $schema: "https://opencode.ai/config.json",
     autoupdate: false,
+    // Keeps GM's credentials out of the agent's shell and out of tool output (agent/opencode-plugin)
+    plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "gm-guard.js")).href],
     share: "disabled" as const,
     model: def ? `${providerFor(def)}/${def.id}` : undefined,
     small_model: small ? `${providerFor(small)}/${small.id}` : undefined,
@@ -210,6 +213,26 @@ async function pumpEvents(client: OpencodeClient, directory: string) {
   }
 }
 
+/**
+ * Turn SayGM's terse HTTP errors into something actionable. Returns null for errors that
+ * may be transient (network blips), which OpenCode is allowed to retry.
+ */
+export function gatewayHint(message: string, model: string): string | null {
+  const code = message.match(/"code"\s*:\s*"?(\d{3})"?/)?.[1] ?? message.match(/\b(40[1-4]|429)\b/)?.[1];
+  switch (code) {
+    case "402":
+      return `SayGM refused the request: payment required (402) for ${model}. Check your SayGM balance or whether your plan includes this model, or switch model.`;
+    case "401":
+      return "SayGM rejected the API key (401). Check SAYGM_API_KEY in Settings → Configuration.";
+    case "403":
+      return `SayGM says this key isn't allowed to use ${model} (403).`;
+    case "404":
+      return `SayGM doesn't know the model ${model} (404). Reload the model list in Settings and pick another.`;
+    default:
+      return null;
+  }
+}
+
 /** Tiny push→pull queue so event callbacks can feed an async generator. */
 function channel<T>() {
   const buf: T[] = [];
@@ -293,7 +316,10 @@ export const opencodeEngine: AgentEngine = {
               outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
               costUsd: m.cost,
             };
-            if (m.error) out.push({ type: "error", message: m.error.data?.message ?? m.error.name ?? "Model error" });
+            if (m.error) {
+              const raw = String(m.error.data?.message ?? m.error.name ?? "Model error");
+              out.push({ type: "error", message: gatewayHint(raw, input.model) ?? raw });
+            }
           }
           break;
         }
@@ -329,8 +355,10 @@ export const opencodeEngine: AgentEngine = {
         case "session.status": {
           const st = p.status;
           if (st?.type === "retry") {
-            out.push({ type: "error", message: `Model call failed, OpenCode retrying (attempt ${st.attempt}): ${st.message}` });
-            if (st.attempt >= 2) void s.client.session.abort({ path: { id: sid }, query: dir });
+            const hint = gatewayHint(String(st.message ?? ""), input.model);
+            out.push({ type: "error", message: hint ?? `Model call failed, OpenCode retrying (attempt ${st.attempt}): ${st.message}` });
+            // Billing/auth/model errors won't fix themselves: stop instead of retrying
+            if (hint || st.attempt >= 2) void s.client.session.abort({ path: { id: sid }, query: dir });
           }
           break;
         }

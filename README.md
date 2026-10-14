@@ -47,7 +47,7 @@ shell is switched off (set `ALLOW_HOST_SHELL=true` only if you accept the risk).
 docker compose up -d --build      # UI + API on http://localhost:8787 (this computer only)
 docker compose logs -f gm-agent   # or the Activity panel in the UI
 docker compose logs -f egress     # every outbound request, allowed or refused
-docker compose restart egress     # after editing egress/allowlist.txt
+docker compose exec egress squid -k reconfigure   # after editing egress/allowlist.txt (no dropped connections)
 docker compose down               # stop
 ```
 
@@ -184,8 +184,14 @@ paths, proxy) can only be changed in `.env` plus a deploy, so a browser session 
 lower the walls. The UI can't write your Windows `.env` (the container can't see Windows,
 by design); copy a value there yourself if you want it to be the long-term default.
 
-Note: keys set either way are visible to the agent's shell inside the container, the same
-as `.env` (see GAPS.md item 11). Use scoped keys where the service offers them.
+GM's own credentials (SayGM, Ditto, Atlas, 404, `APP_TOKEN`) are blanked in every shell the
+agent starts, and any known key that turns up in a tool's output is replaced with
+`[REDACTED]` before the model, the chat history or Ditto sees it
+([`agent/opencode-plugin/gm-guard.js`](agent/opencode-plugin/gm-guard.js) for OpenCode; the
+server redacts again for both engines). Keys meant for the agent (`GITHUB_TOKEN`,
+`TAOSTATS_API_KEY`) stay available to it but are masked in output. This prevents accidental
+leaks; it isn't a hard wall, because the shell runs as the same user as GM (GAPS.md item 11).
+Use scoped keys where the service offers them.
 
 ## Activity and errors
 
@@ -200,6 +206,18 @@ To get the agent's view on something: tick entries in the log and choose **Expla
 **Debug** or **Review with subagents**, or highlight text in the log or in a reply and use
 the **Ask agent** buttons that appear. Either way the excerpt is put in the message box with
 the request, so you can add your notes before sending.
+
+## Export a chat
+
+**Export** in the top bar (when a chat is open):
+
+- **Copy for another agent**: Markdown with a short description of how GM is set up, the
+  full transcript, every tool call (outputs trimmed) and the chat's activity log. Paste it
+  into Claude, ChatGPT, Codex or another GM chat for a second opinion or debugging.
+- **Copy conversation only**, **Download Markdown**, **Download JSON** (everything,
+  untruncated).
+
+Keys and tokens are replaced with `[REDACTED]` in every export.
 
 ## Subagents
 
@@ -237,6 +255,7 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
+| `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `tools=0`, `activity=0`, `limit=` (chars per tool output) |
 | `GET` | `/api/activity` | Activity events (`?after=&level=&sessionId=&limit=`) |
 | `GET` | `/api/activity/stream` | Live activity (SSE; `?token=` for EventSource) |
 

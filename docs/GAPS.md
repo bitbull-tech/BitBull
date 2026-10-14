@@ -33,7 +33,7 @@ Gemini CLI and stock OpenCode, as of October 2026. "Have" means working in this 
 8. **Composer conveniences.** @-mention files, slash commands for saved prompts, paste screenshots straight to vision models, a context-usage meter and a manual /compact.
 9. **Code intelligence after edits.** OpenCode supports LSP diagnostics (`ENABLE_LSP`, off by default). Turning it on per project gives the "edit, see type errors, fix" loop Cursor and Claude Code have.
 10. **Spend controls.** A per-chat and per-day budget, and a cheap default model for subagents. SayGM makes per-model routing easy; the cap is missing.
-11. **Secrets isolation.** The agent's shell runs in the same container as the server's keys. Leading cloud agents run tools in a separate sandbox with no secrets. Planned: per-project tool container.
+11. **Secrets isolation.** The agent's shell runs in the same container, as the same user, as the server's keys. GM now blanks its credentials in the agent's shell and redacts any key found in tool output (gm-guard plugin + server redaction), which stops accidental leaks, but a determined agent could still read them from disk or another process. Leading cloud agents run tools in a separate sandbox with no secrets. Planned: per-project tool container.
 12. **Multi-user.** One shared token today. Needed before opening it to others: accounts, per-user projects, audit log.
 13. **IDE integration.** Claude Code, Codex and Gemini CLI plug into VS Code and JetBrains. GM is web-only. Lowest priority for the heritage platform; useful for the games.
 

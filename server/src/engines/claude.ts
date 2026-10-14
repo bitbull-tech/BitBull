@@ -15,6 +15,8 @@ function cleanEnv(): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue;
     if (/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$|CLAUDECODE$|CLAUDE_AGENT_)/.test(k)) continue;
+    // GM's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
+    if (/^(SAYGM_API_KEY|DITTO_API_KEY|APP_TOKEN|ATLAS_API_KEY|FOUR04_API_KEY|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
     out[k] = v;
   }
   return out;

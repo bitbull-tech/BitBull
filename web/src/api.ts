@@ -215,6 +215,15 @@ export const api = {
   projectFiles: (projectId: string, dir = '') =>
     req<{ dir: string; entries: { name: string; dir: boolean; size: number }[] }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
 
+  /** Chat export for pasting into another agent: format md (default) or json */
+  async exportChat(id: string, format: 'md' | 'json' = 'md', opts: { tools?: boolean; activity?: boolean } = {}) {
+    const q = new URLSearchParams({ format, tools: opts.tools === false ? '0' : '1', activity: opts.activity === false ? '0' : '1' })
+    const res = await fetch(`/api/sessions/${id}/export?${q}`, { headers: { authorization: `Bearer ${getToken()}` } })
+    if (res.status === 401) throw new Unauthorized('unauthorized')
+    if (!res.ok) throw new Error(`Export failed (${res.status})`)
+    return res.text()
+  },
+
   /** POST + read the SSE stream manually (EventSource can't POST). */
   async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void, attachments: string[] = [], plan = false) {
     const res = await fetch(`/api/sessions/${id}/messages`, {

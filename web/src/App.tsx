@@ -4,6 +4,7 @@ import { Chat } from './Chat'
 import { IconChevronRight, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
+import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
@@ -443,6 +444,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               <span className="muted new-label">New chat</span>
             )}
           </div>
+          {active && <ExportMenu session={active} />}
           <button className="btn files-btn" title="Browse and add files and folders" onClick={() => setFilesFor(currentProject ?? 'general')}>
             <IconFolder size={14} /> Files
           </button>

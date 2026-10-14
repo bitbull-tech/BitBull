@@ -47,15 +47,32 @@ export function resetDitto() {
 
 export const dittoEnabled = () => !!config.ditto.apiKey;
 
-export async function dittoCall(name: string, args: Record<string, unknown>) {
+/** Network-level failures worth retrying (proxy restarting, connection reset, timeout). */
+const transient = (msg: string) => /ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket|fetch failed|terminated|timeout|50[234]/i.test(msg);
+
+/**
+ * Call a Ditto tool. Transient network errors are retried with backoff (1s, 5s, 15s): writes
+ * use a vendorId, so a retried save can't create duplicates.
+ */
+export async function dittoCall(name: string, args: Record<string, unknown>, retries = [1000, 5000, 15000]) {
   if (!dittoEnabled()) return null;
-  try {
-    const c = await getClient();
-    return await c.callTool({ name, arguments: args });
-  } catch (err) {
-    client = null; // force reconnect next time
-    console.error(`[ditto] ${name} failed:`, errText(err));
-    return null;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const c = await getClient();
+      const res = await c.callTool({ name, arguments: args });
+      if (attempt > 0) console.log(`[ditto] ${name} succeeded on retry ${attempt}`);
+      return res;
+    } catch (err) {
+      client = null; // force reconnect next time
+      const msg = errText(err);
+      if (attempt < retries.length && transient(msg)) {
+        console.warn(`[ditto] ${name} failed (${msg}); retrying in ${retries[attempt] / 1000}s`);
+        await new Promise((r) => setTimeout(r, retries[attempt]));
+        continue;
+      }
+      console.error(`[ditto] ${name} failed:`, msg);
+      return null;
+    }
   }
 }
 

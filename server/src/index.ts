@@ -16,6 +16,7 @@ import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, subscribe, type Level } from "./activity.js";
+import { exportJson, exportMarkdown } from "./export.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -74,6 +75,23 @@ app.put("/api/settings", async (c) => {
   }
 });
 app.get("/api/status", async (c) => c.json(await status()));
+
+// ---------- export a chat (for pasting into another agent) ----------
+app.get("/api/sessions/:id/export", (c) => {
+  const id = c.req.param("id");
+  const format = c.req.query("format") ?? "md";
+  if (format === "json") {
+    const j = exportJson(id);
+    return j ? c.json(j) : c.json({ error: "not found" }, 404);
+  }
+  const md = exportMarkdown(id, {
+    tools: c.req.query("tools") !== "0",
+    activity: c.req.query("activity") !== "0",
+    outputLimit: Number(c.req.query("limit") ?? 2000) || 2000,
+  });
+  if (!md) return c.json({ error: "not found" }, 404);
+  return c.text(md, 200, { "content-type": "text/markdown; charset=utf-8" });
+});
 
 // ---------- activity feed ----------
 app.get("/api/activity", (c) => {

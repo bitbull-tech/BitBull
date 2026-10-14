@@ -63,9 +63,12 @@ export async function syncSkills({ backup = true } = {}) {
   const skills = listSkills();
   console.log(`[skills] ${skills.length} skill(s) mirrored to ${spaces.length} workspace(s)`);
   if (backup && dittoEnabled()) {
-    for (const s of skills) {
-      await backupSkill(s.name, readFileSync(path.join(config.skillsDir, s.dir, "SKILL.md"), "utf8"), s.hash);
-    }
+    // In the background: startup and the UI never wait on Ditto (it retries when the network blips)
+    void (async () => {
+      for (const s of skills) {
+        await backupSkill(s.name, readFileSync(path.join(config.skillsDir, s.dir, "SKILL.md"), "utf8"), s.hash);
+      }
+    })().catch((e) => console.error("[skills] backup to Ditto failed:", e instanceof Error ? e.message : e));
   }
   return skills;
 }

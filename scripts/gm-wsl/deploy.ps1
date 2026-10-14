@@ -23,6 +23,6 @@ Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=n
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
 
 Write-Host "==> Rebuilding" -ForegroundColor Cyan
-& wsl.exe -d $Distro --cd ~/SayGMAgent --exec sh -c "GM_DATA_DIR=`$HOME/gm-data docker compose up -d --build --remove-orphans && docker compose restart egress && docker compose ps"
+& wsl.exe -d $Distro --cd ~/SayGMAgent --exec sh -c "GM_DATA_DIR=`$HOME/gm-data docker compose up -d --build --remove-orphans && (docker compose exec -T egress squid -k reconfigure -f /etc/squid/squid.conf 2>/dev/null || docker compose restart egress) && docker compose ps"
 if ($LASTEXITCODE -ne 0) { throw "docker compose failed ($LASTEXITCODE)" }
 Write-Host "Deployed. http://localhost:8787" -ForegroundColor Green
