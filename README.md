@@ -146,9 +146,12 @@ What leaves the machine, and what doesn't:
 - **SayGM** receives the conversation sent to the model, including any file contents the
   agent reads into it.
 - **GitHub** receives only what the agent commits and pushes.
-- **Files are not backed up anywhere else yet.** Back up `~/gm-data` (for example
-  `wsl -d gm -u root -- tar -czf - -C /home/<you> gm-data > gm-data.tgz`) until off-machine
-  storage is added (Hippius is planned).
+- **Hippius** receives everything you upload, encrypted on this machine first (AES-256-GCM)
+  and indexed in Ditto. Set it up in Settings → Configuration → Hippius storage, or in
+  `.env`; see [docs/STORAGE.md](docs/STORAGE.md). With `STORAGE_MIRROR=off`, nothing is sent.
+  Still back up `~/gm-data` for the database and workspaces (for example
+  `wsl -d gm -u root -- tar -czf - -C /home/<you> gm-data > gm-data.tgz`): Hippius holds the
+  files you uploaded, not the chats.
 
 ## On Windows: the locked-down WSL distro
 
@@ -269,6 +272,9 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `GET` | `/api/sessions/:id/stream` | Attach to a turn and follow it: `?turnId=` (default: the running one, else the last) and `?from=<seq>` to replay what you missed |
 | `POST` | `/api/sessions/:id/abort` | Stop a running turn |
 | `GET` | `/api/brand` | Name, logos and colour overrides (public, no token) |
+| `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |
+| `POST` | `/api/stored/:id/restore` | Pull a stored file back into its workspace and verify it |
+| `POST` | `/api/stored/:id/retry` | Queue a failed upload again |
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |

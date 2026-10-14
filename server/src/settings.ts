@@ -3,6 +3,7 @@ import { config, githubTokenKind, paths, readOverrides, reloadConfig, settingSou
 import { record } from "./activity.js";
 import { resetDitto } from "./ditto.js";
 import { probeDitto } from "./ditto.js";
+import { probeStorage, resetStorage } from "./storage.js";
 import { listModels } from "./models.js";
 import { listSkills } from "./skills.js";
 import { listSubagents } from "./subagents.js";
@@ -50,6 +51,13 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   FOUR04_API_BASE: {},
   FOUR04_MCP_URL: {},
   TAOSTATS_API_KEY: {},
+  HIPPIUS_ACCESS_KEY: {},
+  HIPPIUS_SECRET_KEY: {},
+  HIPPIUS_BUCKET: {},
+  HIPPIUS_S3_ENDPOINT: {},
+  // Changing this makes everything already stored unreadable, so the UI confirms first
+  HIPPIUS_ENCRYPTION_KEY: {},
+  STORAGE_MIRROR: { options: ["uploads", "off"] },
   HERITAGE_LIKENESS_POLICY: { options: ["ground-only", "private-likeness"] },
   UPLOAD_MAX_MB: {},
   ENABLE_WEB_SEARCH: { options: ["true", "false"] },
@@ -68,6 +76,11 @@ export async function updateSettings(values: Record<string, string | null>) {
     if (v && opts && !opts.includes(v)) throw new Error(`${k} must be one of: ${opts.join(", ")}`);
     if (v && /[\r\n]/.test(v)) throw new Error(`${k} can't contain line breaks`);
     if (k === "UPLOAD_MAX_MB" && v && !(Number(v) > 0)) throw new Error("UPLOAD_MAX_MB must be a positive number");
+    // Reject a bad encryption key here rather than at the first upload, when it is too late
+    if (k === "HIPPIUS_ENCRYPTION_KEY" && v) {
+      const buf = /^[0-9a-f]{64}$/i.test(v.trim()) ? Buffer.from(v.trim(), "hex") : Buffer.from(v.trim(), "base64");
+      if (buf.length !== 32) throw new Error("HIPPIUS_ENCRYPTION_KEY must be 32 bytes (44 base64 characters, or 64 hex)");
+    }
   }
   const cur = readOverrides();
   for (const [k, v] of Object.entries(values)) {
@@ -77,6 +90,7 @@ export async function updateSettings(values: Record<string, string | null>) {
   writeOverrides(cur);
   reloadConfig();
   resetDitto();
+  resetStorage();
   await listModels(true).catch(() => []);
   const changed = Object.keys(values);
   record({ level: "info", source: "config", message: `Settings changed in the UI: ${changed.join(", ")} (values not logged)` });
@@ -188,6 +202,24 @@ export function describeSettings() {
       ],
     },
     {
+      id: "hippius",
+      title: "Hippius storage",
+      rows: [
+        row("HIPPIUS_ACCESS_KEY", "Sub-token access key", config.storage.accessKey, {
+          secret: true,
+          hint: "Hippius console → S3 Buckets → Sub Tokens. Object Read & Write, limited to this bucket. Never the account master key.",
+        }),
+        row("HIPPIUS_SECRET_KEY", "Sub-token secret", config.storage.secretKey, { secret: true, hint: "Shown once when the sub-token is created" }),
+        row("HIPPIUS_BUCKET", "Bucket", config.storage.bucket, { hint: "Create it in the Hippius console first" }),
+        row("HIPPIUS_ENCRYPTION_KEY", "Encryption key", config.storage.encryptionKey, {
+          secret: true,
+          hint: "32 bytes, base64. Files are encrypted with this before they leave the machine. Keep a copy somewhere else: without it, nothing stored can be read back, and changing it orphans everything already stored.",
+        }),
+        row("STORAGE_MIRROR", "What to store", config.storage.mirror, { hint: "uploads: everything you attach or add through Files. off: store nothing." }),
+        row("HIPPIUS_S3_ENDPOINT", "Endpoint", config.storage.endpoint),
+      ],
+    },
+    {
       id: "heritage",
       title: "Heritage experiences",
       rows: [
@@ -225,6 +257,7 @@ export async function status() {
     ditto: d.enabled ? { ok: !!d.ok, tools: "tools" in d ? d.tools?.length : 0, error: "error" in d ? d.error : undefined } : { ok: false, error: "DITTO_API_KEY not set" },
     skills: listSkills().map((s) => ({ name: s.name, description: s.description })),
     subagents: listSubagents().map((a) => ({ name: a.name, description: a.description, access: a.access, model: a.model })),
+    storage: await withTimeout(probeStorage(), 15000, "Hippius").catch((e: Error) => ({ ok: false, configured: true, detail: e.message })),
     workspace: paths.workspace,
     sandbox: { kind: config.sandbox.kind, shell: shellAllowed(), egress: config.sandbox.egressProxy ? "allowlist" : "open" },
     systemPromptFound: existsSync(config.promptFile),

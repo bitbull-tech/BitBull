@@ -92,6 +92,12 @@ export function Settings({
                   detail={status?.ditto.ok ? `${status.ditto.tools} memory tools · archive: ${cfg.ditto.archive}` : status?.ditto.error ?? 'Not connected'}
                 />
                 <StatusCard
+                  title="Hippius storage"
+                  ok={status ? status.storage?.ok : undefined}
+                  loading={!status}
+                  detail={status?.storage?.detail ?? 'Not configured'}
+                />
+                <StatusCard
                   title="Agent sandbox"
                   ok={status ? status.sandbox?.kind !== 'none' : undefined}
                   loading={!status}

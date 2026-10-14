@@ -17,6 +17,9 @@ models.opencode.ai
 # Bittensor data
 api.taostats.io
 
+# Hippius: off-machine storage for uploads (encrypted before it leaves here)
+s3.hippius.com
+
 # Package registries (the agent installs project dependencies)
 registry.npmjs.org
 pypi.org

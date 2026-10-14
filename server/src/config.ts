@@ -148,6 +148,26 @@ function buildConfig() {
     egressProxy: process.env.HTTPS_PROXY || process.env.https_proxy || "",
   },
 
+  /**
+   * Off-machine storage on Hippius (S3-compatible). GM holds the only credential: Hippius
+   * sub-tokens scope to a bucket, not a folder, so prefix isolation is GM's job. See
+   * docs/STORAGE.md.
+   */
+  storage: {
+    endpoint: env("HIPPIUS_S3_ENDPOINT", "https://s3.hippius.com"),
+    region: env("HIPPIUS_REGION", "decentralized"),
+    /** Sub-token with Object Read & Write on this bucket only — never the account master key */
+    accessKey: env("HIPPIUS_ACCESS_KEY", ""),
+    secretKey: env("HIPPIUS_SECRET_KEY", ""),
+    bucket: env("HIPPIUS_BUCKET", "gm-agent"),
+    /** 32 bytes, base64 or hex. Without it nothing stored can ever be read back. */
+    encryptionKey: env("HIPPIUS_ENCRYPTION_KEY", ""),
+    /** off = store nothing; uploads = everything the user attaches or adds */
+    mirror: env("STORAGE_MIRROR", "uploads") as "off" | "uploads",
+    /** Skip anything larger than this (MB); a single PUT has to fit in one request */
+    maxFileMb: Number(env("STORAGE_MAX_FILE_MB", "2048")),
+  },
+
   heritage: {
     /**
      * How generated media may depict real, named people from uploads.

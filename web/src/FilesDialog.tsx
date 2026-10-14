@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type Project } from './api'
+import { api, type Project, type StoredFile } from './api'
 import { IconChevronRight, IconFile, IconFolder, IconRefresh, IconX } from './icons'
 import { filterItems, fmtBytes, fromDrop, fromInput, SKIP_DIRS, uploadItems, type UploadItem } from './uploads'
+
+/** Whether a file has reached Hippius yet. Nothing is shown when storage is switched off. */
+function BackupMark({ file }: { file?: StoredFile }) {
+  if (!file) return <span className="backup-mark none" title="Not backed up" />
+  if (file.status === 'stored')
+    return <span className="backup-mark ok" title={`Backed up to Hippius${file.sha256 ? ` · sha256 ${file.sha256.slice(0, 12)}…` : ''}`} />
+  if (file.status === 'pending') return <span className="backup-mark pending" title="Waiting to upload" />
+  return <span className="backup-mark bad" title={file.error ?? 'Upload failed'} />
+}
 
 /**
  * Browse a project's workspace and add local files or whole folders to it (structure kept).
@@ -20,6 +29,9 @@ export function FilesDialog({ project, onClose }: { project: Project | null; onC
   const [dragging, setDragging] = useState(false)
   const filesRef = useRef<HTMLInputElement>(null)
   const folderRef = useRef<HTMLInputElement>(null)
+  const [stored, setStored] = useState<Map<string, StoredFile>>(new Map())
+  const [storage, setStorage] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = (d = dir) =>
     void api
@@ -27,8 +39,19 @@ export function FilesDialog({ project, onClose }: { project: Project | null; onC
       .then((r) => setEntries(r.entries))
       .catch((e) => setMsg(e instanceof Error ? e.message : String(e)))
 
+  /** What of this workspace is backed up on Hippius, keyed by path within it. */
+  const loadStored = () =>
+    void api
+      .storedFiles(pid)
+      .then((r) => {
+        setStorage(r.enabled)
+        setStored(new Map(r.files.map((f) => [f.rel_path, f])))
+      })
+      .catch(() => setStorage(false))
+
   useEffect(() => {
     load(dir)
+    loadStored()
     setTarget(dir || 'uploads')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dir])
@@ -102,7 +125,9 @@ export function FilesDialog({ project, onClose }: { project: Project | null; onC
                 </button>
               ) : (
                 <div key={e.name} className="file-row">
-                  <IconFile size={14} /> <span className="grow">{e.name}</span> <span className="muted small">{fmtBytes(e.size)}</span>
+                  <IconFile size={14} /> <span className="grow">{e.name}</span>
+                  {storage && <BackupMark file={stored.get(dir ? `${dir}/${e.name}` : e.name)} />}
+                  <span className="muted small">{fmtBytes(e.size)}</span>
                 </div>
               ),
             )}
@@ -173,6 +198,62 @@ export function FilesDialog({ project, onClose }: { project: Project | null; onC
             </div>
           )}
           {msg && <p className="small">{msg}</p>}
+
+          {storage && stored.size > 0 && (
+            <>
+              <h3>Backed up on Hippius</h3>
+              <p className="muted small">
+                Encrypted here before upload, and indexed in Ditto so you can ask for them by what they are. Restoring writes the
+                file back into this workspace and checks it against its original checksum.
+              </p>
+              <div className="files-list">
+                {[...stored.values()].slice(0, 40).map((f) => (
+                  <div key={f.id} className="file-row">
+                    <BackupMark file={f} />
+                    <span className="grow">{f.rel_path}</span>
+                    <span className="muted small">{fmtBytes(f.size)}</span>
+                    {f.status === 'stored' && (
+                      <button
+                        className="btn sm"
+                        disabled={busyId === f.id}
+                        onClick={() => {
+                          setBusyId(f.id)
+                          setMsg(null)
+                          void api
+                            .restoreStored(f.id)
+                            .then((r) =>
+                              setMsg(r.verified ? `Restored ${r.path} and the checksum matched.` : `Restored ${r.path}, but the checksum did NOT match.`),
+                            )
+                            .catch((e) => setMsg(e instanceof Error ? e.message : String(e)))
+                            .finally(() => (setBusyId(null), load()))
+                        }}
+                      >
+                        {busyId === f.id ? 'Restoring…' : 'Restore'}
+                      </button>
+                    )}
+                    {f.status === 'failed' && (
+                      <button
+                        className="btn sm"
+                        disabled={busyId === f.id}
+                        title={f.error ?? undefined}
+                        onClick={() => {
+                          setBusyId(f.id)
+                          void api
+                            .retryStored(f.id)
+                            .then(() => setMsg('Queued again.'))
+                            .catch((e) => setMsg(e instanceof Error ? e.message : String(e)))
+                            .finally(() => (setBusyId(null), setTimeout(loadStored, 1500)))
+                        }}
+                      >
+                        Try again
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           <p className="muted small">
             Tip: for a Git repository, ask the agent to clone it instead. That keeps its history and lets the agent push back (set
             GITHUB_TOKEN for private repos).

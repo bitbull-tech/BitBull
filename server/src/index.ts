@@ -21,7 +21,8 @@ import {
   type TurnRecord,
   type TurnStatus,
 } from "./turns.js";
-import { messages, projects, sessions, workspaceFor } from "./db.js";
+import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
+import { mirrorFile, newEncryptionKey, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
@@ -382,8 +383,66 @@ app.post("/api/projects/:id/files", async (c) => {
     saved.push(rel);
   }
   console.log(`[upload] ${saved.length} file(s) -> ${target} (${skipped.length} existing skipped)`);
+  const id = c.req.param("id");
+  const project = id === "general" ? undefined : projects.get(id);
+  for (const rel of saved) {
+    mirrorFile({
+      projectId: project?.id ?? null,
+      projectDir: project?.dir ?? null,
+      projectName: project?.name,
+      workspace: ws,
+      relPath: rel.split(path.sep).join("/"),
+    });
+  }
   return c.json({ saved, skipped });
 });
+
+// ---------- storage (Hippius) ----------
+
+/** What has been mirrored for a project, newest first. "general" = the unfiled workspace. */
+app.get("/api/projects/:id/stored", (c) => {
+  const id = c.req.param("id");
+  if (id !== "general" && !projects.get(id)) return c.json({ error: "project not found" }, 404);
+  return c.json({ files: storedFiles.list(id === "general" ? null : id), enabled: storageEnabled() });
+});
+
+/** Pull a stored file back into its workspace and verify its checksum. */
+app.post("/api/stored/:id/restore", async (c) => {
+  const row = storedFiles.get(c.req.param("id"));
+  if (!row) return c.json({ error: "not found" }, 404);
+  if (row.status !== "stored") return c.json({ error: "this file is not stored yet" }, 409);
+  const ws = row.project_id ? workspaceOf(row.project_id) : paths.workspace;
+  if (!ws) return c.json({ error: "the project this belongs to is gone" }, 409);
+  try {
+    const out = await restoreFile(row, ws);
+    return c.json({ path: row.rel_path, verified: out.verified });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+/** Try a failed upload again. */
+app.post("/api/stored/:id/retry", (c) => {
+  const row = storedFiles.get(c.req.param("id"));
+  if (!row) return c.json({ error: "not found" }, 404);
+  const ws = row.project_id ? workspaceOf(row.project_id) : paths.workspace;
+  if (!ws) return c.json({ error: "the project this belongs to is gone" }, 409);
+  const project = row.project_id ? projects.get(row.project_id) : undefined;
+  const queued = mirrorFile({
+    projectId: row.project_id,
+    projectDir: project?.dir ?? null,
+    projectName: project?.name ?? row.project_name ?? undefined,
+    workspace: ws,
+    relPath: row.rel_path,
+  });
+  return queued ? c.json({ ok: true }) : c.json({ error: "could not queue it: storage off, or the local file is gone" }, 409);
+});
+
+/**
+ * A fresh encryption key, for first-time setup. Returned once and never stored by this
+ * route: the user saves it through Settings like any other value, and backs it up.
+ */
+app.post("/api/storage/key", (c) => c.json({ key: newEncryptionKey() }));
 
 /** List one folder of a project's workspace (for the Files panel and picking an upload target). */
 app.get("/api/projects/:id/files", (c) => {
@@ -428,6 +487,16 @@ app.post("/api/sessions/:id/files", async (c) => {
     saved.push({ name: f.name, path: path.posix.join("uploads", s.id.slice(0, 8), name), size: f.size });
   }
   console.log(`[upload] ${saved.length} file(s) -> ${rel}`);
+  const project = projects.get(s.project_id);
+  for (const f of saved) {
+    mirrorFile({
+      projectId: s.project_id,
+      projectDir: project?.dir ?? null,
+      projectName: project?.name,
+      workspace: workspaceFor(project),
+      relPath: f.path,
+    });
+  }
   return c.json({ files: saved });
 });
 
@@ -583,6 +652,7 @@ if (existsSync(config.webDist)) {
 
 // ---------- boot ----------
 resetStaleTurns();
+resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] SayGM Agent listening on http://${info.address}:${info.port}`);

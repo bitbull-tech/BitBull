@@ -104,6 +104,37 @@ export async function archiveTurn(t: {
   });
 }
 
+/**
+ * Index a file stored on Hippius. Hippius holds the bytes; this memory is how they are
+ * found again — "the photo of Grandad's squadron" searches Ditto and gets back a key.
+ */
+export async function indexFile(f: {
+  name: string;
+  project?: string;
+  relPath: string;
+  key: string;
+  bucket: string;
+  sha256: string;
+  size: number;
+}) {
+  if (!dittoEnabled()) return;
+  const mb = f.size / 1024 / 1024;
+  const content = [
+    `File "${f.name}"${f.project ? ` in project "${f.project}"` : ""} (SayGM Agent)`,
+    "",
+    `Stored on Hippius at hippius:${f.bucket}/${f.key} (encrypted; restore it through GM).`,
+    `In the workspace at ${f.relPath}. ${mb < 0.1 ? `${f.size} bytes` : `${mb.toFixed(1)} MB`}, sha256 ${f.sha256}.`,
+  ].join("\n");
+  await dittoCall("save_memory", {
+    content,
+    source: config.ditto.source,
+    sourceContext: f.project ? `project:${f.project}` : "files",
+    // Content-addressed: re-storing the same bytes at the same key won't duplicate the memory
+    vendorId: `file:${f.key}:${f.sha256.slice(0, 16)}`,
+    metadata: { kind: "stored-file", name: f.name, key: f.key, bucket: f.bucket, sha256: f.sha256, size: f.size, project: f.project ?? null },
+  });
+}
+
 /** Back up a skill file to Ditto (idempotent by skill name + content hash). */
 export async function backupSkill(name: string, markdown: string, hash: string) {
   await dittoCall("save_memory", {

@@ -52,6 +52,24 @@ CREATE TABLE IF NOT EXISTS turns (
   ended_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, started_at DESC);
+-- Files mirrored to Hippius. The bytes live there, this is the local ledger, and a Ditto
+-- memory per file is the searchable index. project_name is kept so a restore still reads
+-- sensibly after a project is renamed or deleted.
+CREATE TABLE IF NOT EXISTS stored_files (
+  id TEXT PRIMARY KEY,
+  project_id TEXT,
+  project_name TEXT,
+  rel_path TEXT NOT NULL,
+  key TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  sha256 TEXT,
+  status TEXT NOT NULL,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  stored_at INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stored_files_key ON stored_files(key);
+CREATE INDEX IF NOT EXISTS idx_stored_files_loc ON stored_files(project_id, rel_path);
 CREATE TABLE IF NOT EXISTS turn_events (
   turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
   seq INTEGER NOT NULL,
@@ -217,6 +235,89 @@ export const sessions = {
   },
   delete(id: string) {
     db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  },
+};
+
+export interface StoredFileRow {
+  id: string;
+  project_id: string | null;
+  project_name: string | null;
+  /** Path inside the workspace, e.g. "uploads/3f2a/photo.jpg" */
+  rel_path: string;
+  /** Object key in the Hippius bucket, e.g. "squadron-202-a1b2/uploads/3f2a/photo.jpg" */
+  key: string;
+  /** Plaintext size in bytes */
+  size: number;
+  /** SHA-256 of the plaintext, known once it has been read for upload */
+  sha256: string | null;
+  status: "pending" | "stored" | "failed";
+  error: string | null;
+  created_at: number;
+  stored_at: number | null;
+}
+
+export const storedFiles = {
+  get(id: string): StoredFileRow | undefined {
+    return db.prepare("SELECT * FROM stored_files WHERE id = ?").get(id) as unknown as StoredFileRow | undefined;
+  },
+  byKey(key: string): StoredFileRow | undefined {
+    return db.prepare("SELECT * FROM stored_files WHERE key = ?").get(key) as unknown as StoredFileRow | undefined;
+  },
+  /** Everything mirrored for a project ("general" = the unfiled workspace), newest first. */
+  list(projectId: string | null, limit = 500): StoredFileRow[] {
+    return (
+      projectId === null
+        ? db.prepare("SELECT * FROM stored_files WHERE project_id IS NULL ORDER BY created_at DESC LIMIT ?").all(limit)
+        : db.prepare("SELECT * FROM stored_files WHERE project_id = ? ORDER BY created_at DESC LIMIT ?").all(projectId, limit)
+    ) as unknown as StoredFileRow[];
+  },
+  pending(): StoredFileRow[] {
+    return db.prepare("SELECT * FROM stored_files WHERE status = 'pending' ORDER BY created_at").all() as unknown as StoredFileRow[];
+  },
+  failed(): StoredFileRow[] {
+    return db.prepare("SELECT * FROM stored_files WHERE status = 'failed' ORDER BY created_at").all() as unknown as StoredFileRow[];
+  },
+  counts(): { stored: number; pending: number; failed: number; bytes: number } {
+    const rows = db.prepare("SELECT status, COUNT(*) n, COALESCE(SUM(size),0) bytes FROM stored_files GROUP BY status").all() as unknown as Array<{
+      status: string;
+      n: number;
+      bytes: number;
+    }>;
+    const by = (s: string) => rows.find((r) => r.status === s)?.n ?? 0;
+    return {
+      stored: by("stored"),
+      pending: by("pending"),
+      failed: by("failed"),
+      bytes: rows.find((r) => r.status === "stored")?.bytes ?? 0,
+    };
+  },
+  /** One row per key: re-uploading the same path replaces the previous record. */
+  add(row: StoredFileRow): StoredFileRow {
+    db.prepare(
+      `INSERT INTO stored_files (id,project_id,project_name,rel_path,key,size,sha256,status,error,created_at,stored_at)
+       VALUES (@id,@project_id,@project_name,@rel_path,@key,@size,@sha256,@status,@error,@created_at,@stored_at)
+       ON CONFLICT(key) DO UPDATE SET
+         id=excluded.id, project_id=excluded.project_id, project_name=excluded.project_name, size=excluded.size,
+         sha256=excluded.sha256, status=excluded.status, error=excluded.error, created_at=excluded.created_at,
+         stored_at=excluded.stored_at`,
+    ).run({ ...row });
+    return row;
+  },
+  update(id: string, patch: Partial<Pick<StoredFileRow, "status" | "sha256" | "error" | "stored_at">>) {
+    const cur = storedFiles.get(id);
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    db.prepare("UPDATE stored_files SET status=@status, sha256=@sha256, error=@error, stored_at=@stored_at WHERE id=@id").run({
+      id,
+      status: next.status,
+      sha256: next.sha256,
+      error: next.error,
+      stored_at: next.stored_at,
+    });
+    return next;
+  },
+  remove(id: string) {
+    db.prepare("DELETE FROM stored_files WHERE id = ?").run(id);
   },
 };
 

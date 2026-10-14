@@ -105,9 +105,24 @@ export interface SettingGroup {
   title: string
   rows: SettingRow[]
 }
+export interface StoredFile {
+  id: string
+  project_id: string | null
+  project_name: string | null
+  rel_path: string
+  key: string
+  size: number
+  sha256: string | null
+  status: 'pending' | 'stored' | 'failed'
+  error: string | null
+  created_at: number
+  stored_at: number | null
+}
+
 export interface Status {
   saygm: { ok: boolean; models?: number; ms?: number; error?: string }
   ditto: { ok: boolean; tools?: number; error?: string }
+  storage?: { ok: boolean; configured: boolean; detail: string; stored?: number; pending?: number; failed?: number; bytes?: number }
   skills: { name: string; description: string }[]
   subagents?: { name: string; description: string; access: 'read' | 'write'; model: string }[]
   workspace: string
@@ -217,6 +232,12 @@ export const api = {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Upload failed (${res.status})`)
     return (await res.json()) as { saved: string[]; skipped: string[] }
   },
+  /** Files mirrored to Hippius for a project ("general" = the unfiled workspace) */
+  storedFiles: (projectId: string) => req<{ files: StoredFile[]; enabled: boolean }>(`/api/projects/${projectId}/stored`),
+  restoreStored: (id: string) => req<{ path: string; verified: boolean }>(`/api/stored/${id}/restore`, { method: 'POST' }),
+  retryStored: (id: string) => req<{ ok: boolean }>(`/api/stored/${id}/retry`, { method: 'POST' }),
+  newStorageKey: () => req<{ key: string }>('/api/storage/key', { method: 'POST' }),
+
   projectFiles: (projectId: string, dir = '') =>
     req<{ dir: string; entries: { name: string; dir: boolean; size: number }[] }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
 
