@@ -4,7 +4,7 @@ import { Chat } from './Chat'
 import { IconChevronRight, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
-import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, useActivity } from './activity'
+import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
@@ -133,6 +133,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [status, setStatus] = useState<Status | null>(null)
   const [activityOpen, setActivityOpen] = useState(false)
   const { unseen } = useActivity()
+  useEffect(() => {
+    const close = () => setActivityOpen(false)
+    window.addEventListener('gm:compose', close)
+    return () => window.removeEventListener('gm:compose', close)
+  }, [])
 
   const setModel = (id: string) => {
     setModelState(id)
@@ -458,6 +463,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       </main>
       {!activityOpen && <ErrorToasts onOpen={() => (clearToasts(), setActivityOpen(true))} />}
       {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
+      <SelectionAsk />
 
       {settingsOpen && (
         <Settings

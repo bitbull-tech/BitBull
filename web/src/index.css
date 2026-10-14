@@ -208,7 +208,7 @@ code, pre, kbd { font-family: var(--mono); }
   flex: 1; min-width: 0; border: 1px solid var(--accent); background: var(--panel); border-radius: 7px;
   padding: 3px 8px; outline: none; font-size: 13.5px;
 }
-.side-foot { display: flex; align-items: center; gap: 2px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 6px; }
+.side-foot { display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; gap: 2px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 6px; }
 .status-line {
   display: inline-flex; align-items: center; gap: 6px; border: none; background: none; color: var(--muted);
   font-size: 12px; padding: 6px 8px; border-radius: 8px;
@@ -679,3 +679,21 @@ button.file-row:hover { background: var(--hover); }
 .toast-msg { font-size: 13px; margin: 4px 0 6px; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
 @keyframes toast-in { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (max-width: 640px) { .act-chat, .act-src { display: none; } }
+
+/* ---------- review: tick log entries or highlight text, then ask the agent ---------- */
+.btn.sm { height: 26px; padding: 0 9px; font-size: 12px; border-radius: 7px; }
+.act-row { display: grid; grid-template-columns: 26px 1fr; align-items: start; }
+.act-row > .act-detail { grid-column: 2; }
+.act-pick { margin: 6px 0 0 10px; accent-color: var(--accent); cursor: pointer; opacity: 0.45; }
+.act-row:hover .act-pick, .act-pick:checked { opacity: 1; }
+.act-row.picked { background: var(--accent-soft) !important; }
+.act-row .act-line { padding-left: 4px; }
+.review-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 10px 6px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 10px; background: var(--accent-soft); font-size: 12.5px; }
+.act-review-wrap .review-bar { margin: 0 20px 8px; }
+.sel-ask { position: fixed; z-index: 70; display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); animation: toast-in 0.12s ease-out; }
+.cfg-current { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cfg-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cfg-edit input, .cfg-edit select { flex: 1; min-width: 180px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); font-family: var(--mono); font-size: 12.5px; }
+.cfg-edit input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tag.src-ui { color: var(--accent); background: var(--accent-soft); }
+.side-foot .act-badge { order: 10; }

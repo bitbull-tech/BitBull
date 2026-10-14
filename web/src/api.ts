@@ -96,6 +96,9 @@ export interface SettingRow {
   secret?: boolean
   isDefault: boolean
   hint?: string
+  editable?: boolean
+  source?: 'ui' | 'env' | 'default'
+  options?: string[]
 }
 export interface SettingGroup {
   id: string
@@ -181,6 +184,9 @@ export const api = {
   syncSkills: () => req<{ skills: { name: string }[] }>('/api/skills/sync', { method: 'POST' }),
 
   settings: () => req<{ groups: SettingGroup[] }>('/api/settings'),
+  /** null or '' clears the UI value so .env applies again */
+  updateSettings: (values: Record<string, string | null>) =>
+    req<{ changed: string[]; groups: SettingGroup[] }>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
   status: () => req<Status>('/api/status'),
   refreshModels: () => req<{ models: Model[] }>('/api/models/refresh', { method: 'POST' }),
   async upload(id: string, files: File[]): Promise<Uploaded[]> {

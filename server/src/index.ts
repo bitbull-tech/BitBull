@@ -14,7 +14,7 @@ import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
-import { describeSettings, status } from "./settings.js";
+import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, subscribe, type Level } from "./activity.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
@@ -61,6 +61,18 @@ app.post("/api/models/refresh", async (c) => {
 /** Effective configuration (secrets masked) for the Settings panel. */
 app.get("/api/settings", (c) => c.json({ groups: describeSettings() }));
 /** Live connection checks that cost no model tokens. */
+/** Change settings from the UI (saved to DATA_DIR/settings.local.json, applied live). */
+app.put("/api/settings", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { values?: Record<string, string | null> };
+  if (!body.values || typeof body.values !== "object") return c.json({ error: "values required" }, 400);
+  try {
+    const changed = await updateSettings(body.values);
+    void reloadOpencode().catch(() => {}); // restarts now if idle, otherwise before the next turn
+    return c.json({ changed, groups: describeSettings() });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
 app.get("/api/status", async (c) => c.json(await status()));
 
 // ---------- activity feed ----------

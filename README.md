@@ -122,6 +122,7 @@ Everything GM stores is under `/data` in the container (`~/gm-data` in the `gm` 
   integrations/atlas/workflows/ exported Atlas workflow specs (contain credentials)
   logs/server.log               raw server output (secrets redacted)
   logs/activity.jsonl           the Activity feed (secrets redacted)
+  settings.local.json           keys and settings saved from the UI (mode 600)
   home/ cache/ config/ opencode-sandbox/ claude-sandbox/   tool and engine state
 ```
 
@@ -169,6 +170,23 @@ docker compose up -d --build
 State lives in `./data` (or `GM_DATA_DIR`). Put it behind HTTPS (Caddy, nginx or a
 Cloudflare Tunnel) before exposing it: the agent can run shell commands in its workspace.
 
+## Keys and settings: `.env` or the UI
+
+`.env` is the base. Keys and settings marked **Edit** in Settings → Configuration (model
+keys, Ditto, GitHub, Atlas, 404, Taostats, default models, heritage policy, upload size)
+can also be set from the UI. They're saved on the server in `data/settings.local.json`
+(mode 600, never in git), override `.env`, and apply immediately: no deploy or restart.
+**Use .env** removes an override. Each value shows where it comes from: `.env`,
+`set here` or `default`.
+
+Access and sandbox settings (`APP_TOKEN`, `ALLOW_*`, `GM_SANDBOX`, permissions, ports,
+paths, proxy) can only be changed in `.env` plus a deploy, so a browser session can't
+lower the walls. The UI can't write your Windows `.env` (the container can't see Windows,
+by design); copy a value there yourself if you want it to be the long-term default.
+
+Note: keys set either way are visible to the agent's shell inside the container, the same
+as `.env` (see GAPS.md item 11). Use scoped keys where the service offers them.
+
 ## Activity and errors
 
 The **Activity** bar under the chat (collapsed by default) shows the latest event and a red
@@ -177,6 +195,11 @@ or this chat); **Full log** opens everything with search, filters and download. 
 pop up as alerts in the top-right corner and show as a badge in the sidebar. It records chat
 turns (model, time, tokens, cost), every tool call and subagent, uploads, Ditto and SayGM
 problems and server warnings. Stored in `data/logs/activity.jsonl`, secrets redacted.
+
+To get the agent's view on something: tick entries in the log and choose **Explain**,
+**Debug** or **Review with subagents**, or highlight text in the log or in a reply and use
+the **Ask agent** buttons that appear. Either way the excerpt is put in the message box with
+the request, so you can add your notes before sending.
 
 ## Subagents
 
@@ -213,6 +236,7 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `POST` | `/api/sessions/:id/abort` | Stop a running turn |
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
+| `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
 | `GET` | `/api/activity` | Activity events (`?after=&level=&sessionId=&limit=`) |
 | `GET` | `/api/activity/stream` | Live activity (SSE; `?token=` for EventSource) |
 

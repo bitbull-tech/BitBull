@@ -37,6 +37,14 @@ async function getClient(): Promise<Client> {
   }
 }
 
+/** Drop the cached connection (after the key or URL changes in Settings). */
+export function resetDitto() {
+  const c = client;
+  client = null;
+  connecting = null;
+  void c?.close().catch(() => {});
+}
+
 export const dittoEnabled = () => !!config.ditto.apiKey;
 
 export async function dittoCall(name: string, args: Record<string, unknown>) {

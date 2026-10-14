@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type Status } from './api'
+import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type SettingRow, type Status } from './api'
 import { IconCheck, IconLogout, IconMonitor, IconMoon, IconRefresh, IconSun, IconX } from './icons'
 import type { ThemePref } from './theme'
 
@@ -25,6 +25,7 @@ export function Settings({
   const [groups, setGroups] = useState<SettingGroup[] | null>(null)
   const [checking, setChecking] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   const check = async () => {
     setChecking(true)
@@ -170,28 +171,27 @@ export function Settings({
           {tab === 'config' && (
             <>
               <p className="muted small">
-                What the server is running with right now. Change values in <code>.env</code> and restart (<code>docker compose up -d</code>).
-                Secrets are masked.
+                Keys and settings marked <b>Edit</b> can be changed here: they're saved on the GM server (in its data folder, readable only by
+                GM) and take effect straight away, overriding <code>.env</code>. <b>Use .env</b> removes the override. Everything else, including
+                access and sandbox settings, can only be changed in <code>.env</code> followed by a deploy. Secrets are never shown in full.
               </p>
+              {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}
               {!groups && <p className="muted">Loading…</p>}
               {groups?.map((g) => (
                 <section key={g.id} className="cfg-group">
                   <h3>{g.title}</h3>
                   <div className="cfg-table">
                     {g.rows.map((r) => (
-                      <div className="cfg-row" key={r.env}>
-                        <div className="cfg-label">
-                          {r.label}
-                          {r.hint && <div className="cfg-hint">{r.hint}</div>}
-                        </div>
-                        <div className="cfg-val">
-                          <code className={r.secret ? 'secret' : ''}>{r.value}</code>
-                          <div className="cfg-env">
-                            {r.env}
-                            {r.isDefault && <span className="tag">default</span>}
-                          </div>
-                        </div>
-                      </div>
+                      <ConfigRow
+                        key={r.env}
+                        r={r}
+                        onSaved={(groups, text) => {
+                          setGroups(groups)
+                          setSaveMsg({ ok: true, text })
+                          void check()
+                        }}
+                        onError={(text) => setSaveMsg({ ok: false, text })}
+                      />
                     ))}
                   </div>
                 </section>
@@ -225,6 +225,102 @@ export function Settings({
               </button>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const SOURCE_LABEL = { ui: 'set here', env: '.env', default: 'default' } as const
+
+function ConfigRow({
+  r,
+  onSaved,
+  onError,
+}: {
+  r: SettingRow
+  onSaved: (groups: SettingGroup[], msg: string) => void
+  onError: (msg: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [reveal, setReveal] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const save = async (v: string | null) => {
+    setBusy(true)
+    try {
+      const res = await api.updateSettings({ [r.env]: v })
+      onSaved(res.groups, v === null ? `${r.env} now comes from .env (or its default).` : `${r.env} saved and applied.`)
+      setEditing(false)
+      setValue('')
+    } catch (e) {
+      onError(e instanceof Error ? e.message.replace(/^\d+ /, '') : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="cfg-row">
+      <div className="cfg-label">
+        {r.label}
+        {r.hint && <div className="cfg-hint">{r.hint}</div>}
+      </div>
+      <div className="cfg-val">
+        {!editing ? (
+          <div className="cfg-current">
+            <code className={r.secret ? 'secret' : ''}>{r.value}</code>
+            {r.editable && (
+              <button className="btn sm" onClick={() => (setEditing(true), setValue(r.secret ? '' : r.value === '(not set)' ? '' : r.value))}>
+                Edit
+              </button>
+            )}
+            {r.editable && r.source === 'ui' && (
+              <button className="link" disabled={busy} onClick={() => void save(null)} title="Remove the value set here">
+                Use .env
+              </button>
+            )}
+          </div>
+        ) : (
+          <form
+            className="cfg-edit"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void save(value)
+            }}
+          >
+            {r.options ? (
+              <select value={value} onChange={(e) => setValue(e.target.value)} autoFocus>
+                {r.options.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={r.secret && !reveal ? 'password' : 'text'}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={r.secret ? 'Paste the new key' : ''}
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+              />
+            )}
+            {r.secret && (
+              <button type="button" className="link" onClick={() => setReveal((x) => !x)}>
+                {reveal ? 'Hide' : 'Show'}
+              </button>
+            )}
+            <button type="submit" className="btn sm primary" disabled={busy || !value.trim()}>
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" className="btn sm" onClick={() => setEditing(false)} disabled={busy}>
+              Cancel
+            </button>
+          </form>
+        )}
+        <div className="cfg-env">
+          {r.env}
+          <span className={`tag src-${r.source ?? 'env'}`}>{SOURCE_LABEL[r.source ?? (r.isDefault ? 'default' : 'env')]}</span>
         </div>
       </div>
     </div>

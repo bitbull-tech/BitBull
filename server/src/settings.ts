@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
-import { config, githubTokenKind, paths, shellAllowed } from "./config.js";
+import { config, githubTokenKind, paths, readOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides } from "./config.js";
+import { record } from "./activity.js";
+import { resetDitto } from "./ditto.js";
 import { probeDitto } from "./ditto.js";
 import { listModels } from "./models.js";
 import { listSkills } from "./skills.js";
@@ -17,6 +19,68 @@ export interface SettingRow {
   /** true when the env var isn't set and the built-in default is in use */
   isDefault: boolean;
   hint?: string;
+  /** can be changed from the UI (saved to settings.local.json) */
+  editable?: boolean;
+  /** where the value comes from */
+  source: "ui" | "env" | "default";
+  /** for editable choices */
+  options?: string[];
+}
+
+/**
+ * Settings that can be changed from the UI. Deliberately excludes anything that controls
+ * access or the sandbox (APP_TOKEN, ALLOW_*, GM_SANDBOX, permissions, ports, paths, proxy),
+ * so a compromised browser session can't switch off the walls.
+ */
+export const EDITABLE: Record<string, { options?: string[] }> = {
+  SAYGM_API_KEY: {},
+  DITTO_API_KEY: {},
+  DITTO_ARCHIVE: { options: ["turn", "off"] },
+  DEFAULT_ENGINE: { options: ["opencode", "claude"] },
+  DEFAULT_MODEL: {},
+  SMALL_MODEL: {},
+  SUBAGENT_MODEL: {},
+  OWNER_NAME: {},
+  GITHUB_TOKEN: {},
+  GIT_USER_NAME: {},
+  GIT_USER_EMAIL: {},
+  ATLAS_API_KEY: {},
+  ATLAS_MCP_URL: {},
+  FOUR04_API_KEY: {},
+  FOUR04_API_BASE: {},
+  FOUR04_MCP_URL: {},
+  TAOSTATS_API_KEY: {},
+  HERITAGE_LIKENESS_POLICY: { options: ["ground-only", "private-likeness"] },
+  UPLOAD_MAX_MB: {},
+  ENABLE_WEB_SEARCH: { options: ["true", "false"] },
+  ENABLE_LSP: { options: ["true", "false"] },
+};
+
+/**
+ * Save values from the UI and apply them live. null or "" removes the UI value so .env
+ * (or the default) applies again. Returns the keys changed.
+ */
+export async function updateSettings(values: Record<string, string | null>) {
+  const bad = Object.keys(values).filter((k) => !(k in EDITABLE));
+  if (bad.length) throw new Error(`Not editable from the UI: ${bad.join(", ")}`);
+  for (const [k, v] of Object.entries(values)) {
+    const opts = EDITABLE[k].options;
+    if (v && opts && !opts.includes(v)) throw new Error(`${k} must be one of: ${opts.join(", ")}`);
+    if (v && /[\r\n]/.test(v)) throw new Error(`${k} can't contain line breaks`);
+    if (k === "UPLOAD_MAX_MB" && v && !(Number(v) > 0)) throw new Error("UPLOAD_MAX_MB must be a positive number");
+  }
+  const cur = readOverrides();
+  for (const [k, v] of Object.entries(values)) {
+    if (v === null || v.trim() === "") delete cur[k];
+    else cur[k] = v.trim();
+  }
+  writeOverrides(cur);
+  reloadConfig();
+  resetDitto();
+  await listModels(true).catch(() => []);
+  const changed = Object.keys(values);
+  record({ level: "info", source: "config", message: `Settings changed in the UI: ${changed.join(", ")} (values not logged)` });
+  return changed;
 }
 
 const mask = (v: string) => (!v ? "(not set)" : v.length <= 12 ? "•".repeat(v.length) : `${v.slice(0, 6)}…${v.slice(-4)}`);
@@ -24,7 +88,17 @@ const isSet = (k: string) => !!process.env[k];
 
 function row(env: string, label: string, value: unknown, opts: { secret?: boolean; hint?: string } = {}): SettingRow {
   const v = value === undefined || value === null ? "" : String(value);
-  return { env, label, value: opts.secret ? mask(v) : v || "(not set)", secret: opts.secret, isDefault: !isSet(env), hint: opts.hint };
+  const source = settingSource(env);
+  return {
+    env,
+    label,
+    value: opts.secret ? mask(v) : v || "(not set)",
+    secret: opts.secret,
+    isDefault: source === "default" && !isSet(env),
+    hint: opts.hint,
+    source,
+    ...(env in EDITABLE ? { editable: true, ...(EDITABLE[env].options ? { options: EDITABLE[env].options } : {}) } : {}),
+  };
 }
 
 export function describeSettings() {

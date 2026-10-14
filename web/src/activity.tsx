@@ -81,6 +81,62 @@ export function markErrorsSeen() {
   emit()
 }
 
+/* ---------------- selection for review ---------------- */
+
+let selected = new Set<number>()
+const selSubs = new Set<() => void>()
+let selSnap = selected
+const selEmit = () => {
+  selSnap = new Set(selected)
+  selSubs.forEach((f) => f())
+}
+export function toggleSelected(id: number) {
+  if (selected.has(id)) selected.delete(id)
+  else selected.add(id)
+  selEmit()
+}
+export function clearSelected() {
+  selected = new Set()
+  selEmit()
+}
+export function useSelected() {
+  return useSyncExternalStore(
+    (f) => {
+      selSubs.add(f)
+      return () => selSubs.delete(f)
+    },
+    () => selSnap,
+  )
+}
+
+/** Put text into the chat composer (Chat listens), so the user can add notes before sending. */
+export function composeInChat(text: string) {
+  window.dispatchEvent(new CustomEvent('gm:compose', { detail: text }))
+}
+
+export type ReviewMode = 'explain' | 'debug' | 'review'
+const ASKS: Record<ReviewMode, string> = {
+  explain: 'Explain what happened in these activity log entries, in plain terms, and whether anything needs my attention.',
+  debug: 'Find the root cause of the problem in these activity log entries and propose a fix. Use the debugger subagent if you need to reproduce it.',
+  review: 'Review these activity log entries with the reviewer and challenger subagents in parallel: what went wrong or looks risky, and what should change.',
+}
+
+export function logBlock(list: ActivityEvent[]) {
+  return list
+    .map((e) => {
+      const head = `${e.ts} ${e.level.toUpperCase()} [${e.source}]${e.sessionTitle ? ` (chat: ${e.sessionTitle})` : ''} ${e.message}`
+      const d = e.detail ? `\n${e.detail.length > 1500 ? e.detail.slice(0, 1500) + '\n…(truncated)' : e.detail}` : ''
+      return head + d
+    })
+    .join('\n')
+}
+
+export function askAboutEvents(list: ActivityEvent[], mode: ReviewMode) {
+  if (!list.length) return
+  composeInChat(`${ASKS[mode]}\n\n\`\`\`log\n${logBlock(list)}\n\`\`\`\n\nMy notes: `)
+  clearSelected()
+}
+
 let started = false
 function start() {
   if (started) return
@@ -133,9 +189,17 @@ export function useActivity() {
 
 const time = (ts: string) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-function Row({ e, open, onToggle }: { e: ActivityEvent; open: boolean; onToggle: () => void }) {
+function Row({ e, open, onToggle, picked }: { e: ActivityEvent; open: boolean; onToggle: () => void; picked: boolean }) {
   return (
-    <div className={`act-row lv-${e.level}`}>
+    <div className={`act-row lv-${e.level} ${picked ? 'picked' : ''}`} data-askable="activity">
+      <input
+        type="checkbox"
+        className="act-pick"
+        checked={picked}
+        onChange={() => toggleSelected(e.id)}
+        aria-label="Select for review"
+        title="Select for agent review"
+      />
       <button className="act-line" onClick={onToggle} disabled={!e.detail}>
         <span className="act-time">{time(e.ts)}</span>
         <span className={`act-lv lv-${e.level}`}>{e.level}</span>
@@ -149,6 +213,24 @@ function Row({ e, open, onToggle }: { e: ActivityEvent; open: boolean; onToggle:
   )
 }
 
+/** Bar shown when entries are ticked: send them to the agent. */
+function ReviewBar({ events }: { events: ActivityEvent[] }) {
+  const sel = useSelected()
+  if (!sel.size) return null
+  const list = events.filter((e) => sel.has(e.id))
+  return (
+    <div className="review-bar">
+      <b>{sel.size} selected</b>
+      <span className="muted small">Ask the agent to</span>
+      <button className="btn sm" onClick={() => askAboutEvents(list, 'explain')}>Explain</button>
+      <button className="btn sm" onClick={() => askAboutEvents(list, 'debug')}>Debug</button>
+      <button className="btn sm primary" onClick={() => askAboutEvents(list, 'review')}>Review with subagents</button>
+      <span className="grow" />
+      <button className="link" onClick={clearSelected}>Clear</button>
+    </div>
+  )
+}
+
 /* ---------------- dock: collapsed bar at the bottom of the chat ---------------- */
 
 type DockFilter = 'all' | 'problems' | 'chat'
@@ -156,6 +238,7 @@ const DOCK_KEY = 'gm-activity-dock'
 
 export function ActivityDock({ sessionId, onOpenFull }: { sessionId?: string; onOpenFull: () => void }) {
   const { events, unseen, connected } = useActivity()
+  const sel = useSelected()
   const [open, setOpen] = useState(() => {
     try {
       return localStorage.getItem(DOCK_KEY) === 'open'
@@ -241,10 +324,11 @@ export function ActivityDock({ sessionId, onOpenFull }: { sessionId?: string; on
               </button>
             )}
           </div>
+          <ReviewBar events={events} />
           <div className="act-list" ref={listRef}>
             {shown.length === 0 && <p className="muted small pad">Nothing here yet.</p>}
             {shown.map((e) => (
-              <Row key={e.id} e={e} open={expanded === e.id} onToggle={() => setExpanded(expanded === e.id ? null : e.id)} />
+              <Row key={e.id} e={e} picked={sel.has(e.id)} open={expanded === e.id} onToggle={() => setExpanded(expanded === e.id ? null : e.id)} />
             ))}
           </div>
         </div>
@@ -257,6 +341,7 @@ export function ActivityDock({ sessionId, onOpenFull }: { sessionId?: string; on
 
 export function ActivityView({ onClose, initialLevel }: { onClose: () => void; initialLevel?: Level }) {
   const { events } = useActivity()
+  const sel = useSelected()
   const [level, setLevel] = useState<Level | 'all'>(initialLevel ?? 'all')
   const [source, setSource] = useState('all')
   const [q, setQ] = useState('')
@@ -329,12 +414,16 @@ export function ActivityView({ onClose, initialLevel }: { onClose: () => void; i
           <button className="btn" onClick={download}>Download</button>
           <button className="btn" onClick={markErrorsSeen}>Mark errors seen</button>
         </div>
+        <div className="act-review-wrap">
+          <ReviewBar events={events} />
+        </div>
         <div className="act-list full" ref={listRef}>
           {shown.length === 0 && <p className="muted small pad">No matching events.</p>}
           {shown.map((e) => (
             <Row
               key={e.id}
               e={e}
+              picked={sel.has(e.id)}
               open={expanded.has(e.id)}
               onToggle={() =>
                 setExpanded((s) => {
@@ -386,6 +475,57 @@ export function ErrorToasts({ onOpen }: { onOpen: () => void }) {
           </button>
         </div>
       ))}
+    </div>
+  )
+}
+
+/* ---------------- highlight text → ask the agent ---------------- */
+
+/**
+ * Select text in a reply or in the activity log and a small "Ask agent" button appears next to
+ * it. The excerpt goes into the composer as a quote, ready for your note.
+ */
+export function SelectionAsk() {
+  const [pos, setPos] = useState<{ x: number; y: number; text: string; kind: string } | null>(null)
+  useEffect(() => {
+    const onUp = () =>
+      setTimeout(() => {
+        const sel = window.getSelection()
+        const text = sel?.toString().trim() ?? ''
+        if (!sel || !text || sel.rangeCount === 0) return setPos(null)
+        const node = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
+        const host = node?.closest('[data-askable]')
+        if (!host) return setPos(null)
+        const r = sel.getRangeAt(0).getBoundingClientRect()
+        setPos({ x: Math.min(r.right, window.innerWidth - 220), y: Math.max(8, r.top - 40), text: text.slice(0, 6000), kind: host.getAttribute('data-askable') ?? '' })
+      }, 0)
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as Element)?.closest?.('.sel-ask')) setPos(null)
+    }
+    document.addEventListener('mouseup', onUp)
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [])
+  if (!pos) return null
+  const what = pos.kind === 'reply' ? 'this part of your reply' : 'this part of the activity log'
+  const quote = pos.text
+    .split('\n')
+    .map((l) => `> ${l}`)
+    .join('\n')
+  const go = (ask: string) => {
+    composeInChat(`${ask} ${what}:\n\n${quote}\n\nMy notes: `)
+    window.getSelection()?.removeAllRanges()
+    setPos(null)
+  }
+  return (
+    <div className="sel-ask" style={{ left: pos.x, top: pos.y }}>
+      <span className="muted small">Ask agent:</span>
+      <button className="btn sm" onClick={() => go('Explain')}>Explain</button>
+      <button className="btn sm" onClick={() => go('Review and challenge')}>Review</button>
+      <button className="btn sm" onClick={() => go('Fix the problem in')}>Fix</button>
     </div>
   )
 }

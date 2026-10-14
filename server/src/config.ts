@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,7 +19,63 @@ const bool = (v: string) => ["1", "true", "yes", "on"].includes(v.toLowerCase())
 
 export type EngineId = "opencode" | "claude";
 
-export const config = {
+/* ---------- settings saved from the UI ----------
+ * .env is the base. Keys edited in Settings → Configuration are saved to
+ * <DATA_DIR>/settings.local.json (mode 600, never in git) and win over .env.
+ * They're applied to process.env before the config below is built, and again live on save.
+ */
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, "data"));
+export const overridesFile = path.join(DATA_DIR, "settings.local.json");
+/** process.env as it came from .env / the container, before any UI overrides */
+const baseEnv: Record<string, string | undefined> = { ...process.env };
+
+export function readOverrides(): Record<string, string> {
+  try {
+    if (!existsSync(overridesFile)) return {};
+    const raw = JSON.parse(readFileSync(overridesFile, "utf8"));
+    return raw && typeof raw === "object" ? Object.fromEntries(Object.entries(raw).filter(([, v]) => typeof v === "string")) as Record<string, string> : {};
+  } catch (e) {
+    console.error("[config] settings.local.json is unreadable; ignoring it:", e instanceof Error ? e.message : e);
+    return {};
+  }
+}
+
+export function writeOverrides(values: Record<string, string>) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = overridesFile + ".tmp";
+  writeFileSync(tmp, JSON.stringify(values, null, 2) + "\n", { mode: 0o600 });
+  renameSync(tmp, overridesFile);
+  try {
+    chmodSync(overridesFile, 0o600);
+  } catch {
+    /* not supported on this filesystem */
+  }
+}
+
+/** Where a setting's current value comes from. */
+export function settingSource(key: string): "ui" | "env" | "default" {
+  if (key in readOverrides()) return "ui";
+  return baseEnv[key] !== undefined && baseEnv[key] !== "" ? "env" : "default";
+}
+
+function applyOverrides() {
+  const o = readOverrides();
+  // restore anything previously overridden, then apply the current set
+  for (const k of appliedKeys) if (!(k in o)) {
+    if (baseEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = baseEnv[k];
+  }
+  appliedKeys.clear();
+  for (const [k, v] of Object.entries(o)) {
+    process.env[k] = v;
+    appliedKeys.add(k);
+  }
+}
+const appliedKeys = new Set<string>();
+applyOverrides();
+
+function buildConfig() {
+  const c = {
   port: Number(env("PORT", "8787")),
   host: env("HOST", "0.0.0.0"),
 
@@ -130,7 +186,23 @@ export const config = {
   uploadMaxMb: Number(env("UPLOAD_MAX_MB", "100")),
   promptFile: path.resolve(env("SYSTEM_PROMPT_FILE", path.join(ROOT, "agent", "SYSTEM.md"))),
   webDist: path.resolve(env("WEB_DIST", path.join(ROOT, "web", "dist"))),
-};
+  };
+  c.integrations.atlas.workflowsDir = path.resolve(env("ATLAS_WORKFLOWS_DIR", path.join(c.dataDir, "integrations", "atlas", "workflows")));
+  return c;
+}
+
+export const config = buildConfig();
+
+/** Bumped whenever settings change at runtime; long-lived clients (OpenCode, Ditto) reconnect on it. */
+export let configVersion = 1;
+
+/** Re-read .env + UI overrides and update the live config in place. */
+export function reloadConfig() {
+  applyOverrides();
+  Object.assign(config, buildConfig());
+  applyGitEnv();
+  configVersion++;
+}
 
 export const paths = {
   db: path.join(config.dataDir, "agent.db"),
@@ -142,9 +214,6 @@ export const paths = {
   opencodeData: path.resolve(env("OPENCODE_DATA_DIR", path.join(config.dataDir, "opencode"))),
 };
 
-config.integrations.atlas.workflowsDir = path.resolve(
-  env("ATLAS_WORKFLOWS_DIR", path.join(config.dataDir, "integrations", "atlas", "workflows")),
-);
 
 for (const p of [config.dataDir, paths.workspace, paths.projects, paths.claudeConfig, paths.opencodeData, config.integrations.atlas.workflowsDir]) {
   mkdirSync(p, { recursive: true });
@@ -180,6 +249,11 @@ export function githubTokenKind(t = config.integrations.github.token) {
 function applyGitEnv() {
   const g = config.integrations.github;
   const set: Array<[string, string]> = [];
+  for (const k of Object.keys(process.env)) if (/^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(k)) delete process.env[k];
+  if (!g.token) {
+    delete process.env.GH_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+  }
   if (g.token) {
     process.env.GH_TOKEN = g.token;
     process.env.GITHUB_TOKEN = g.token;

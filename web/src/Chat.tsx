@@ -116,6 +116,23 @@ export function Chat({
     taRef.current?.focus()
   }, [session?.id])
 
+  // Text sent from the activity log or a highlighted passage lands here for the user to finish
+  useEffect(() => {
+    const onCompose = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail
+      setInput((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n${text}` : text))
+      setTimeout(() => {
+        const ta = taRef.current
+        if (!ta) return
+        ta.focus()
+        ta.selectionStart = ta.selectionEnd = ta.value.length
+        ta.scrollTop = ta.scrollHeight
+      }, 0)
+    }
+    window.addEventListener('gm:compose', onCompose)
+    return () => window.removeEventListener('gm:compose', onCompose)
+  }, [])
+
   const patchLast = (fn: (m: ViewMessage) => ViewMessage) =>
     setMsgs((all) => (all.length ? [...all.slice(0, -1), fn(all[all.length - 1])] : all))
 
@@ -448,7 +465,7 @@ function MessageView({ m }: { m: ViewMessage }) {
             </div>
           </details>
         )}
-        <div className="md">
+        <div className="md" data-askable="reply">
           {m.content ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: (p) => <a {...p} target="_blank" rel="noreferrer" /> }}>
               {m.content}
