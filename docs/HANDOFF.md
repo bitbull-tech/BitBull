@@ -91,6 +91,14 @@ conversation of 7–14 Oct 2026. Short version in `CLAUDE.md`.
 - 14 Oct: SayGM returned **402 Payment Required** for kimi-k3 (balance/plan) — open for Tom.
 - Proxy restart during deploy caused `ECONNREFUSED egress:3128` for Ditto → deploy now uses
   `squid -k reconfigure` (pid at /tmp/squid.pid), Ditto retries.
+- 14 Oct: **a changed `egress/allowlist.txt` did not reach the running proxy.** The file is
+  bind-mounted singly, so the container holds its inode, and the deploy replaces the whole
+  directory (`rm -rf ~/SayGMAgent && mv …`), giving it a new one — squid kept reading the old,
+  deleted inode and `-k reconfigure` changed nothing. Found when `s3.hippius.com` was absent
+  inside the container after a deploy that added it. `deploy.ps1` now diffs what the container
+  actually sees against the file on disk and recreates the proxy only when they differ.
+  Check after any allowlist change:
+  `docker compose exec -T egress grep <domain> /etc/squid/allowlist.txt`.
 - Windows PowerShell 5.1: `Start-Process -ArgumentList @(...)` doesn't quote items → pass one
   string. `{…}` in a `wsl … sh -c "…"` line is parsed as a script block → use a here-string piped
   to `sh`. Native-arg quoting differs between PS 5.1 and 7 → deploy writes a temp `.cmd`.
