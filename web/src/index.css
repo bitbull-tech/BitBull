@@ -276,6 +276,8 @@ code, pre, kbd { font-family: var(--mono); }
 }
 .sidebar .btn { border-color: var(--side-line); }
 .sidebar .session.active { background: var(--side-2); box-shadow: none; }
+.cfg-warn { flex-basis: 100%; color: var(--warn); line-height: 1.4; }
+
 /* Backup state in the Files dialog: a dot per file, nothing shouty */
 .backup-mark { width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .backup-mark.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 16%, transparent); }

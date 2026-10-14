@@ -73,7 +73,9 @@ Windows (Tom's machine): edit/commit in `D:\github\SayGMAgent`, ship with
 - Verify before claiming done: typecheck, build, `npm test`, and for UI a Playwright screenshot
   (Chromium is preinstalled in Claude cloud sandboxes at /opt/pw-browsers).
 - Taostats: v1 API only (`/v1/…`, raw key in Authorization, no Bearer); see skills/taostats-api.
-- Hippius sub-tokens scope to a **bucket**, never a folder (no IAM, no STS). GM holds the only
-  credential; per-folder access is GM's job, never a Hippius grant. Uploads are encrypted before
-  they leave the machine, and `HIPPIUS_ENCRYPTION_KEY` is unrecoverable if lost — see docs/STORAGE.md.
+- Hippius: the console only scopes a sub-token to a **bucket**, but the Management API
+  (`POST /api/objectstore/sub-tokens/`, console nav is **Object Store**) also takes
+  `allowed_prefixes` — `tools/hippius-setup.mjs` uses it. GM still holds the only credential and
+  does its own access control. Uploads are encrypted before they leave the machine, and
+  `HIPPIUS_ENCRYPTION_KEY` is unrecoverable if lost — see docs/STORAGE.md.
 - Tom prefers concise, plain-English answers and step-by-step PowerShell when he must run things.

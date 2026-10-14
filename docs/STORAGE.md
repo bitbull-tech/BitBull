@@ -11,15 +11,30 @@ every stored file GM saves a short Ditto memory (project, filename, key, size, S
 
 ## Why GM holds the only credential
 
-This is the fact that decides the design: **Hippius sub-tokens scope to a bucket, not a
-folder.** They are Object Read Only or Object Read & Write, across all buckets or named
-ones. There is no IAM, no STS/AssumeRole and no prefix policy; bucket policies accept
-exactly one statement (public-read) and nothing else.
+The console only scopes a sub-token to a **bucket** (Object Read Only or Object Read &
+Write, across all buckets or named ones), and there is no IAM, no STS/AssumeRole and no
+usable bucket policy — one public-read statement is all `PutBucketPolicy` accepts.
 
-So a per-folder credential does not exist, and folder isolation can only be enforced by
-whoever holds the key. GM holds one sub-token, scoped to one bucket, and **no user ever
-gets a Hippius credential**. When multi-user arrives, a user's access is a row in GM's own
-database — the storage layer doesn't change at all.
+The **Management API goes further** than the console: `POST /api/objectstore/sub-tokens/`
+takes `scope_type` (`single_bucket` | `multi_bucket` | `global`), `bucket_names`,
+`actions`, **`allowed_prefixes`**, `ip_allowlist` and an expiry, and the gateway validates
+the scope (a bad one comes back as `502 s3-scope-sync-failed`). So prefix-scoped
+credentials *are* possible — just not from the console UI.
+`tools/hippius-setup.mjs --prefix` uses this.
+
+GM still holds the only credential, for reasons that don't depend on that:
+
+- Files are encrypted before upload, so a prefix-scoped key handed to someone else gives
+  them ciphertext. Access without the encryption key is meaningless, and handing out the
+  encryption key is forever.
+- A sub-token can't be scoped per *person* without one token per person to issue, rotate
+  and revoke — which is an access-control system, and GM already has the database for one.
+- Sharing wants a link, not a credential (see below).
+
+So: one sub-token, one bucket, prefixes per project, and **no user ever gets a Hippius
+credential**. When multi-user arrives, a user's access is a row in GM's own database — the
+storage layer doesn't change. Prefix-scoped sub-tokens stay available as defence in depth,
+or for a tenant who genuinely needs to point their own S3 client at their own folder.
 
 When you do need to hand someone a link, it will be a GM link (`/s/<token>`), not a
 presigned URL. Not built yet, and deliberately: a GM link can be revoked the moment you
@@ -95,16 +110,29 @@ GM validates the length when you save it, but it cannot tell you that you've cha
 the wrong 32 bytes. Generate one in Settings, write it down somewhere that isn't this
 machine, and don't rotate it casually.
 
-## Onboarding checklist
+## Onboarding
 
-1. Hippius console → create the bucket (`gm-agent`).
-2. S3 Buckets → Sub Tokens → new token, **Object Read & Write**, limited to that bucket.
-   Copy the secret: it is shown once.
-3. GM → Settings → Configuration → Hippius storage → paste the access key and secret, set
-   the bucket.
-4. Generate an encryption key, save it, and **back it up somewhere else**.
-5. Settings → Status → "Hippius storage" should go green and name the bucket.
-6. Attach a file to a chat, then open Files: it should show a green dot. Restore it to prove
+The console section is called **Object Store** (the docs call it "S3 Buckets", which is not
+what the navigation says). If you can't find it, or would rather not click through it, the
+Management API does the whole thing:
+
+```bash
+# Console → Settings → access token
+export HIPPIUS_CONSOLE_TOKEN=…
+node tools/hippius-setup.mjs --list            # what exists today
+node tools/hippius-setup.mjs                   # create the bucket + a scoped sub-token
+```
+
+It prints the access key and secret once for pasting into GM. With `--save` and
+`GM_APP_TOKEN` set it writes them into GM's settings directly and never prints the secret.
+`--prefix general/` restricts the sub-token to one key prefix.
+
+Then, either way:
+
+1. GM → Settings → Configuration → **Hippius storage**: check the access key and bucket.
+2. **Encryption key → Generate**, copy it somewhere that isn't this machine, Save.
+3. Settings → Status → "Hippius storage" should go green and name the bucket.
+4. Attach a file to a chat, then open Files: it should show a green dot. Restore it to prove
    the round trip.
 
 ## Not supported by Hippius, so not used here

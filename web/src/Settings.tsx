@@ -336,9 +336,35 @@ function ConfigRow({
                 {reveal ? 'Hide' : 'Show'}
               </button>
             )}
+            {r.env === 'HIPPIUS_ENCRYPTION_KEY' && (
+              <button
+                type="button"
+                className="btn sm"
+                disabled={busy}
+                title="32 random bytes, generated on the server"
+                onClick={() => {
+                  if (r.value !== '(not set)' && !confirm('Replace the existing key?\n\nEverything already stored on Hippius was encrypted with the old key and will no longer be readable. Only do this if nothing is stored yet, or you still have the old key safe.'))
+                    return
+                  setBusy(true)
+                  void api
+                    .newStorageKey()
+                    .then((res) => {
+                      setValue(res.key)
+                      setReveal(true) // it is shown once here: they have to be able to copy it
+                    })
+                    .catch((e) => onError(e instanceof Error ? e.message : String(e)))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                Generate
+              </button>
+            )}
             <button type="submit" className="btn sm primary" disabled={busy || !value.trim()}>
               {busy ? 'Saving…' : 'Save'}
             </button>
+            {r.env === 'HIPPIUS_ENCRYPTION_KEY' && value && (
+              <span className="cfg-warn small">Copy this somewhere safe before saving — it is not shown again, and without it nothing stored can be read back.</span>
+            )}
             <button type="button" className="btn sm" onClick={() => setEditing(false)} disabled={busy}>
               Cancel
             </button>
