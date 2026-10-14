@@ -216,8 +216,8 @@ export const api = {
     req<{ dir: string; entries: { name: string; dir: boolean; size: number }[] }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
 
   /** Chat export for pasting into another agent: format md (default) or json */
-  async exportChat(id: string, format: 'md' | 'json' = 'md', opts: { tools?: boolean; activity?: boolean } = {}) {
-    const q = new URLSearchParams({ format, tools: opts.tools === false ? '0' : '1', activity: opts.activity === false ? '0' : '1' })
+  async exportChat(id: string, format: 'md' | 'json' = 'md', opts: { tools?: boolean; activity?: boolean; exchange?: string; compact?: boolean } = {}) {
+    const q = new URLSearchParams({ format, tools: opts.tools === false ? '0' : '1', activity: opts.activity === false ? '0' : '1', ...(opts.exchange ? { exchange: opts.exchange } : {}), ...(opts.compact ? { compact: '1' } : {}) })
     const res = await fetch(`/api/sessions/${id}/export?${q}`, { headers: { authorization: `Bearer ${getToken()}` } })
     if (res.status === 401) throw new Unauthorized('unauthorized')
     if (!res.ok) throw new Error(`Export failed (${res.status})`)

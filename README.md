@@ -11,6 +11,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - One Docker image, one data volume; reachable by URL with a bearer token
 - `POST /api/v1/chat` for scripts and other agents
 
+New here (or a new agent session)? Start with [CLAUDE.md](CLAUDE.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the
 OpenCode-vs-Agent-SDK proposal.
 
@@ -209,13 +210,16 @@ the request, so you can add your notes before sending.
 
 ## Export a chat
 
-**Export** in the top bar (when a chat is open):
+One click: **Copy last** in the top bar copies your latest request and the agent's reply,
+with its tool calls, that turn's activity log and a short description of how GM is set up,
+as Markdown ready to paste into Claude, ChatGPT, Codex or another GM chat. **Copy for agent**
+under any reply does the same for that exchange.
 
-- **Copy for another agent**: Markdown with a short description of how GM is set up, the
-  full transcript, every tool call (outputs trimmed) and the chat's activity log. Paste it
-  into Claude, ChatGPT, Codex or another GM chat for a second opinion or debugging.
-- **Copy conversation only**, **Download Markdown**, **Download JSON** (everything,
-  untruncated).
+Under each reply, **Copy for agent: full · prompt + reply** copies that exchange either
+way; **prompt + reply** is the short form (just the request, the answer and any error) for a
+quick second opinion. The ▾ next to Copy last has the same two for the latest exchange, plus
+**Copy whole chat**, **Copy conversation only**, **Download Markdown**
+and **Download JSON** (everything, untruncated).
 
 Keys and tokens are replaced with `[REDACTED]` in every export.
 
@@ -255,7 +259,7 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
-| `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `tools=0`, `activity=0`, `limit=` (chars per tool output) |
+| `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `exchange=last` or an assistant message id; `compact=1` (prompt + reply only); `tools=0`, `activity=0`, `limit=` (chars per tool output) |
 | `GET` | `/api/activity` | Activity events (`?after=&level=&sessionId=&limit=`) |
 | `GET` | `/api/activity/stream` | Live activity (SSE; `?token=` for EventSource) |
 

@@ -88,6 +88,8 @@ app.get("/api/sessions/:id/export", (c) => {
     tools: c.req.query("tools") !== "0",
     activity: c.req.query("activity") !== "0",
     outputLimit: Number(c.req.query("limit") ?? 2000) || 2000,
+    exchange: c.req.query("exchange") || undefined,
+    compact: c.req.query("compact") === "1",
   });
   if (!md) return c.json({ error: "not found" }, 404);
   return c.text(md, 200, { "content-type": "text/markdown; charset=utf-8" });

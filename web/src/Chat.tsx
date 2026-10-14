@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
 import { filterItems, fromDrop, hasFolder, uploadItems } from './uploads'
+import { reportLocal } from './activity'
 
 interface ViewMessage {
   id: string
@@ -275,7 +276,7 @@ export function Chat({
         ) : (
           <div className="thread">
             {msgs.map((m) => (
-              <MessageView key={m.id} m={m} />
+              <MessageView key={m.id} m={m} sessionId={session?.id} />
             ))}
           </div>
         )}
@@ -406,8 +407,9 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   )
 }
 
-function MessageView({ m }: { m: ViewMessage }) {
+function MessageView({ m, sessionId }: { m: ViewMessage; sessionId?: string }) {
   const [copied, copy] = useCopy()
+  const [exported, setExported] = useState<'' | 'full' | 'short'>('')
   if (m.role === 'user')
     return (
       <div className="msg user">
@@ -481,6 +483,33 @@ function MessageView({ m }: { m: ViewMessage }) {
               <button className="icon-btn sm" onClick={() => copy(m.content)} title="Copy reply">
                 {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
               </button>
+            )}
+            {sessionId && !/^a-\d+$/.test(m.id) && (
+              <span className="copy-agent">
+                Copy for agent:
+                {(['full', 'short'] as const).map((kind) => (
+                  <button
+                    key={kind}
+                    className="link small"
+                    title={
+                      kind === 'full'
+                        ? 'This request and reply with setup, tool calls and the activity log, for debugging in another agent'
+                        : 'Just this request and reply, for a quick second opinion'
+                    }
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(await api.exportChat(sessionId, 'md', { exchange: m.id, compact: kind === 'short' }))
+                        setExported(kind)
+                        setTimeout(() => setExported(''), 2000)
+                      } catch (e) {
+                        reportLocal(`Copy failed: ${e instanceof Error ? e.message : String(e)}`)
+                      }
+                    }}
+                  >
+                    {exported === kind ? 'Copied' : kind === 'full' ? 'full' : 'prompt + reply'}
+                  </button>
+                ))}
+              </span>
             )}
             {m.usage && (m.usage.outputTokens || m.usage.costUsd) ? (
               <span>

@@ -41,13 +41,41 @@ export function ExportMenu({ session }: { session: Session }) {
     }
   }
 
+  const copyLast = () =>
+    run(async () => {
+      const md = await api.exportChat(session.id, 'md', { exchange: 'last' })
+      await navigator.clipboard.writeText(md)
+      flash('Copied last exchange')
+    })
+
   return (
     <div className="export-menu" ref={ref}>
-      <button className="btn files-btn" onClick={() => setOpen((o) => !o)} title="Export this chat for another agent or for your records">
-        <IconCopy size={14} /> {note ?? 'Export'}
-      </button>
+      <div className="split-btn">
+        <button className="btn files-btn" onClick={copyLast} title="Copy the latest request and reply (with tool calls and log) to paste into another agent">
+          <IconCopy size={14} /> {note ?? 'Copy last'}
+        </button>
+        <button className="btn files-btn caret" onClick={() => setOpen((o) => !o)} aria-label="More export options" title="More export options">
+          ▾
+        </button>
+      </div>
       {open && (
         <div className="row-menu export-pop">
+          <button onClick={copyLast}>
+            <b>Copy last exchange (full)</b>
+            <small>Latest request and reply, with setup, tool calls and log: for debugging</small>
+          </button>
+          <button
+            onClick={() =>
+              run(async () => {
+                await navigator.clipboard.writeText(await api.exportChat(session.id, 'md', { exchange: 'last', compact: true }))
+                flash('Copied prompt + reply')
+              })
+            }
+          >
+            <b>Copy prompt + reply only</b>
+            <small>Just the latest request and answer: for a quick second opinion</small>
+          </button>
+          <div className="menu-sep" />
           <button
             onClick={() =>
               run(async () => {
@@ -57,8 +85,8 @@ export function ExportMenu({ session }: { session: Session }) {
               })
             }
           >
-            <b>Copy for another agent</b>
-            <small>Transcript, tool calls and activity log as Markdown</small>
+            <b>Copy whole chat</b>
+            <small>Full transcript, tool calls and activity log as Markdown</small>
           </button>
           <button
             onClick={() =>

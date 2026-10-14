@@ -27,6 +27,10 @@ export interface ExportOptions {
   activity?: boolean;
   /** max characters per tool output */
   outputLimit?: number;
+  /** only one exchange: the assistant message with this id (plus the user message before it), or "last" */
+  exchange?: string;
+  /** just prompt + reply (+ errors), no setup, tool calls or log: for a quick second opinion */
+  compact?: boolean;
 }
 
 export function exportJson(sessionId: string) {
@@ -71,13 +75,48 @@ export function exportMarkdown(sessionId: string, opts: ExportOptions = {}) {
   const p = projects.get(s.project_id);
   const limit = opts.outputLimit ?? 2000;
   const env = environment(p?.name);
-  const rows = messages.list(sessionId);
+  const all = messages.list(sessionId);
+  let rows = all;
+  let window: [number, number] | null = null;
+  if (opts.exchange) {
+    // the chosen (or last) assistant reply and the user message that prompted it
+    const idx =
+      opts.exchange === "last"
+        ? all.map((m) => m.role).lastIndexOf("assistant")
+        : all.findIndex((m) => m.id === opts.exchange && m.role === "assistant");
+    if (idx < 0) return null;
+    const start = idx > 0 && all[idx - 1].role === "user" ? idx - 1 : idx;
+    rows = all.slice(start, idx + 1);
+    window = [rows[0].created_at - 1000, all[idx].created_at + 2000];
+  }
   const out: string[] = [];
 
-  out.push(`# GM Agent chat: ${s.title}`);
+  if (opts.compact) {
+    // Short form: what was asked and what came back, nothing else
+    const errs = recent({ sessionId, level: "error", limit: 200 }).filter((e) => !window || (Date.parse(e.ts) >= window[0] && Date.parse(e.ts) <= window[1]));
+    for (const m of rows) {
+      if (m.role === "user") {
+        out.push("**Prompt:**", "", redact(m.content.trim()), "");
+        try {
+          const a = m.tools_json ? JSON.parse(m.tools_json)?.attachments : null;
+          if (Array.isArray(a) && a.length) out.push(`_Attachments: ${a.map((x: string) => x.split("/").pop()).join(", ")}_`, "");
+        } catch {
+          /* ignore */
+        }
+      } else {
+        out.push(`**Response (${m.model ?? s.model}):**`, "", redact(m.content.trim()) || "_(no text reply)_", "");
+      }
+    }
+    if (errs.length) out.push(`_Errors during this turn: ${errs.map((e) => e.message).join(" · ")}_`, "");
+    return redact(out.join("\n"));
+  }
+
+  out.push(opts.exchange ? `# GM Agent: one exchange from "${s.title}"` : `# GM Agent chat: ${s.title}`);
   out.push("");
   out.push(
-    "> Exported from **GM Agent**, a self-hosted AI agent on the SayGM model gateway. It runs agent engines (OpenCode or the Claude Agent SDK) in a Docker sandbox whose only internet access is an allowlist proxy, with Ditto as long-term memory. Credentials have been replaced with `[REDACTED]`. Below: the setup, the full transcript with tool calls, and the activity log for this chat.",
+    `> Exported from **GM Agent**, a self-hosted AI agent on the SayGM model gateway. It runs agent engines (OpenCode or the Claude Agent SDK) in a Docker sandbox whose only internet access is an allowlist proxy, with Ditto as long-term memory. Credentials have been replaced with \`[REDACTED]\`. Below: the setup, ${
+      opts.exchange ? "one request and the agent's reply" : "the full transcript"
+    } with tool calls, and the activity log${opts.exchange ? " for that exchange" : ""}.`,
   );
   out.push("");
   out.push("## Setup");
@@ -86,7 +125,9 @@ export function exportMarkdown(sessionId: string, opts: ExportOptions = {}) {
   out.push(`- Engine: ${s.engine} · model(s): ${[...new Set(rows.map((m) => m.model).filter(Boolean))].join(", ") || s.model}`);
   for (const [k, v] of Object.entries(env)) out.push(`- ${k}: ${v}`);
   out.push("");
-  out.push("## Transcript");
+  if (opts.exchange && all.length > rows.length) out.push("", `_This is message ${all.indexOf(rows[0]) + 1}–${all.indexOf(rows[rows.length - 1]) + 1} of ${all.length} in the chat; earlier context isn't included._`);
+  out.push("");
+  out.push(opts.exchange ? "## Exchange" : "## Transcript");
 
   rows.forEach((m, i) => {
     out.push("");
@@ -133,8 +174,15 @@ export function exportMarkdown(sessionId: string, opts: ExportOptions = {}) {
   });
 
   if (opts.activity !== false) {
-    const acts = recent({ sessionId, limit: 500 });
-    out.push("", "## Activity log for this chat", "");
+    let acts = recent({ sessionId, limit: 500 });
+    if (window) {
+      // start at this exchange's own "Turn started" so the previous turn's tail isn't included
+      const w = window;
+      const startEv = acts.filter((e) => e.message.startsWith("Turn started") && Date.parse(e.ts) >= w[0] && Date.parse(e.ts) <= w[1]).at(-1);
+      const from = startEv ? Date.parse(startEv.ts) : w[0];
+      acts = acts.filter((e) => Date.parse(e.ts) >= from && Date.parse(e.ts) <= w[1]);
+    }
+    out.push("", opts.exchange ? "## Activity log for this exchange" : "## Activity log for this chat", "");
     if (!acts.length) out.push("_(none recorded)_");
     else
       out.push(
