@@ -128,6 +128,8 @@ export interface AppConfig {
   ditto: { enabled: boolean; archive: string }
 }
 
+export type TurnStatus = 'running' | 'done' | 'error' | 'aborted' | 'interrupted'
+
 export type AgentEvent =
   | { type: 'text'; delta: string }
   | { type: 'thinking'; delta: string }
@@ -135,6 +137,8 @@ export type AgentEvent =
   | { type: 'tool_end'; id: string; output?: string; isError?: boolean }
   | { type: 'done'; engineSessionId: string; usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number }; messageId?: string }
   | { type: 'error'; message: string }
+  /** The stream ended because the turn did — not because the connection dropped. */
+  | { type: 'end'; status: TurnStatus; seq: number }
 
 const TOKEN_KEY = 'gm-agent-token'
 export const getToken = () => {
@@ -163,7 +167,8 @@ export const api = {
   config: () => req<AppConfig>('/api/config'),
   models: (refresh = false) => req<{ models: Model[] }>(`/api/models${refresh ? '?refresh=1' : ''}`),
   sessions: () => req<{ sessions: Session[] }>('/api/sessions'),
-  session: (id: string) => req<{ session: Session; messages: Message[]; running: boolean }>(`/api/sessions/${id}`),
+  session: (id: string) =>
+    req<{ session: Session; messages: Message[]; running: boolean; turnId: string | null }>(`/api/sessions/${id}`),
   createSession: (engine: EngineId, model: string, projectId?: string | null) =>
     req<{ session: Session }>('/api/sessions', { method: 'POST', body: JSON.stringify({ engine, model, projectId }) }),
   moveSession: (id: string, projectId: string | null) =>
@@ -224,33 +229,103 @@ export const api = {
     return res.text()
   },
 
-  /** POST + read the SSE stream manually (EventSource can't POST). */
-  async send(id: string, message: string, model: string, onEvent: (e: AgentEvent) => void, attachments: string[] = [], plan = false) {
-    const res = await fetch(`/api/sessions/${id}/messages`, {
+  /** Start a turn without streaming it; follow it with `follow()`. */
+  startTurn: (id: string, message: string, model: string, attachments: string[] = [], plan = false) =>
+    req<{ turnId: string; sessionId: string }>(`/api/sessions/${id}/messages?stream=0`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
       body: JSON.stringify({ message, model, attachments, plan }),
-    })
+    }),
+
+  /**
+   * Attach to a turn's event stream from `from` (the last sequence number we have) and
+   * read it until it ends. Resolves `{ended:true}` when the *turn* finished and
+   * `{ended:false}` when the connection did — the caller re-attaches in that case.
+   */
+  async follow(
+    id: string,
+    turnId: string,
+    from: number,
+    onEvent: (e: AgentEvent, seq: number) => void,
+    signal?: AbortSignal,
+  ): Promise<{ ended: boolean; seq: number }> {
+    const q = new URLSearchParams({ turnId, from: String(from) })
+    const res = await fetch(`/api/sessions/${id}/stream?${q}`, { headers: { authorization: `Bearer ${getToken()}` }, signal })
     if (res.status === 401) throw new Unauthorized('unauthorized')
     if (!res.ok || !res.body) throw new Error(`${res.status} ${await res.text()}`)
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      let i: number
-      while ((i = buf.indexOf('\n\n')) >= 0) {
-        const chunk = buf.slice(0, i)
-        buf = buf.slice(i + 2)
-        const data = chunk
-          .split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice(5).trimStart())
-          .join('\n')
-        if (data) onEvent(JSON.parse(data) as AgentEvent)
+    return readEvents(res.body, from, onEvent)
+  },
+
+  /**
+   * Follow a turn to its end, re-attaching where we left off if the connection drops
+   * (sleep, tunnel blip, flaky mobile data). The turn keeps running on the server either way.
+   */
+  async followUntilDone(
+    id: string,
+    turnId: string,
+    from: number,
+    onEvent: (e: AgentEvent, seq: number) => void,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    let seq = from
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await api.follow(id, turnId, seq, (e, s) => { seq = Math.max(seq, s); onEvent(e, s) }, signal)
+        if (r.ended) return seq
+      } catch (e) {
+        if (signal?.aborted) return seq
+        if (e instanceof Unauthorized || attempt >= 5) throw e
       }
+      if (signal?.aborted) return seq
+      if (attempt >= 5) throw new Error('Lost the connection to this turn. It may still be running: reopen the chat to catch up.')
+      await new Promise((r) => setTimeout(r, Math.min(8000, 500 * 2 ** attempt)))
     }
   },
+
+  /** Start a turn and follow it to the end. */
+  async run(
+    id: string,
+    input: { message: string; model: string; attachments?: string[]; plan?: boolean },
+    onEvent: (e: AgentEvent, seq: number) => void,
+    opts: { signal?: AbortSignal; onTurn?: (turnId: string) => void } = {},
+  ) {
+    const { turnId } = await api.startTurn(id, input.message, input.model, input.attachments ?? [], input.plan ?? false)
+    opts.onTurn?.(turnId)
+    await api.followUntilDone(id, turnId, 0, onEvent, opts.signal)
+  },
+}
+
+/** Reads an SSE body: `id:` carries the sequence number, `data:` the event JSON. */
+async function readEvents(
+  body: ReadableStream<Uint8Array>,
+  from: number,
+  onEvent: (e: AgentEvent, seq: number) => void,
+): Promise<{ ended: boolean; seq: number }> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let seq = from
+  let ended = false
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let i: number
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, i)
+      buf = buf.slice(i + 2)
+      let data = ''
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('data:')) data += (data ? '\n' : '') + line.slice(5).trimStart()
+        else if (line.startsWith('id:')) seq = Number(line.slice(3).trim()) || seq
+      }
+      if (!data) continue // heartbeat
+      const ev = JSON.parse(data) as AgentEvent
+      if (ev.type === 'end') {
+        ended = true
+        continue
+      }
+      onEvent(ev, seq)
+    }
+  }
+  return { ended, seq }
 }

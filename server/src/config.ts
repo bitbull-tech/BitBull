@@ -177,6 +177,11 @@ function buildConfig() {
      * the chat. Per agent: SUBAGENT_MODEL_<NAME>, e.g. SUBAGENT_MODEL_REVIEWER=gpt-5.5.
      */
     subagentModel: env("SUBAGENT_MODEL", "inherit"),
+    /**
+     * How long a finished turn's event log is kept so a client can replay it (days; 0 = forever).
+     * This is a re-attach buffer, not history: messages and tool calls live in `messages`.
+     */
+    turnRetentionDays: Number(env("TURN_RETENTION_DAYS", "7")),
   },
 
   dataDir: path.resolve(env("DATA_DIR", path.join(ROOT, "data"))),

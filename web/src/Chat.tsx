@@ -90,6 +90,8 @@ export function Chat({
   const taRef = useRef<HTMLTextAreaElement>(null)
   // When the first message of a draft creates a session, keep the local stream going
   const createdHere = useRef<string | null>(null)
+  // The turn we are currently reading, so re-rendering doesn't attach to it twice
+  const followingRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!session) {
@@ -100,10 +102,12 @@ export function Chat({
     setEngine(session.engine)
     if (createdHere.current === session.id) return
     void guard(api.session(session.id)).then((r) => {
-      if (r) {
-        setMsgs(r.messages.map(toView))
-        setBusy(r.running)
-      }
+      if (!r) return
+      setMsgs(r.messages.map(toView))
+      setBusy(r.running)
+      // A turn left running (tab closed, phone asleep, laptop lid shut) is still going on
+      // the server: join it and replay everything it produced while we were away.
+      if (r.running && r.turnId && followingRef.current !== r.turnId) void resume(session.id, r.turnId)
     })
   }, [session, guard])
 
@@ -157,6 +161,22 @@ export function Chat({
     }
   }
 
+  /** Join a turn that is already running and replay it from the start. */
+  const resume = async (sessionId: string, turnId: string) => {
+    followingRef.current = turnId
+    setBusy(true)
+    // The user's message is already in history; the reply is only saved when the turn ends.
+    setMsgs((all) => [...all, { id: `a-${turnId}`, role: 'assistant', content: '', tools: [], model, streaming: true }])
+    try {
+      await guard(api.followUntilDone(sessionId, turnId, 0, onEvent))
+    } finally {
+      if (followingRef.current === turnId) followingRef.current = null
+      patchLast((m) => ({ ...m, streaming: false }))
+      setBusy(false)
+      onTurnDone()
+    }
+  }
+
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return
     const arr = Array.from(list)
@@ -196,10 +216,16 @@ export function Chat({
       { id: `u-${Date.now()}`, role: 'user', content: text, tools: [], attachments: paths },
       { id: `a-${Date.now()}`, role: 'assistant', content: '', tools: [], model, streaming: true, plan },
     ])
-    await guard(api.send(s.id, text, model, onEvent, paths, plan))
-    patchLast((m) => ({ ...m, streaming: false }))
-    setBusy(false)
-    onTurnDone()
+    try {
+      await guard(api.run(s.id, { message: text, model, attachments: paths, plan }, onEvent, {
+        onTurn: (turnId) => (followingRef.current = turnId),
+      }))
+    } finally {
+      followingRef.current = null
+      patchLast((m) => ({ ...m, streaming: false }))
+      setBusy(false)
+      onTurnDone()
+    }
   }
 
   const empty = msgs.length === 0

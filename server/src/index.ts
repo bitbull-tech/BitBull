@@ -8,7 +8,19 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { assertConfig, config, paths, type EngineId } from "./config.js";
 import "./log.js";
-import { abortRun, engines, isRunning, runTurn } from "./agent.js";
+import { engines, isRunning } from "./agent.js";
+import {
+  abortTurn,
+  activeTurnId,
+  collectTurn,
+  latestTurnId,
+  resetStaleTurns,
+  snapshot as snapshotTurn,
+  startTurn,
+  watch as watchTurn,
+  type TurnRecord,
+  type TurnStatus,
+} from "./turns.js";
 import { messages, projects, sessions, workspaceFor } from "./db.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
@@ -258,7 +270,8 @@ app.post("/api/sessions", async (c) => {
 app.get("/api/sessions/:id", (c) => {
   const s = sessions.get(c.req.param("id"));
   if (!s) return c.json({ error: "not found" }, 404);
-  return c.json({ session: s, messages: messages.list(s.id), running: isRunning(s.id) });
+  // turnId lets a client that was away re-attach to the stream and replay what it missed
+  return c.json({ session: s, messages: messages.list(s.id), running: isRunning(s.id), turnId: latestTurnId(s.id) ?? null });
 });
 
 app.patch("/api/sessions/:id", async (c) => {
@@ -279,13 +292,13 @@ app.patch("/api/sessions/:id", async (c) => {
 });
 
 app.delete("/api/sessions/:id", (c) => {
-  abortRun(c.req.param("id"));
+  abortTurn(c.req.param("id"));
   sessions.delete(c.req.param("id"));
   return c.json({ ok: true });
 });
 
 app.post("/api/sessions/:id/abort", (c) => {
-  abortRun(c.req.param("id"));
+  abortTurn(c.req.param("id"));
   return c.json({ ok: true });
 });
 
@@ -402,16 +415,103 @@ const SendSchema = z.object({
   plan: z.boolean().optional(),
 });
 
-/** Streaming turn (Server-Sent Events). Used by the web UI. */
+/**
+ * Stream a turn's events over SSE, from `from` (the last seq the client has) onwards.
+ * The turn itself runs in turns.ts, so closing this connection doesn't stop it: the same
+ * stream can be re-opened later, or opened twice from two devices.
+ */
+function streamTurn(c: Parameters<typeof streamSSE>[0], turnId: string, from: number) {
+  return streamSSE(c, async (stream) => {
+    // Subscribe first, snapshot second, then drop duplicates: an event emitted between
+    // the two would otherwise fall through the gap.
+    const queue: TurnRecord[] = [];
+    let ended: TurnStatus | null = null;
+    let closed = false;
+    let wake: (() => void) | null = null;
+    const off = watchTurn(turnId, {
+      event: (rec) => {
+        queue.push(rec);
+        wake?.();
+      },
+      end: (status) => {
+        ended = status;
+        wake?.();
+      },
+    });
+    stream.onAbort(() => {
+      closed = true;
+      off();
+      wake?.();
+    });
+
+    let sent = from;
+    const write = async (rec: TurnRecord) => {
+      if (rec.seq <= sent) return;
+      sent = rec.seq;
+      await stream.writeSSE({ event: rec.event.type, data: JSON.stringify(rec.event), id: String(rec.seq) });
+    };
+    try {
+      const snap = snapshotTurn(turnId, from);
+      if (!snap) {
+        await stream.writeSSE({ event: "error", data: JSON.stringify({ type: "error", message: "unknown turn" }) });
+        return;
+      }
+      for (const rec of snap.events) await write(rec);
+      if (snap.status !== "running") ended = ended ?? snap.status;
+
+      while (!closed && (queue.length || ended === null)) {
+        if (!queue.length) {
+          // heartbeat every 25s keeps proxies and tunnels from closing the connection
+          await Promise.race([new Promise<void>((r) => (wake = r)), new Promise((r) => setTimeout(r, 25000))]);
+          wake = null;
+          if (!queue.length && ended === null && !closed) await stream.writeSSE({ event: "ping", data: "" });
+          continue;
+        }
+        await write(queue.shift()!);
+      }
+      if (!closed && ended !== null) {
+        // A turn the server restarted through never yields `done`; say so rather than hang.
+        if (ended === "interrupted") {
+          await stream.writeSSE({
+            event: "error",
+            data: JSON.stringify({ type: "error", message: "Turn interrupted: the server restarted while it was running." }),
+          });
+        }
+        // Tells the client this stream ended because the turn did, not because the
+        // connection dropped: without it a client can't know whether to re-attach.
+        await stream.writeSSE({ event: "end", data: JSON.stringify({ type: "end", status: ended, seq: sent }) });
+      }
+    } finally {
+      off();
+    }
+  });
+}
+
+/**
+ * Start a turn. Streams it by default (what the web UI does); `?stream=0` returns
+ * `{turnId}` straight away for clients that attach with GET /stream instead.
+ */
 app.post("/api/sessions/:id/messages", async (c) => {
   const s = sessions.get(c.req.param("id"));
   if (!s) return c.json({ error: "not found" }, 404);
   const body = SendSchema.parse(await c.req.json());
-  return streamSSE(c, async (stream) => {
-    for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments, { plan: body.plan })) {
-      await stream.writeSSE({ event: ev.type, data: JSON.stringify(ev) });
-    }
-  });
+  if (activeTurnId(s.id)) return c.json({ error: "This session is already running a turn." }, 409);
+  const { turnId } = startTurn(s, { prompt: body.message, model: body.model ?? s.model, attachments: body.attachments, plan: body.plan });
+  if (c.req.query("stream") === "0") return c.json({ turnId, sessionId: s.id });
+  return streamTurn(c, turnId, 0);
+});
+
+/**
+ * Attach (or re-attach) to a turn: `?from=<seq>` replays everything after that sequence
+ * number and then follows live. Without `turnId` it picks the running turn, or the last one.
+ */
+app.get("/api/sessions/:id/stream", (c) => {
+  const s = sessions.get(c.req.param("id"));
+  if (!s) return c.json({ error: "not found" }, 404);
+  const turnId = c.req.query("turnId") || latestTurnId(s.id);
+  if (!turnId) return c.json({ error: "no turn to attach to" }, 404);
+  const from = Math.max(0, Number(c.req.query("from") ?? 0) || 0);
+  return streamTurn(c, turnId, from);
 });
 
 /**
@@ -431,17 +531,20 @@ app.post("/api/v1/chat", async (c) => {
       model: body.model ?? config.agent.defaultModel,
       projectId: body.projectId && projects.get(body.projectId) ? body.projectId : null,
     });
+  if (activeTurnId(s.id)) return c.json({ error: "This session is already running a turn." }, 409);
+  const { turnId } = startTurn(s, { prompt: body.message, model: body.model ?? s.model, attachments: body.attachments, plan: body.plan });
   let text = "";
   const tools: string[] = [];
   const errors: string[] = [];
   let usage: unknown;
-  for await (const ev of runTurn(s, body.message, body.model ?? s.model, body.attachments, { plan: body.plan })) {
+  const { events } = await collectTurn(turnId);
+  for (const { event: ev } of events) {
     if (ev.type === "text") text += ev.delta;
     if (ev.type === "tool_start") tools.push(ev.name);
     if (ev.type === "error") errors.push(ev.message);
     if (ev.type === "done") usage = ev.usage;
   }
-  return c.json({ sessionId: s.id, text, tools, errors, usage });
+  return c.json({ sessionId: s.id, turnId, text, tools, errors, usage });
 });
 
 // ---------- web UI ----------
@@ -454,6 +557,7 @@ if (existsSync(config.webDist)) {
 }
 
 // ---------- boot ----------
+resetStaleTurns();
 await syncSkills().catch((e) => console.error("[skills]", e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] SayGM Agent listening on http://${info.address}:${info.port}`);

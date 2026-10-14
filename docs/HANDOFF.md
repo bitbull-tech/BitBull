@@ -120,7 +120,9 @@ claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
 4. GAPS.md priorities: checkpoints + diff + undo; parallel builds in git worktrees (best-of-N
    across models, compare view); approvals for push/delete/install; hooks; browser testing
    (Playwright MCP); background/scheduled runs; spend caps; separate tool container; multi-user.
-5. **Desktop / Linux / iOS** (this handoff's purpose). Suggested direction, to be confirmed with Tom:
+5. **Desktop / Linux / iOS** — now planned and decided in **`docs/CLIENTS.md`** (Tauri 2 desktop
+   that also manages the local Docker stack; iOS as a PWA first; per-device tokens before
+   anything leaves localhost; Phase 0 = detached resumable turns). Original sketch below:
    - The server API is the contract (`README.md` → API table; SSE for turns and activity). Clients
      should stay thin.
    - **Linux**: run `docker compose up -d --build` directly (no WSL scripts); add a systemd unit +
