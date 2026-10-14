@@ -12,7 +12,8 @@ locked-down WSL distro called `gm`). End goal: a platform for custom historical/
 experiences (old photos, film, documents → grounded cinematic/interactive pieces) combining
 SayGM models, Atlas AI Studio / 404.xyz media generation and agentic coding.
 
-Next phase (why you're here): **desktop, Linux and iOS implementations**. See "Next" in
+Next phase (why you're here): **desktop, Linux and iOS implementations**. Plan and decisions
+in `docs/CLIENTS.md` (start at Phase 0: detached turns); background in "Next" in
 docs/HANDOFF.md.
 
 ## Layout
@@ -21,6 +22,8 @@ docs/HANDOFF.md.
 server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   index.ts           HTTP API, auth (bearer APP_TOKEN), static UI
   agent.ts           turn runner: history, system prompt, engines, redaction, Ditto archive, activity
+  turns.ts           turns outlive their connection: event log per turn, attach/replay by seq
+  brand.ts           white-label (DATA_DIR/brand.json + brand/): validated name, logos, CSS tokens
   engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, gm-guard plugin
   engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
   config.ts          env + UI overrides (DATA_DIR/settings.local.json), live reloadConfig()
@@ -30,12 +33,14 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   subagents.ts       loads subagents/*.md for both engines; READ_ONLY_BASH rules
   integrations.ts    Atlas, 404, GitHub (+ probes); ditto.ts; models.ts; skills.ts; db.ts
 web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ExportMenu, activity.tsx)
+  brand.ts           brand fetch + CSS-token injection;  BrandMark.tsx  logo/initials
+  index.css          all colour lives in tokens at the top; the sidebar re-declares its own
 agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/gm-guard.js  secret guard
 skills/              skills mirrored into every workspace (.claude/skills) and backed up to Ditto
 subagents/           reviewer, challenger, debugger, tester, worker, fact-checker
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
 scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps1
-docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, STORAGE.md (Hippius plan)
+docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md
 ```
 
 ## Commands

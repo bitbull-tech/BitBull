@@ -1,98 +1,167 @@
-/* ───────────── Tokens ───────────── */
+/* ───────────── Tokens ─────────────
+   Every colour, radius and font in this stylesheet comes from a variable defined here,
+   and nothing below hard-codes one. A brand.json on the server can override any of
+   them at runtime, so the product can be re-skinned without a rebuild — see
+   docs/BRANDING.md and web/src/brand/.
+
+   Light: ink on warm paper, with a calm blue as the accent.
+   Dark:  warm near-black, with the signal yellow as the accent.
+   The sidebar is dark in both modes: it re-declares the surface tokens for its subtree,
+   so every component inside it stays correct without knowing anything about it.
+*/
 :root {
-  --bg: #f6f6f3;
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #faf7ef;
+  --bg-tint-1: rgb(240 193 74 / 0.1);
+  --bg-tint-2: rgb(28 126 214 / 0.05);
   --panel: #ffffff;
-  --panel-2: #fbfbf9;
-  --side: #efeee9;
-  --text: #1a1a17;
-  --text-2: #3a3935;
-  --muted: #6d6b64;
-  --line: #e3e1da;
-  --line-2: #d6d3ca;
-  --hover: rgb(26 26 23 / 0.05);
-  --accent: #5b5bd6;
-  --accent-2: #14b8a6;
-  --accent-soft: rgb(91 91 214 / 0.1);
+  --panel-2: #fdfaf3;
+  --code-bg: #f4f0e4;
+
+  /* Ink */
+  --text: #1b1a16;
+  --text-2: #45423a;
+  --muted: #78746a;
+  --line: #e9e3d4;
+  --line-2: #dbd4c1;
+  --hover: rgb(27 26 22 / 0.055);
+
+  /* Accents: primary carries actions, secondary is for highlights and gradients */
+  --accent: #1c7ed6;
+  --accent-2: #e8a92c;
+  --accent-soft: rgb(28 126 214 / 0.1);
   --accent-text: #ffffff;
-  --user: #eceaf9;
-  --user-text: #1f1d3d;
-  --code-bg: #f2f1ec;
+  --user: #eef3fa;
+  --user-text: #16243a;
+
+  /* Sidebar: its own surface, dark in both themes */
+  --side: #16150f;
+  --side-2: #201e15;
+  --side-text: #f3efe2;
+  --side-text-2: #cdc8b8;
+  --side-muted: #928d7c;
+  --side-line: rgb(255 255 255 / 0.08);
+  --side-hover: rgb(255 255 255 / 0.06);
+  /* The rail is dark in both themes, so it keeps the signal yellow whatever the mode */
+  --side-accent: #f3c249;
+  --side-accent-text: #15150f;
+
+  /* States */
   --ok: #16a34a;
   --bad: #dc2626;
   --warn: #d97706;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
-  --shadow-lg: 0 24px 64px rgb(0 0 0 / 0.16);
+
+  /* Model families (fixed brand colours of the providers, not ours) */
   --fam-anthropic: #d97757;
   --fam-openai: #10a37f;
   --fam-google: #4285f4;
   --fam-open: #a855f7;
   --fam-other: #8a8a84;
+
+  /* Shape and type */
   --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+  --shadow: 0 1px 2px rgb(31 26 10 / 0.04), 0 8px 24px rgb(31 26 10 / 0.06);
+  --shadow-lg: 0 24px 64px rgb(31 26 10 / 0.16);
   --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --display: 'Outfit', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --serif: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
   --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
-  color-scheme: light;
 }
+
+/* The dark palette, declared once and used by both the media query and the toggle. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0e0f11;
-    --panel: #16171a;
-    --panel-2: #1a1b1f;
-    --side: #121316;
-    --text: #ececea;
-    --text-2: #cfcfca;
-    --muted: #96958f;
-    --line: #25262b;
-    --line-2: #32333a;
-    --hover: rgb(255 255 255 / 0.05);
-    --accent: #8486f7;
-    --accent-2: #2dd4bf;
-    --accent-soft: rgb(132 134 247 / 0.14);
-    --accent-text: #0e0f11;
-    --user: #24243a;
-    --user-text: #e8e8ff;
-    --code-bg: #1d1e22;
+    color-scheme: dark;
+    --bg: #0d0d0b;
+    --bg-tint-1: rgb(243 194 73 / 0.07);
+    --bg-tint-2: rgb(124 196 240 / 0.05);
+    --panel: #161614;
+    --panel-2: #1c1b18;
+    --code-bg: #121210;
+    --text: #f2efe6;
+    --text-2: #d2cec2;
+    --muted: #918d81;
+    --line: #26251f;
+    --line-2: #36342c;
+    --hover: rgb(255 255 255 / 0.055);
+    --accent: #f3c249;
+    --accent-2: #7cc4f0;
+    --accent-soft: rgb(243 194 73 / 0.14);
+    --accent-text: #15150f;
+    --user: #22201a;
+    --user-text: #f2efe6;
+    --side: #0a0a09;
+    --side-2: #141310;
+    --side-text: #f0ece1;
+    --side-text-2: #c5c0b2;
+    --side-muted: #8b877b;
+    --side-line: rgb(255 255 255 / 0.07);
+    --side-hover: rgb(255 255 255 / 0.05);
+    --side-accent: #f3c249;
+    --side-accent-text: #15150f;
     --ok: #22c55e;
     --bad: #f87171;
+    --warn: #eab308;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.3);
     --shadow-lg: 0 24px 64px rgb(0 0 0 / 0.55);
-    color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-  --bg: #0e0f11;
-  --panel: #16171a;
-  --panel-2: #1a1b1f;
-  --side: #121316;
-  --text: #ececea;
-  --text-2: #cfcfca;
-  --muted: #96958f;
-  --line: #25262b;
-  --line-2: #32333a;
-  --hover: rgb(255 255 255 / 0.05);
-  --accent: #8486f7;
-  --accent-2: #2dd4bf;
-  --accent-soft: rgb(132 134 247 / 0.14);
-  --accent-text: #0e0f11;
-  --user: #24243a;
-  --user-text: #e8e8ff;
-  --code-bg: #1d1e22;
+  color-scheme: dark;
+  --bg: #0d0d0b;
+  --bg-tint-1: rgb(243 194 73 / 0.07);
+  --bg-tint-2: rgb(124 196 240 / 0.05);
+  --panel: #161614;
+  --panel-2: #1c1b18;
+  --code-bg: #121210;
+  --text: #f2efe6;
+  --text-2: #d2cec2;
+  --muted: #918d81;
+  --line: #26251f;
+  --line-2: #36342c;
+  --hover: rgb(255 255 255 / 0.055);
+  --accent: #f3c249;
+  --accent-2: #7cc4f0;
+  --accent-soft: rgb(243 194 73 / 0.14);
+  --accent-text: #15150f;
+  --user: #22201a;
+  --user-text: #f2efe6;
+  --side: #0a0a09;
+  --side-2: #141310;
+  --side-text: #f0ece1;
+  --side-text-2: #c5c0b2;
+  --side-muted: #8b877b;
+  --side-line: rgb(255 255 255 / 0.07);
+  --side-hover: rgb(255 255 255 / 0.05);
+  --side-accent: #f3c249;
+  --side-accent-text: #15150f;
   --ok: #22c55e;
   --bad: #f87171;
+  --warn: #eab308;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 24px 64px rgb(0 0 0 / 0.55);
-  color-scheme: dark;
 }
 
 /* ───────────── Base ───────────── */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
-  background: var(--bg);
+  /* Two very soft washes of the accent colours over the base, like warm paper */
+  background:
+    radial-gradient(1200px 700px at 78% -10%, var(--bg-tint-1), transparent 60%),
+    radial-gradient(900px 600px at 0% 100%, var(--bg-tint-2), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font: 14.5px/1.6 var(--font);
   -webkit-font-smoothing: antialiased;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
+h1, h2, h3, .display { font-family: var(--display); letter-spacing: -0.02em; font-weight: 600; }
 button, select, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: 0.5; }
@@ -152,20 +221,25 @@ code, pre, kbd { font-family: var(--mono); }
 .seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 .seg.mini button { padding: 3px 9px; font-size: 12px; }
 
-/* Brand */
+/* Brand: the mark is either the operator's logo (an <img>) or initials on a tinted tile */
 .hero-mark, .brand-mark {
-  display: grid; place-items: center; color: #fff; font-weight: 800; letter-spacing: -0.5px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center; flex: none; overflow: hidden;
+  font-family: var(--display); font-weight: 700; letter-spacing: -0.03em;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.hero-mark { width: 60px; height: 60px; border-radius: 18px; font-size: 21px; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent); }
+.hero-mark { width: 60px; height: 60px; border-radius: var(--radius-lg); font-size: 20px; }
 .brand-mark { width: 34px; height: 34px; border-radius: 10px; font-size: 12.5px; }
+.hero-mark img, .brand-mark img { width: 100%; height: 100%; object-fit: contain; padding: 14%; }
+/* A logo supplied as an image sits on its own, without the tinted tile */
+.hero-mark.has-img, .brand-mark.has-img { background: none; border-color: transparent; }
 .pulse-soft { animation: pulse 1.4s ease-in-out infinite; }
 
 /* ───────────── Login ───────────── */
 .login-bg {
   background:
-    radial-gradient(800px 400px at 20% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent),
-    radial-gradient(700px 400px at 90% 100%, color-mix(in srgb, var(--accent-2) 12%, transparent), transparent),
+    radial-gradient(900px 500px at 75% 0%, var(--bg-tint-1), transparent 60%),
+    radial-gradient(700px 500px at 10% 100%, var(--bg-tint-2), transparent 55%),
     var(--bg);
 }
 .login {
@@ -181,11 +255,33 @@ code, pre, kbd { font-family: var(--mono); }
 /* ───────────── Shell ───────────── */
 .shell { display: grid; grid-template-columns: 276px 1fr; height: 100%; }
 .sidebar {
-  background: var(--side); border-right: 1px solid var(--line);
+  /* Dark in both themes: redefining the surface tokens here re-colours the whole
+     subtree, so nothing inside the sidebar needs to know it sits on a dark panel. */
+  --panel: var(--side-2);
+  --panel-2: var(--side-2);
+  --text: var(--side-text);
+  --text-2: var(--side-text-2);
+  --muted: var(--side-muted);
+  --line: var(--side-line);
+  --line-2: var(--side-line);
+  --hover: var(--side-hover);
+  --code-bg: var(--side-2);
+  --accent: var(--side-accent);
+  --accent-text: var(--side-accent-text);
+  --accent-soft: color-mix(in srgb, var(--side-accent) 16%, transparent);
+  color-scheme: dark;
+  background: var(--side); color: var(--side-text);
+  border-right: 1px solid var(--side-line);
   display: flex; flex-direction: column; min-height: 0; padding: 14px 10px 10px;
 }
-.brand { display: flex; gap: 10px; align-items: center; padding: 0 6px 14px; }
-.brand-name { font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
+.sidebar .btn { border-color: var(--side-line); }
+.sidebar .session.active { background: var(--side-2); box-shadow: none; }
+.brand-panel {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: var(--radius);
+}
+.brand { display: flex; gap: 10px; align-items: center; padding: 2px 6px 16px; }
+.brand-name { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: -0.02em; line-height: 1.2; }
 .brand-sub { font-size: 11.5px; color: var(--muted); }
 .new-chat { padding: 9px 14px; }
 .side-search {
@@ -284,15 +380,20 @@ code, pre, kbd { font-family: var(--mono); }
 .thread { max-width: 820px; margin: 0 auto; padding: 28px 24px 16px; }
 
 .hero { max-width: 760px; margin: 0 auto; padding: 9vh 24px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; }
-.hero h1 { font-size: 30px; letter-spacing: -0.6px; margin: 22px 0 8px; font-weight: 700; }
-.hero p { color: var(--muted); max-width: 520px; margin: 0 0 30px; font-size: 15px; }
+.hero p.hero-greet { font-family: var(--serif); font-style: italic; font-size: 30px; line-height: 1.1; color: var(--muted); margin: 22px 0 0; max-width: none; }
+.hero h1 { font-size: 34px; margin: 2px 0 10px; font-weight: 700; }
+.hero p { color: var(--muted); max-width: 540px; margin: 0 0 30px; font-size: 14.5px; }
+.suggest-label {
+  align-self: flex-start; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted); margin-bottom: 8px;
+}
 .suggest { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; }
 .suggest-card {
-  text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 14px 16px;
-  display: flex; flex-direction: column; gap: 4px; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 5px; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .suggest-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); transform: translateY(-1px); box-shadow: var(--shadow); }
-.suggest-card b { font-size: 13.5px; }
+.suggest-card b { font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: -0.01em; }
 .suggest-card span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 
 .msg { margin-bottom: 26px; animation: rise 0.18s ease-out; }
@@ -305,7 +406,7 @@ code, pre, kbd { font-family: var(--mono); }
 .msg.assistant { display: grid; grid-template-columns: 30px 1fr; gap: 14px; }
 .avatar {
   width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 10.5px; font-weight: 800;
-  color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); margin-top: 2px;
+  font-family: var(--display); color: var(--accent-text); background: var(--accent); margin-top: 2px;
 }
 .msg-body { min-width: 0; }
 .msg-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; min-height: 22px; }

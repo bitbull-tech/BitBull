@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type EngineId, type Model, type Project, type Session, type Status } from './api'
+import { getBrand } from './brand'
+import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
 import { IconChevronRight, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
@@ -50,7 +52,7 @@ export default function App() {
     void boot()
   }, [boot])
 
-  if (authed === null) return <div className="center"><div className="hero-mark pulse-soft">GM</div></div>
+  if (authed === null) return <div className="center"><BrandMark className="hero-mark pulse-soft" /></div>
   if (!authed || !cfg) return <Login onDone={boot} error={error} />
   return (
     <Shell
@@ -78,9 +80,9 @@ function Login({ onDone, error }: { onDone: () => void; error: string | null }) 
           onDone()
         }}
       >
-        <div className="hero-mark">GM</div>
-        <h1>GM Agent</h1>
-        <p className="muted">Your agent on SayGM, with Ditto memory.</p>
+        <BrandMark className="hero-mark" />
+        <h1>{getBrand().name}</h1>
+        <p className="muted">{getBrand().tagline}</p>
         <input type="password" autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Access token (APP_TOKEN)" />
         {(error || (tried && value)) && <p className="error small">{error ?? 'That token was not accepted.'}</p>}
         <button type="submit" className="btn primary block">Unlock</button>
@@ -288,10 +290,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">GM</div>
+          <BrandMark onDark />
           <div>
-            <div className="brand-name">GM Agent</div>
-            <div className="brand-sub">SayGM · Ditto · Atlas</div>
+            <div className="brand-name">{getBrand().name}</div>
+            <div className="brand-sub">{getBrand().tagline}</div>
           </div>
         </div>
         <button className="btn primary block new-chat" onClick={() => newChat(null)}>

@@ -5,6 +5,9 @@ any time), with **[Ditto](https://heyditto.ai)** as long-term memory, two plugga
 engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 
 - Chat UI with streaming, tool-call view, per-message model switching
+- Turns run on the server, not in your tab: close it, sleep the laptop, come back, and the
+  chat picks up where it left off
+- Light and dark, and white-labelled from one `brand.json` — name, logo and every colour
 - Engine per chat: **OpenCode** (native for every model) or **Claude Agent SDK**
 - Ditto MCP wired into the agent + every turn and skill archived to Ditto
 - Skills in `/skills`, versioned in Git, shared by both engines
@@ -208,6 +211,14 @@ To get the agent's view on something: tick entries in the log and choose **Expla
 the **Ask agent** buttons that appear. Either way the excerpt is put in the message box with
 the request, so you can add your notes before sending.
 
+## Make it yours (white-labelling)
+
+Name, tagline, logos and every colour come from `brand.json` in the data folder, with the
+image files in `brand/` beside it. Edit it and reload the page — nothing is rebuilt or
+deployed. `docs/brand.example.json` is a starting point and
+[docs/BRANDING.md](docs/BRANDING.md) lists every token you can override. Settings →
+Appearance shows what is in force.
+
 ## Export a chat
 
 One click: **Copy last** in the top bar copies your latest request and the agent's reply,
@@ -254,8 +265,10 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `GET` | `/api/models` | Live SayGM model list (`?refresh=1`) |
 | `GET/POST` | `/api/sessions` | List / create (`{engine, model}`) |
 | `GET/PATCH/DELETE` | `/api/sessions/:id` | History / rename / delete |
-| `POST` | `/api/sessions/:id/messages` | Streaming turn (SSE): `text`, `thinking`, `tool_start`, `tool_end`, `error`, `done` |
+| `POST` | `/api/sessions/:id/messages` | Start a turn. Streams it as SSE (`text`, `thinking`, `tool_start`, `tool_end`, `error`, `done`, `end`); `?stream=0` returns `{turnId}` instead |
+| `GET` | `/api/sessions/:id/stream` | Attach to a turn and follow it: `?turnId=` (default: the running one, else the last) and `?from=<seq>` to replay what you missed |
 | `POST` | `/api/sessions/:id/abort` | Stop a running turn |
+| `GET` | `/api/brand` | Name, logos and colour overrides (public, no token) |
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |

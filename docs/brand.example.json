@@ -1,0 +1,21 @@
+{
+  "_comment": "Copy to <DATA_DIR>/brand.json and edit. Images go in <DATA_DIR>/brand/. See docs/BRANDING.md.",
+  "name": "GM Agent",
+  "tagline": "SayGM · Ditto · Atlas",
+  "mark": "GM",
+  "logo": null,
+  "logoDark": null,
+  "icon": null,
+  "tokens": {
+    "light": {
+      "accent": "#1c7ed6",
+      "accent-text": "#ffffff",
+      "bg": "#faf7ef"
+    },
+    "dark": {
+      "accent": "#f3c249",
+      "accent-text": "#15150f",
+      "bg": "#0d0d0b"
+    }
+  }
+}

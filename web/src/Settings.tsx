@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type SettingRow, type Status } from './api'
 import { IconCheck, IconLogout, IconMonitor, IconMoon, IconRefresh, IconSun, IconX } from './icons'
 import type { ThemePref } from './theme'
+import { getBrand } from './brand'
+import { BrandMark } from './BrandMark'
 
 type Tab = 'status' | 'integrations' | 'config' | 'appearance'
 
@@ -219,6 +221,24 @@ export function Settings({
                   </button>
                 ))}
               </div>
+              <h3>Branding</h3>
+              <div className="brand-panel">
+                <BrandMark className="brand-mark" />
+                <div className="grow">
+                  <div className="brand-name">{getBrand().name}</div>
+                  <div className="muted small">
+                    {getBrand().logo ? 'Using your logo' : 'Using the built-in mark'}
+                    {' · '}
+                    {Object.keys(getBrand().tokens.light).length + Object.keys(getBrand().tokens.dark).length} colour override
+                    {Object.keys(getBrand().tokens.light).length + Object.keys(getBrand().tokens.dark).length === 1 ? '' : 's'}
+                  </div>
+                </div>
+              </div>
+              <p className="muted small">
+                Name, logo and colours come from <code>brand.json</code> in the data folder, with images in{' '}
+                <code>brand/</code> beside it. Edit the file and reload this page: there is nothing to rebuild or deploy.
+                See <code>docs/BRANDING.md</code>.
+              </p>
               <h3>Session</h3>
               <button className="btn danger" onClick={onLogout}>
                 <IconLogout size={14} /> Sign out of this browser

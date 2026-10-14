@@ -5,6 +5,12 @@ import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
 import { filterItems, fromDrop, hasFolder, uploadItems } from './uploads'
 import { reportLocal } from './activity'
+import { BrandMark } from './BrandMark'
+
+const greeting = () => {
+  const h = new Date().getHours()
+  return h < 5 ? 'good night' : h < 12 ? 'good morning' : h < 18 ? 'good afternoon' : 'good evening'
+}
 
 interface ViewMessage {
   id: string
@@ -274,13 +280,19 @@ export function Chat({
       >
         {empty ? (
           <div className="hero">
-            <div className={`hero-mark ${project ? `pc-${project.color}` : ''}`}>{project ? project.name.slice(0, 2).toUpperCase() : 'GM'}</div>
+            {project ? (
+              <div className={`hero-mark pc-${project.color}`}>{project.name.slice(0, 2).toUpperCase()}</div>
+            ) : (
+              <BrandMark className="hero-mark" />
+            )}
+            {!project && <p className="hero-greet">{greeting()}.</p>}
             <h1>{project ? project.name : 'What are we working on?'}</h1>
             <p>
               {project
                 ? project.description || 'Chats, files and instructions for this project live together. Attach photos, film and documents to get started.'
                 : 'Any SayGM model, one conversation. Memory lives in Ditto, so context follows you from model to model.'}
             </p>
+            <div className="suggest-label">Try a starting point</div>
             <div className="suggest">
               {(project ? PROJECT_SUGGESTIONS : SUGGESTIONS).map((s) => (
                 <button

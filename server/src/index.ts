@@ -22,6 +22,7 @@ import {
   type TurnStatus,
 } from "./turns.js";
 import { messages, projects, sessions, workspaceFor } from "./db.js";
+import { brand, brandAsset } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
@@ -45,7 +46,8 @@ function tokenOk(given: string | undefined) {
 }
 
 app.use("/api/*", async (c, next) => {
-  if (c.req.path === "/api/health") return next();
+  // Health and branding are public: the login screen has to render before there is a token.
+  if (c.req.path === "/api/health" || c.req.path === "/api/brand" || c.req.path.startsWith("/api/brand/")) return next();
   const header = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (!tokenOk(header ?? c.req.query("token"))) return c.json({ error: "unauthorized" }, 401);
   return next();
@@ -53,6 +55,29 @@ app.use("/api/*", async (c, next) => {
 
 // ---------- meta ----------
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+/** Name, logos and colour overrides (see docs/BRANDING.md). Public: the login screen needs it. */
+app.get("/api/brand", (c) => c.json(brand()));
+
+const MIME: Record<string, string> = {
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+};
+app.get("/api/brand/asset/:file", (c) => {
+  const file = brandAsset(c.req.param("file"));
+  if (!file) return c.json({ error: "not found" }, 404);
+  // An SVG is served as a download-safe, script-free document: it is operator-supplied,
+  // but it must not become a way to run script on the app's origin.
+  return c.body(readFileSync(file), 200, {
+    "content-type": MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    "cache-control": "public, max-age=300",
+  });
+});
 
 app.get("/api/config", async (c) =>
   c.json({
