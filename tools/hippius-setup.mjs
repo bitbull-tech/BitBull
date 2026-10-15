@@ -6,11 +6,21 @@
  *   HIPPIUS_CONSOLE_TOKEN=... node tools/hippius-setup.mjs
  *   HIPPIUS_CONSOLE_TOKEN=... GM_APP_TOKEN=... node tools/hippius-setup.mjs --save
  *
- * The console token comes from the Hippius Console → Settings (an account access token,
- * used with `Authorization: Token …`). It is only used here, never stored, and never sent
+ * The console token comes from the Hippius Console -> Settings (an account access token,
+ * used with `Authorization: Token ...`). It is only used here, never stored, and never sent
  * anywhere except api.hippius.com.
  *
+ * Lost the secret for a key you already have? There is no way to read it back - Hippius
+ * shows it once at creation and `/objectstore/tokens/auth/` is validator-only. Either make
+ * a new sub-token (just run this with no flags) or rotate the old one:
+ *
+ *   node tools/hippius-setup.mjs --doctor            # what exists, and what to do about it
+ *   node tools/hippius-setup.mjs --rotate <id>       # new secret for an existing key
+ *
  * Options
+ *   --doctor            list everything and say what to do next
+ *   --list              list master tokens, sub-tokens and buckets
+ *   --rotate <id|key>   mint a new secret for an existing token (revokes the old one)
  *   --bucket <name>     bucket to use or create        (default: gm-agent, or HIPPIUS_BUCKET)
  *   --prefix <p>        limit the sub-token to one key prefix, repeatable (e.g. --prefix general/)
  *   --actions <a,b>     sub-token actions              (default: read,write)
@@ -20,7 +30,7 @@
  *   --gm <url>          GM base URL                    (default: http://localhost:8787, or GM_URL)
  *   --list              show existing buckets and sub-tokens, change nothing
  *
- * Docs: https://api.hippius.com/ (Swagger) · docs/STORAGE.md
+ * Docs: https://api.hippius.com/ (Swagger), docs/STORAGE.md
  */
 const API = process.env.HIPPIUS_API ?? "https://api.hippius.com/api";
 const TOKEN = process.env.HIPPIUS_CONSOLE_TOKEN ?? "";
@@ -36,9 +46,9 @@ const bucket = one("bucket", process.env.HIPPIUS_BUCKET ?? "gm-agent");
 const gmUrl = (one("gm", process.env.GM_URL ?? "http://localhost:8787")).replace(/\/$/, "");
 
 if (!TOKEN) {
-  console.error("Set HIPPIUS_CONSOLE_TOKEN first (Hippius Console → Settings → access token).");
-  console.error("  PowerShell:  $env:HIPPIUS_CONSOLE_TOKEN = 'hpc_…'");
-  console.error("  bash:        export HIPPIUS_CONSOLE_TOKEN=hpc_…");
+  console.error("Set HIPPIUS_CONSOLE_TOKEN first (Hippius Console -> Settings -> access token).");
+  console.error("  PowerShell:  $env:HIPPIUS_CONSOLE_TOKEN = 'hpc_...'");
+  console.error("  bash:        export HIPPIUS_CONSOLE_TOKEN=hpc_...");
   process.exit(1);
 }
 
@@ -62,22 +72,105 @@ async function hippius(path, init = {}) {
   }
   if (!res.ok) {
     const detail = typeof body === "string" ? body.slice(0, 400) : JSON.stringify(body);
-    throw new Error(`${init.method ?? "GET"} ${path} → ${res.status}\n${detail}`);
+    const hint =
+      res.status === 401
+        ? "\n\nThat token was not accepted. HIPPIUS_CONSOLE_TOKEN must be the ACCOUNT access token\nfrom the Hippius Console under Settings - not an S3 access key, which is a different thing\nand is only used by S3 clients."
+        : res.status === 403
+          ? "\n\nAuthenticated but not allowed. Check the token belongs to the account that owns the bucket."
+          : "";
+    throw new Error(`${init.method ?? "GET"} ${path} -> ${res.status}\n${detail}${hint}`);
   }
   return body;
 }
 
-const asList = (r) => (Array.isArray(r) ? r : (r?.results ?? r?.buckets ?? r?.sub_tokens ?? []));
+const asList = (r) =>
+  Array.isArray(r) ? r : (r?.results ?? r?.buckets ?? r?.sub_tokens ?? r?.master_tokens ?? r?.tokens ?? []);
+const idOf = (t) => t.id ?? t.token_id ?? t.tokenId ?? "";
+const keyOf = (t) => t.accessKeyId ?? t.access_key_id ?? "";
+const describe = (t) =>
+  `${(t.name ?? "(unnamed)").padEnd(18)} ${keyOf(t).padEnd(26)} ${(t.status ?? "").padEnd(8)} ${(t.bucketNames ?? t.bucket_names ?? []).join(",")}`;
+
+/** Everything the account has, so you can see what you're working with. */
+async function inventory() {
+  const out = {};
+  for (const [key, path] of [
+    ["masters", "/objectstore/master-tokens/"],
+    ["subs", "/objectstore/sub-tokens/"],
+    ["buckets", "/objectstore/buckets/"],
+  ]) {
+    try {
+      out[key] = asList(await hippius(path));
+    } catch (e) {
+      out[key] = { error: e.message };
+    }
+  }
+  return out;
+}
 
 async function main() {
-  if (flag("list")) {
-    const buckets = asList(await hippius("/objectstore/buckets/"));
-    console.log(`Buckets (${buckets.length}):`);
-    for (const b of buckets) console.log(`  ${b.name ?? b.Name ?? JSON.stringify(b)}`);
-    const tokens = asList(await hippius("/objectstore/sub-tokens/"));
-    console.log(`\nSub-tokens (${tokens.length}):`);
-    for (const t of tokens)
-      console.log(`  ${t.name ?? "(unnamed)"}  ${t.accessKeyId ?? t.access_key_id ?? ""}  ${t.status ?? ""}  ${(t.bucketNames ?? t.bucket_names ?? []).join(",")}`);
+  if (flag("whoami") || flag("doctor") || flag("list")) {
+    let who = null;
+    try {
+      who = await hippius("/users/me/");
+    } catch {
+      /* some accounts can't read this; the inventory below is the real test */
+    }
+    if (who) console.log(`Signed in as ${who.username ?? who.email ?? who.id ?? "(unknown)"}`);
+    const inv = await inventory();
+
+    const section = (title, rows) => {
+      if (rows?.error) return console.log(`\n${title}: could not read (${rows.error.split("\n")[0]})`);
+      console.log(`\n${title} (${rows.length}):`);
+      for (const r of rows) console.log("  " + (typeof r === "string" ? r : describe(r)));
+      if (!rows.length) console.log("  (none)");
+    };
+    section("Master tokens", inv.masters);
+    section("Sub-tokens", inv.subs);
+    section(
+      "Buckets",
+      Array.isArray(inv.buckets) ? inv.buckets.map((b) => b.name ?? b.Name ?? JSON.stringify(b)) : inv.buckets,
+    );
+
+    // Nothing readable means the token is wrong, not that the account is empty - saying
+    // "no bucket yet" here would send you off creating things you may already have.
+    const unreadable = [inv.masters, inv.subs, inv.buckets].filter((r) => r?.error);
+    if (unreadable.length === 3) {
+      console.log(`\n${unreadable[0].error}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    if (flag("doctor")) {
+      console.log("\n--- what to do next ---");
+      const bucketNames = Array.isArray(inv.buckets) ? inv.buckets.map((b) => b.name ?? b.Name) : [];
+      if (!bucketNames.length) console.log(`- No bucket yet. Run without flags to create "${bucket}" and a sub-token for it.`);
+      else if (!bucketNames.includes(bucket)) console.log(`- You have ${bucketNames.join(", ")}. Use --bucket <name> to pick one, or run without flags to create "${bucket}".`);
+      else console.log(`- Bucket "${bucket}" exists.`);
+
+      const active = (Array.isArray(inv.subs) ? inv.subs : []).filter((t) => (t.status ?? "active") === "active");
+      if (!active.length) console.log("- No active sub-token. Run without flags to create one (you get the secret once, there and then).");
+      else {
+        console.log(`- You have ${active.length} active sub-token(s). A secret is only ever shown at creation, so if you don't have it:`);
+        for (const t of active) console.log(`    node tools/hippius-setup.mjs --rotate ${idOf(t)}      # ${t.name ?? "(unnamed)"} ${keyOf(t)}`);
+        console.log("  Rotating mints a new secret and revokes the old one. Anything still using the old secret stops working.");
+      }
+      console.log("- Then add --save (with GM_APP_TOKEN set) to write the credentials straight into GM.");
+    }
+    return;
+  }
+
+  // Lost the secret for a token you already have: mint a new one.
+  const rotate = one("rotate", "");
+  if (rotate) {
+    const inv = await inventory();
+    const all = [...(Array.isArray(inv.subs) ? inv.subs : []), ...(Array.isArray(inv.masters) ? inv.masters : [])];
+    const match = all.find((t) => idOf(t) === rotate || keyOf(t) === rotate);
+    if (!match) throw new Error(`No token here with id or access key "${rotate}". Run --list to see them.`);
+    const isMaster = (Array.isArray(inv.masters) ? inv.masters : []).some((t) => idOf(t) === idOf(match));
+    const path = `/objectstore/${isMaster ? "master" : "sub"}-tokens/${idOf(match)}/rotate/`;
+    console.log(`Rotating ${isMaster ? "master" : "sub"}-token "${match.name ?? "(unnamed)"}"...`);
+    const res = await hippius(path, { method: "POST" });
+    await handOver(res, bucket);
     return;
   }
 
@@ -102,33 +195,37 @@ async function main() {
     ...(one("expires", "") ? { expires_at: one("expires", "") } : {}),
   };
   const created = await hippius("/objectstore/sub-tokens/", { method: "POST", body: JSON.stringify(payload) });
+  console.log(`Created sub-token "${payload.name}" (${payload.actions.join("+")}${prefixes.length ? `, prefixes ${prefixes.join(" ")}` : ""}).`);
+  await handOver(created, bucket);
+}
+
+/** The one moment the secret exists outside Hippius: into GM, or onto the screen. */
+async function handOver(created, bucketName) {
   const accessKeyId = created.accessKeyId ?? created.access_key_id;
   const secret = created.secret;
-  if (!accessKeyId || !secret) throw new Error(`Unexpected response:\n${JSON.stringify(created, null, 2)}`);
-  console.log(`Created sub-token "${payload.name}" (${payload.actions.join("+")}${prefixes.length ? `, prefixes ${prefixes.join(" ")}` : ""}).`);
+  if (!accessKeyId || !secret) throw new Error(`No credentials in the response:\n${JSON.stringify(created, null, 2)}`);
 
-  // 3. Hand it to GM, or print it
   if (flag("save")) {
     const appToken = process.env.GM_APP_TOKEN ?? "";
     if (!appToken) throw new Error("--save needs GM_APP_TOKEN (the token you unlock the GM UI with)");
     const res = await fetch(`${gmUrl}/api/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json", authorization: `Bearer ${appToken}` },
-      body: JSON.stringify({ values: { HIPPIUS_ACCESS_KEY: accessKeyId, HIPPIUS_SECRET_KEY: secret, HIPPIUS_BUCKET: bucket } }),
+      body: JSON.stringify({ values: { HIPPIUS_ACCESS_KEY: accessKeyId, HIPPIUS_SECRET_KEY: secret, HIPPIUS_BUCKET: bucketName } }),
     });
     if (!res.ok) throw new Error(`GM refused the settings (${res.status}): ${(await res.text()).slice(0, 300)}`);
     console.log(`\nSaved into GM at ${gmUrl}. The secret was never printed.`);
     console.log(`Access key: ${accessKeyId}`);
-    console.log("\nStill to do in GM → Settings → Configuration → Hippius storage:");
-    console.log("  • Encryption key → Generate → copy it somewhere safe → Save");
-    console.log("Then Settings → Status should show Hippius storage green.");
+    console.log("\nStill to do in GM, Settings > Configuration > Hippius storage:");
+    console.log("  - Encryption key > Generate > copy it somewhere safe > Save");
+    console.log("Then Settings > Status should show Hippius storage green.");
   } else {
-    console.log("\nPaste these into GM → Settings → Configuration → Hippius storage.");
+    console.log("\nPaste these into GM, Settings > Configuration > Hippius storage.");
     console.log("The secret is shown once, here, and nowhere else:\n");
     console.log(`  Sub-token access key : ${accessKeyId}`);
     console.log(`  Sub-token secret     : ${secret}`);
-    console.log(`  Bucket               : ${bucket}`);
-    console.log("\nThen: Encryption key → Generate → copy it somewhere safe → Save.");
+    console.log(`  Bucket               : ${bucketName}`);
+    console.log("\nThen: Encryption key > Generate > copy it somewhere safe > Save.");
   }
 }
 

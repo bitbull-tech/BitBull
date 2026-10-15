@@ -117,15 +117,30 @@ what the navigation says). If you can't find it, or would rather not click throu
 Management API does the whole thing:
 
 ```bash
-# Console → Settings → access token
+# Hippius Console -> Settings -> account access token (NOT an S3 access key)
 export HIPPIUS_CONSOLE_TOKEN=…
-node tools/hippius-setup.mjs --list            # what exists today
+node tools/hippius-setup.mjs --doctor          # what exists, and what to do about it
 node tools/hippius-setup.mjs                   # create the bucket + a scoped sub-token
 ```
 
 It prints the access key and secret once for pasting into GM. With `--save` and
 `GM_APP_TOKEN` set it writes them into GM's settings directly and never prints the secret.
-`--prefix general/` restricts the sub-token to one key prefix.
+`--prefix general/` restricts the sub-token to one key prefix, and `--gm` points it at a
+different GM (e.g. the test stack on 8788).
+
+**Your seed phrase is not part of this.** It signs into the Hippius console, and that is
+the only place it belongs — the API's mnemonic route is a challenge/signature flow for
+their own front end, not something to script. Log in there once, take an access token, and
+use that.
+
+**Lost the secret for a key you already have?** There is no way to read it back: Hippius
+shows it once, and `/objectstore/tokens/auth/` is validator-only. Either create a new
+sub-token (run the tool with no flags) or rotate the old one, which mints a new secret and
+revokes the old — anything still using it stops working:
+
+```bash
+node tools/hippius-setup.mjs --rotate <token-id-or-access-key>
+```
 
 Then, either way:
 
