@@ -167,6 +167,23 @@ powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -InstallAtLogi
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -Stop
 ```
 
+### Trying a branch before you merge it
+
+A second, isolated GM on another port, with its own containers and its own empty data
+folder, built from whatever is in your checkout right now. The live stack on 8787 is never
+touched.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\test-stack.ps1            # start on http://localhost:8788
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\test-stack.ps1 -Logs      # follow its log
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\test-stack.ps1 -Down      # stop, keep its data
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\test-stack.ps1 -Destroy   # stop and delete its data
+```
+
+It uses the same `.env`, so the same access token unlocks it, but its chats, workspaces and
+settings are entirely separate (`~/gm-data-test` in the distro). `-Port` and `-Name` let you
+run more than one.
+
 ## Run with Docker (any server)
 
 ```bash

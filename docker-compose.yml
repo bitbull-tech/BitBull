@@ -11,6 +11,10 @@
 #   browser ──127.0.0.1:8787──▶ gateway ──▶ gm-agent ──▶ egress ──allowlist──▶ internet
 #                                           (sandbox network, internal)
 
+# A second, isolated copy can run alongside the live one: GM_SUFFIX renames the containers,
+# GM_TAG its images, GM_PORT its port and GM_DATA_DIR its data. All default to the live
+# stack's values, so nothing changes unless you set them. See scripts/gm-wsl/test-stack.ps1.
+
 x-hardening: &hardening
   read_only: true
   cap_drop: [ALL]
@@ -23,8 +27,8 @@ services:
   gm-agent:
     <<: *hardening
     build: .
-    image: saygmagent:local
-    container_name: gm-agent
+    image: saygmagent:${GM_TAG:-local}
+    container_name: gm-agent${GM_SUFFIX:-}
     env_file: .env
     environment:
       DATA_DIR: /data
@@ -52,8 +56,8 @@ services:
   egress:
     <<: *hardening
     build: ./egress
-    image: saygmagent-egress:local
-    container_name: gm-egress
+    image: saygmagent-egress:${GM_TAG:-local}
+    container_name: gm-egress${GM_SUFFIX:-}
     volumes:
       - ./egress/allowlist.txt:/etc/squid/allowlist.txt:ro
     tmpfs:
@@ -68,8 +72,8 @@ services:
   gateway:
     <<: *hardening
     build: ./egress
-    image: saygmagent-egress:local
-    container_name: gm-gateway
+    image: saygmagent-egress:${GM_TAG:-local}
+    container_name: gm-gateway${GM_SUFFIX:-}
     command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:gm-agent:8787"]
     # Only reachable from this computer. Put a reverse proxy with HTTPS in front to expose it.
     ports:

@@ -26,7 +26,7 @@ Write-Host "==> Rebuilding" -ForegroundColor Cyan
 # The allowlist is bind-mounted as a single FILE, so the container holds its inode. This
 # deploy replaces the whole directory, which gives the file a new inode: the running proxy
 # keeps reading the old, deleted one, and `squid -k reconfigure` changes nothing. So compare
-# what the container actually sees and recreate it only when the list has changed —
+# what the container actually sees and recreate it only when the list has changed:
 # reconfigure alone, which doesn't drop connections, stays the common path.
 #
 # The script goes in through stdin: a multi-line argument to `sh -c` gets mangled by
