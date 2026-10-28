@@ -46,7 +46,9 @@ egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
 scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps1, test-stack.ps1,
                      link.ps1 + gm-links.sh (read-only folder links), link-helper.ps1 (lets the UI open
                      a folder picker on the PC, localhost:8790), copy-in.ps1 (fast copy), backup.ps1
-docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md
+docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md,
+                     CAPTURE.md (phone scanning → cloud folder → ingest; later a capture page)
+tools/               atlas-run.mjs, hippius-setup.mjs, ingest.mjs (scans → archive/ with manifest, OCR, dedupe)
 ```
 
 ## Commands

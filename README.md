@@ -393,6 +393,15 @@ wsl -d gm --exec docker exec gm-agent python3 -c "import socket; socket.socket(4
 # expected: PermissionError / Operation not permitted
 ```
 
+## Capturing documents, photos and books
+
+Phones scan (Microsoft Lens / Adobe Scan / vFlat), a shared cloud folder collects, the PC
+syncs it, and it's linked read-only into GM; in a project chat, "ingest /links/gm-capture"
+runs `tools/ingest.mjs`, which copies new scans into `archive/items/`, de-duplicates, reads
+dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The phone-to-GM
+route (per-device upload-only tokens, tunnel, capture page) is planned in
+[docs/CAPTURE.md](docs/CAPTURE.md).
+
 ## GitHub
 
 Set `GITHUB_TOKEN` to a fine-grained token (`github_pat_…`, recommended, limited to the repos

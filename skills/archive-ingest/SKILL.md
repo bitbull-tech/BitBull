@@ -10,7 +10,9 @@ Turns a pile of uploads into a structured, source-bound catalogue that the
 item say", never "what happened to this person".
 
 ## 1. Inventory
-- List everything under `uploads/` in the project workspace. For each file record: path, type, size, and for media the dimensions/duration.
+- Run the ingest tool first: `node /app/tools/ingest.mjs <inbox> --out archive` (inbox = `uploads/`, `uploads/inbox/`, or a linked folder such as `/links/gm-capture`; the tool path is `tools/ingest.mjs` relative to GM's root, use `ls /app/tools` if unsure). It copies each new file into `archive/items/<id>/`, de-duplicates by content, reads EXIF dates, OCRs images and PDFs, and writes `archive/manifest.md` with a "needs a look" list. Re-run it whenever the inbox grows; it only processes new files.
+- Read `archive/manifest.md`. Work from `archive/items/<id>/original.*` and `text.txt`; never change files in the inbox (linked folders are read-only anyway).
+- For anything the tool couldn't read (HEIC, video, audio, flagged items), record path, type, size, and for media the dimensions/duration yourself.
 - Tools if installed (check with `which`/`where`): `exiftool` (dates, camera, GPS), `ffprobe` (video duration, fps), `pdftotext`/`pdfinfo`, `tesseract` (OCR). If one is missing, say so and continue with what you can read directly (you can read images and PDFs yourself).
 - For video, extract a contact sheet so it can be described: `ffmpeg -i in.mp4 -vf "fps=1/5,scale=320:-1,tile=4x4" sheet.jpg`.
 
@@ -19,7 +21,8 @@ For each item write `catalogue/<item-id>.json`:
 ```json
 {
   "id": "doc-003",
-  "source": "uploads/abc12345/record-card.jpg",
+  "source": "archive/items/item-0003/original.jpg",
+  "sha256": "from manifest.json",
   "kind": "service-record | photo | letter | logbook | newspaper | film | other",
   "transcription": "verbatim text, [illegible] where unreadable",
   "fields": [
@@ -32,6 +35,7 @@ For each item write `catalogue/<item-id>.json`:
   "notes": "damage, conflicting readings, questions for the user"
 }
 ```
+- `text.txt` is OCR: quote it as evidence only after checking it against the image. Old typewriting and handwriting are misread often; a wrong service number is worse than "[illegible]".
 - Every field carries the exact evidence it came from. If two readings conflict (e.g. two OCR passes, or two documents disagree), keep both and flag it. Don't pick one silently.
 - Never identify a person in a photo by face. Only attach a name when a caption, the user, or a document says who it is.
 
