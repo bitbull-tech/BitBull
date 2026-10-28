@@ -55,7 +55,7 @@ docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/L
 npm run setup                 # install server + web deps
 npm run dev                   # API :8787 + Vite UI :5173 (host mode: agent shell OFF)
 npm run typecheck             # both packages
-cd server && npm test         # node:test via tsx: subagents, turns, egress, links, storage (CI runs them)
+cd server && npm test         # node:test via tsx: subagents (+ the real opencode binary), turns, egress, links, storage; CI runs them
 cd web && npx vite build      # UI build (server serves web/dist)
 docker compose up -d --build  # sandboxed: gm-agent + gm-egress + gm-gateway on 127.0.0.1:8787
 ```

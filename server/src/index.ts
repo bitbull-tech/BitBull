@@ -41,7 +41,7 @@ assertConfig();
 
 const app = new Hono();
 
-// ---------- auth: single owner bearer token (header, or ?token= for SSE/browser) ----------
+// ---------- auth: single owner bearer token (header; ?token= only for the SSE streams) ----------
 function tokenOk(given: string | undefined) {
   if (config.allowNoAuth && !config.appToken) return true;
   if (!given) return false;
@@ -54,7 +54,10 @@ app.use("/api/*", async (c, next) => {
   // Health and branding are public: the login screen has to render before there is a token.
   if (c.req.path === "/api/health" || c.req.path === "/api/brand" || c.req.path.startsWith("/api/brand/")) return next();
   const header = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!tokenOk(header ?? c.req.query("token"))) return c.json({ error: "unauthorized" }, 401);
+  // ?token= only for the live streams (EventSource can't send headers); everything else
+  // needs the header, so the token isn't left in logs and history by ordinary requests
+  const streamOnly = c.req.method === "GET" && /^\/api\/(activity|sessions\/[^/]+)\/stream$/.test(c.req.path);
+  if (!tokenOk(header ?? (streamOnly ? c.req.query("token") : undefined))) return c.json({ error: "unauthorized" }, 401);
   return next();
 });
 

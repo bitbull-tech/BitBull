@@ -58,7 +58,7 @@ function providerFor(m: { api?: ModelApi; family: ModelInfo["family"] }) {
   return PROVIDERS[api].id;
 }
 
-function buildConfig(models: ModelInfo[]) {
+export function buildConfig(models: ModelInfo[]) {
   type Entry = {
     name: string;
     limit?: { context: number; output: number };

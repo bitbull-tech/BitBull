@@ -393,9 +393,10 @@ See [docs/GAPS.md](docs/GAPS.md) for what's still missing compared with other co
 
 Every `/api/*` route needs `Authorization: Bearer $APP_TOKEN`, except `GET /api/health` and
 `GET /api/brand` (+ `/api/brand/asset/:file`), which the login screen needs before there is a
-token. The browser's live streams (EventSource can't send headers) pass the same token as
-`?token=`; that is fine on localhost and is due to move to a header or cookie before GM is put
-behind a tunnel (docs/CLIENTS.md 0.3). `/internal/egress/check` answers only the egress
+token. Only the two live streams (`GET /api/activity/stream`, `GET /api/sessions/:id/stream`)
+also accept the token as `?token=`, because EventSource can't send headers; every other route
+refuses it there. That is fine on localhost and is due to move to a header or cookie before GM is
+put behind a tunnel (docs/CLIENTS.md 0.3). `/internal/egress/check` answers only the egress
 container, and `/mcp/gm` only the engines (a token minted at startup).
 
 | Method | Path | |

@@ -155,7 +155,7 @@ function start() {
   let backlogDone = false
   const open = () => {
     const es = new EventSource(`/api/activity/stream?after=${after}&token=${encodeURIComponent(getToken())}`)
-    // Events in the first moment are history being replayed; don't toast those
+    // On the first connection, events in the first moment are history being replayed; don't toast those
     const t = setTimeout(() => (backlogDone = true), 1500)
     es.onopen = () => {
       connected = true
@@ -173,7 +173,9 @@ function start() {
     es.onerror = () => {
       es.close()
       clearTimeout(t)
-      backlogDone = true
+      // After a drop, what the next connection replays happened while we were away, so it is
+      // news (toast it). If nothing ever arrived (after = 0), the replay is still old history.
+      backlogDone = after > 0
       if (connected) {
         connected = false
         emit()

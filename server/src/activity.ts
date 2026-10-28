@@ -52,6 +52,8 @@ try {
     for (const l of lines) {
       try {
         const e = JSON.parse(l) as ActivityEvent;
+        // a line that parses but isn't an event (torn write, edited file) must not break ids
+        if (!e || typeof e !== "object" || !Number.isSafeInteger(e.id) || e.id < 0 || typeof e.message !== "string") continue;
         buf.push(e);
         nextId = Math.max(nextId, e.id + 1);
       } catch {
