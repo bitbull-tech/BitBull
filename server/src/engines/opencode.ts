@@ -6,6 +6,7 @@ import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
 import { config, configVersion, paths, ROOT, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
 import { gmMcpServer } from "../mcp.js";
+import { LINKS_ROOT, linksAvailable } from "../links.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
 import { listModels, type ModelApi, type ModelInfo } from "../models.js";
 import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
@@ -144,6 +145,8 @@ function buildConfig(models: ModelInfo[]) {
         "/tmp/*": "allow",
         [`${path.join(ROOT, "tools")}/*`]: "allow",
         [`${config.integrations.atlas.workflowsDir}/*`]: "allow",
+        // read-only links from the user's computer (the mount itself refuses writes)
+        ...(linksAvailable() ? { [`${LINKS_ROOT}/*`]: "allow" } : {}),
       },
     },
   };

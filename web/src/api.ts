@@ -168,6 +168,13 @@ export interface NetworkRequest {
   decidedAt?: string
   scope?: 'host' | 'domain'
 }
+export interface LinkedFolder {
+  name: string
+  path: string
+  entries: number | null
+  readOnly: boolean
+  noExec: boolean
+}
 export interface NetworkState {
   proxied: boolean
   allowlist: string[]
@@ -229,6 +236,7 @@ export const api = {
     req<{ changed: string[]; groups: SettingGroup[] }>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
   status: () => req<Status>('/api/status'),
   network: () => req<NetworkState>('/api/network'),
+  links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),
   decideNetwork: (id: string, decision: 'host' | 'domain' | 'deny') =>
     req<NetworkState>(`/api/network/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
   allowNetwork: (host: string, scope: 'host' | 'domain') =>

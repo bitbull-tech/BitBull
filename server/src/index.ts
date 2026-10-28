@@ -33,6 +33,7 @@ import { recent, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
 import { handleMcp, MCP_PATH, GM_MCP_HEADER, mcpTokenOk } from "./mcp.js";
+import { linksAvailable, listLinks } from "./links.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -132,6 +133,9 @@ app.all(MCP_PATH, async (c) => {
 });
 
 app.get("/api/network", (c) => c.json(networkState()));
+
+// ---------- read-only folder links (added from Windows with link.ps1; listed only) ----------
+app.get("/api/links", (c) => c.json({ available: linksAvailable(), links: listLinks() }));
 app.post("/api/network/requests/:id", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { decision?: string };
   if (body.decision !== "host" && body.decision !== "domain" && body.decision !== "deny") return c.json({ error: "decision must be host, domain or deny" }, 400);

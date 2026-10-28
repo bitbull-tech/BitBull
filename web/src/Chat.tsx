@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
-import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
+import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconLock, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
 import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadItem } from './uploads'
 import { reportLocal } from './activity'
+import { FolderMenu } from './FolderMenu'
 import { BrandMark } from './BrandMark'
 
 const greeting = () => {
@@ -343,8 +344,8 @@ export function Chat({
           {(pending.length > 0 || folders.length > 0) && (
             <div className="chips">
               {folders.map((f) => (
-                <span className="chip" key={f}>
-                  <IconFolder size={13} /> {f}
+                <span className={`chip ${f.startsWith('links/') ? 'linked' : ''}`} key={f} title={f.startsWith('links/') ? 'Your folder, read-only: the agent can read it but not change it' : 'A copy, uploaded to the workspace'}>
+                  {f.startsWith('links/') ? <IconLock size={13} /> : <IconFolder size={13} />} {f.startsWith('links/') ? `${f.slice(6)} (read-only)` : f}
                   <button type="button" onClick={() => setFolders((x) => x.filter((y) => y !== f))} aria-label={`Remove ${f}`}>
                     <IconX size={12} />
                   </button>
@@ -384,9 +385,10 @@ export function Chat({
               <IconClip />
             </button>
             <input ref={fileRef} type="file" multiple hidden onChange={(e) => (addFiles(e.target.files), (e.target.value = ''))} />
-            <button type="button" className="icon-btn" title="Attach a folder (uploaded into uploads/, keeping its structure)" onClick={() => folderRef.current?.click()}>
-              <IconFolder size={16} />
-            </button>
+            <FolderMenu
+              onUpload={() => folderRef.current?.click()}
+              onLink={(name) => setFolders((f) => (f.includes(`links/${name}`) ? f : [...f, `links/${name}`]))}
+            />
             <input
               ref={folderRef}
               type="file"
@@ -475,8 +477,9 @@ function MessageView({ m, sessionId }: { m: ViewMessage; sessionId?: string }) {
           {m.attachments && m.attachments.length > 0 && (
             <div className="chips in-bubble">
               {m.attachments.map((a) => (
-                <span className="chip" key={a}>
-                  <IconFile size={13} /> {a.split('/').pop()}
+                <span className={`chip ${a.startsWith('links/') ? 'linked' : ''}`} key={a}>
+                  {a.startsWith('links/') ? <IconLock size={13} /> : <IconFile size={13} />} {a.split('/').pop()}
+                  {a.startsWith('links/') ? ' (read-only)' : ''}
                 </span>
               ))}
             </div>

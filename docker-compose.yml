@@ -45,6 +45,9 @@ services:
       NODE_USE_ENV_PROXY: "1"
     volumes:
       - ${GM_DATA_DIR:-./data}:/data
+      # Folders you linked read-only (scripts/gm-wsl/link.ps1). Each one is already mounted
+      # ro,noexec in the gm distro; :ro here again. Only you can add one, from Windows.
+      - ${GM_LINKS_DIR:-./links}:/links:ro
     networks: [sandbox]
     depends_on: [egress]
     tmpfs:

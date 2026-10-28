@@ -80,7 +80,12 @@ appendWindowsPath = false
 default = $USER_NAME
 
 [boot]
-command = service docker start
+command = /usr/local/sbin/gm-links mount-all; service docker start
 CONF
+
+say "Read-only folder links (scripts/gm-wsl/link.ps1)"
+install -m 755 "$HOME_DIR/SayGMAgent/scripts/gm-wsl/gm-links.sh" /usr/local/sbin/gm-links
+sed -i 's/\r$//' /usr/local/sbin/gm-links
+mkdir -p /srv/gm-links && chmod 755 /srv/gm-links
 
 say "Provisioned"

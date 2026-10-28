@@ -285,8 +285,60 @@ The static list in `egress/allowlist.txt` is always allowed. For anything else:
 
 **Files** (top bar, or the folder icon on a project) browses a project's workspace and adds
 local files or whole folders, keeping their structure and skipping `node_modules`, `.git`
-and build output. In the chat, the paperclip attaches files and the folder button attaches
-a whole folder; folders (picked or dropped) are uploaded to `uploads/` and attached.
+and build output. In the chat, the paperclip attaches files and the folder button offers
+**Upload a copy** or one of your **linked folders**.
+
+### Copy or link?
+
+| | Copy in | Linked folder |
+|---|---|---|
+| Use it for | building, storing, anything the agent should change | reviews and analysis of your real files |
+| What the agent gets | its own copy in the workspace (read-write) | your folder in place at `/links/<name>`, **read-only, no-exec** |
+| Your original | never touched | can't be changed, deleted or encrypted (the kernel refuses writes) |
+| How | folder button → Upload a copy, drag and drop, or `copy-in.ps1` for big folders | `link.ps1` on the PC only; GM and the agent can't add, widen or change a link |
+| Who can see it | that workspace's chats | **every chat in this GM**; attaching it tells a chat to use it |
+
+```powershell
+# copy a big folder in, fast (no browser); -Project "<name>" for a project's workspace
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\copy-in.ps1 -Path "D:\code\roadwolf" -Project "Game Development"
+
+# link a folder read-only, list links (also re-mounts missing ones), remove one
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Add "D:\Photos\Horner"
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -List
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove horner
+```
+
+How a link is held shut, layer by layer:
+
+1. The `gm` distro sees no Windows drives (automount off). `link.ps1` mounts just that folder at
+   `/srv/gm-links/<name>` with `ro,noexec,nosuid,nodev`, checks that a write fails, and only
+   then records it. Only root in the distro can mount, and only you reach root there (from
+   Windows). Links come back at boot from `/etc/gm-links`.
+2. `gm-agent` gets `/srv/gm-links` at `/links` read-only. Its users are remapped to nobodies in
+   the distro, it has no capabilities and can't mount or remount anything.
+3. GM reads each link's mount flags from `/proc/self/mountinfo` and never hands a chat a link
+   that isn't read-only.
+4. Symlinks and junctions inside a linked folder resolve inside the container, so they can't
+   lead anywhere else on Windows.
+5. Adding or removing a link restarts every GM container that mounts them (about 10 s), so a
+   removed link is really gone.
+
+Both scripts refuse whole drives, network paths, Windows/program/app-data folders, your profile
+root and GM's own repo (its `.env` holds GM's keys), and stop if the folder holds anything that
+looks like keys, passwords or wallets (`.env`, `.ssh`, `*.pem`, `id_*`, `*.kdbx`, wallet and
+seed files, browser login stores…; `-AllowSecrets` overrides). The check runs once, so don't
+save secrets into a linked folder later. `copy-in.ps1` unpacks as the container's unprivileged
+user, never as root, and only accepts plain path characters.
+
+What a link can't protect against: anything the agent reads may be sent to the model it uses,
+and to sites on the allowlist or that you approve. Escaping the container would need a flaw in
+Docker, WSL or the kernel, so keep Windows and WSL updated. To confirm the container can't talk
+to Windows' file server directly (Docker's default seccomp profile blocks `AF_VSOCK`):
+
+```powershell
+wsl -d gm --exec docker exec gm-agent python3 -c "import socket; socket.socket(40, socket.SOCK_STREAM)"
+# expected: PermissionError / Operation not permitted
+```
 
 ## GitHub
 
@@ -317,6 +369,7 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
 | `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `exchange=last` or an assistant message id; `compact=1` (prompt + reply only); `tools=0`, `activity=0`, `limit=` (chars per tool output) |
+| `GET` | `/api/links` | Read-only linked folders (name, path, entries, readOnly, noExec); listed only, never changed |
 | `GET` | `/api/network` | Static allowlist, your approvals, pending/recent agent requests, recently blocked hosts |
 | `POST` | `/api/network/requests/:id` | Answer an agent's request: `{decision: "host" \| "domain" \| "deny"}` |
 | `POST/DELETE` | `/api/network/approved` | Allow `{host, scope: "host" \| "domain"}` / remove `/:host?scope=` |

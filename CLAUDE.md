@@ -27,6 +27,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   storage.ts         Hippius mirror: AES-256-GCM, background queue, restore+verify, probe
   egress.ts          network approvals: squid asks /internal/egress/check; agent requests wait for the user
   mcp.ts             GM's own MCP server ("gm") for the engines: request_network_access
+  links.ts           read-only linked folders at /links (lists them; mount flags from mountinfo)
   engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, gm-guard plugin
   engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
   config.ts          env + UI overrides (DATA_DIR/settings.local.json), live reloadConfig()
@@ -42,7 +43,8 @@ agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/gm-guard.js  sec
 skills/              skills mirrored into every workspace (.claude/skills) and backed up to Ditto
 subagents/           reviewer, challenger, debugger, tester, worker, fact-checker
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
-scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps1
+scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps1, test-stack.ps1,
+                     link.ps1 + gm-links.sh (read-only folder links), copy-in.ps1 (fast copy)
 docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md
 ```
 
@@ -66,7 +68,8 @@ Windows (Tom's machine): edit/commit in `D:\github\SayGMAgent`, ship with
 - **Never print, log or commit secrets.** Check keys by length/prefix only. `.env`,
   `settings.local.json` and Atlas workflow specs stay out of git. Everything user-visible goes
   through `redact()`.
-- Keep the sandbox walls: no new host mounts, no docker.sock, nothing that lets the UI change
+- Keep the sandbox walls: no new host mounts (the one exception is `/links`, read-only, filled only
+  by `scripts/gm-wsl/link.ps1` on the PC; see README → Copy or link?), no docker.sock, nothing that lets the UI change
   `APP_TOKEN`/sandbox/proxy settings (see `EDITABLE` in settings.ts). New outbound domains go in
   `egress/allowlist.txt` deliberately; one-off needs go through Settings → Network / the agent's
   `request_network_access` (the user decides, never the agent).
@@ -81,4 +84,7 @@ Windows (Tom's machine): edit/commit in `D:\github\SayGMAgent`, ship with
   `allowed_prefixes` — `tools/hippius-setup.mjs` uses it. GM still holds the only credential and
   does its own access control. Uploads are encrypted before they leave the machine, and
   `HIPPIUS_ENCRYPTION_KEY` is unrecoverable if lost — see docs/STORAGE.md.
+- Scripts that call into the distro pass argv arrays (`wsl --exec cmd arg …`), never strings built
+  from data; anything read from GM's data folder is agent-controlled and is validated against a
+  strict pattern first. `.cmd` lines only ever carry paths limited to plain characters.
 - Tom prefers concise, plain-English answers and step-by-step PowerShell when he must run things.

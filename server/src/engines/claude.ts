@@ -3,6 +3,7 @@ import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent
 import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
 import { gmMcpServer } from "../mcp.js";
+import { LINKS_ROOT, linksAvailable } from "../links.js";
 import type { AgentEngine, AgentEvent, RunInput } from "./types.js";
 import { listModels } from "../models.js";
 
@@ -71,6 +72,8 @@ export const claudeEngine: AgentEngine = {
       agents,
       model: input.model,
       cwd: input.cwd,
+      // read-only links from the user's computer (the mount itself refuses writes)
+      ...(linksAvailable() ? { additionalDirectories: [LINKS_ROOT] } : {}),
       abortController: abort,
       includePartialMessages: true,
       // Loads skills from <workspace>/.claude/skills (synced from repo /skills)
