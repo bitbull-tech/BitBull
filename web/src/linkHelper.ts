@@ -10,6 +10,8 @@ const HELPER = 'http://localhost:8790'
 export interface HelperLink {
   name: string
   state: 'mounted' | 'missing'
+  /** live: the folder itself; filtered: a read-only copy without its secrets (refresh to update) */
+  mode: 'live' | 'filtered'
   path: string
 }
 
@@ -72,4 +74,10 @@ export async function unlinkFolder(name: string, onStep?: (s: string) => void) {
   if (!r.ok) return r
   await waitForGm(name, false)
   return r
+}
+
+/** Filtered links only: re-scan the folder on Windows and copy it again (no restart). */
+export async function refreshFolder(name: string, onStep?: (s: string) => void) {
+  onStep?.(`Refreshing ${name}: checking it for secrets and copying it again…`)
+  return post('/refresh', { name })
 }

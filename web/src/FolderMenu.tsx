@@ -42,7 +42,8 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, busy])
 
-  const winPath = (name: string) => (helper && helper !== 'checking' ? helper.links.find((h) => h.name === name)?.path : undefined)
+  const info = (name: string) => (helper && helper !== 'checking' ? helper.links.find((h) => h.name === name) : undefined)
+  const winPath = (name: string) => info(name)?.path
 
   const startLink = async () => {
     setMsg(null)
@@ -108,7 +109,11 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                     <span>
                       <b>{l.name}</b>
                       <small>
-                        {winPath(l.name) ? `${winPath(l.name)} · ` : ''}read in place: the agent can read and analyse, never change. {l.entries ?? '?'} items.
+                        {winPath(l.name) ? `${winPath(l.name)} · ` : ''}
+                        {info(l.name)?.mode === 'filtered'
+                          ? 'a read-only copy without its secrets (.env, keys, wallets); refresh it in Settings → Folders.'
+                          : 'read in place: the agent can read and analyse, never change.'}{' '}
+                        {l.entries ?? '?'} items.
                       </small>
                     </span>
                   </button>

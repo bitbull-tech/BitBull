@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type LinkedFolder } from './api'
-import { IconLock, IconPlus, IconTrash } from './icons'
-import { HELPER_HINT, helperStatus, linkFolder, onThisPc, unlinkFolder, type HelperLink } from './linkHelper'
+import { IconLock, IconPlus, IconRefresh, IconTrash } from './icons'
+import { HELPER_HINT, helperStatus, linkFolder, onThisPc, refreshFolder, unlinkFolder, type HelperLink } from './linkHelper'
 
 /** Settings → Folders: the read-only links, with Link / Remove through the helper on this PC. */
 export function FoldersPanel() {
@@ -34,16 +34,20 @@ export function FoldersPanel() {
   }
 
   const ready = helper && helper !== 'checking'
-  const rows: Array<{ name: string; path?: string; inGm?: LinkedFolder; state?: string }> = []
-  for (const l of links?.links ?? []) rows.push({ name: l.name, inGm: l, path: ready ? helper.links.find((h) => h.name === l.name)?.path : undefined })
-  if (ready) for (const h of helper.links) if (!rows.some((r) => r.name === h.name)) rows.push({ name: h.name, path: h.path, state: h.state })
+  const rows: Array<{ name: string; path?: string; mode?: string; inGm?: LinkedFolder; state?: string }> = []
+  for (const l of links?.links ?? []) {
+    const h = ready ? helper.links.find((x) => x.name === l.name) : undefined
+    rows.push({ name: l.name, inGm: l, path: h?.path, mode: h?.mode })
+  }
+  if (ready) for (const h of helper.links) if (!rows.some((r) => r.name === h.name)) rows.push({ name: h.name, path: h.path, mode: h.mode, state: h.state })
 
   return (
     <div className="net-panel">
       <p className="muted small">
         Linked folders are folders on this PC that the agent can <b>read but never change</b>: they are mounted read-only, and GM restarts
-        (about 10 seconds) whenever one is added or removed. Every chat in this GM can read them. To give the agent a copy it may change,
-        use the folder button in the chat → Upload a copy.
+        (about 10 seconds) whenever one is added or removed. Every chat in this GM can read them. A folder holding .env files, keys or
+        wallets (GM's own repo, for one) is linked as a read-only copy without them: the agent never sees those files, and Refresh
+        updates the copy. To give the agent a copy it may change, use the folder button in the chat → Upload a copy.
       </p>
       {links && !links.available ? (
         <p className="muted">Links work in the sandboxed GM (Docker) only.</p>
@@ -61,6 +65,24 @@ export function FoldersPanel() {
                     <span className={`pill ${r.inGm.readOnly ? 'ok' : 'bad'}`}>{r.inGm.readOnly ? 'read-only' : 'NOT read-only'}</span>
                   ) : (
                     <span className="pill bad">{r.state === 'missing' ? 'folder missing' : 'not visible to GM yet'}</span>
+                  )}
+                  {r.mode === 'filtered' && (
+                    <span className="pill" title="A read-only copy without .env, keys and wallets. Changes to the folder show up after Refresh.">
+                      copy, secrets hidden
+                    </span>
+                  )}
+                  {ready && r.mode === 'filtered' && (
+                    <button
+                      className="icon-btn sm"
+                      title={`Refresh ${r.name}: re-check for secrets and copy again`}
+                      disabled={!!busy}
+                      onClick={() => {
+                        setBusy(`Refreshing ${r.name}…`)
+                        void run(() => refreshFolder(r.name, setBusy), `Refreshed ${r.name}.`)
+                      }}
+                    >
+                      <IconRefresh size={13} />
+                    </button>
                   )}
                   {ready && (
                     <button

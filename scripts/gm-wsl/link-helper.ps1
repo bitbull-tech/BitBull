@@ -7,7 +7,9 @@
     1. GM's page (in your browser, on this PC) asks this helper.
     2. The helper opens a Windows folder picker on this PC. Nothing is linked unless you pick
        a folder there. GM never sends a path; it can't, and it isn't asked.
-    3. If the folder looks like it holds keys or wallets, a Windows Yes/No box asks you first.
+    3. If the folder holds keys, .env files or wallets, a Windows box asks you: link a read-only
+       COPY without them (the agent never sees them), link it as it is, or cancel. GM's own repo
+       is only ever linked as such a copy.
     4. It runs link.ps1 (all the usual checks: read-only mount, verified, GM restarted).
 
   Who can reach it: only programs on this PC. The agent can't: its container has no route
@@ -78,7 +80,7 @@ function Get-Links {
   $rows = @(& wsl.exe -d $Distro -u root --exec /usr/local/sbin/gm-links list 2>$null)
   $list = @()
   foreach ($r in $rows) {
-    if ($r -match '^(\S+)\s+(mounted|missing)\s+(.+)$') { $list += @{ name = $Matches[1]; state = $Matches[2]; path = $Matches[3].Trim() } }
+    if ($r -match '^(\S+)\s+(mounted|missing)\s+(live|filtered)\s+(.+)$') { $list += @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim() } }
   }
   return ,$list
 }
@@ -94,22 +96,40 @@ function Do-Link {
     }
     $path = $dlg.SelectedPath
     $r = Invoke-Link @("-Add", $path)
-    if ($r.code -eq 3) {
+    $found = ($r.out -split "`n" | Where-Object { $_ -match '^\s{2}\S' } | Select-Object -First 12 | Out-String)
+    if ($r.code -eq 4) {
+      # GM's own repo: only ever as a copy without its secrets
+      $q = [System.Windows.Forms.MessageBox]::Show($owner,
+        "This is GM's own repo. It can be linked as a read-only COPY that leaves out its .env, data folder and anything else that looks secret:`n`n" +
+        $found + "`nThe agent never sees those files. The copy is refreshed when you press Refresh in GM (Settings > Folders).`n`nLink it this way?",
+        "GM: link this folder?", "OKCancel", "Information", "Button1")
+      if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not linked." } }
+      $r = Invoke-Link @("-Add", $path, "-Hide")
+    } elseif ($r.code -eq 3) {
       # keys, wallets or unreadable parts found: you decide, here, in Windows
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
-        "This folder looks like it holds keys, passwords or wallets (or parts of it couldn't be checked):`n`n" +
-        ($r.out -split "`n" | Where-Object { $_ -match '^\s{2}\S' } | Select-Object -First 10 | Out-String) +
-        "`nThe agent could read them and send them to its model. Link it anyway?",
-        "GM: link this folder?", "YesNo", "Warning", "Button2")
-      if ($q -ne [System.Windows.Forms.DialogResult]::Yes) { return @{ ok = $false; cancelled = $true; message = "Not linked: you said no." } }
-      $r = Invoke-Link @("-Add", $path, "-AllowSecrets")
+        "This folder holds files that look like keys, passwords or wallets (or couldn't be checked):`n`n" + $found +
+        "`nYes (recommended): link a read-only COPY without these files. The agent never sees them; press Refresh in GM to update the copy.`n" +
+        "No: link the folder as it is, including them. The agent could read them and send them to its model.`n" +
+        "Cancel: link nothing.",
+        "GM: link this folder?", "YesNoCancel", "Warning", "Button1")
+      if ($q -eq [System.Windows.Forms.DialogResult]::Yes) { $r = Invoke-Link @("-Add", $path, "-Hide") }
+      elseif ($q -eq [System.Windows.Forms.DialogResult]::No) { $r = Invoke-Link @("-Add", $path, "-AllowSecrets") }
+      else { return @{ ok = $false; cancelled = $true; message = "Not linked." } }
     }
     if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 3) -join " " } }
-    $name = if ($r.out -match '/links/([a-z0-9-]+) \(read-only\)') { $Matches[1] } else { $null }
+    $name = if ($r.out -match 'GM-LINK-NAME: ([a-z0-9-]+)') { $Matches[1] } else { $null }
     return @{ ok = $true; name = $name; path = $path; message = "Linked $path" }
   } finally {
     $owner.Close()
   }
+}
+
+function Do-Refresh([string]$name) {
+  if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,39}$') { return @{ ok = $false; message = "bad name" } }
+  $r = Invoke-Link @("-Refresh", $name)
+  if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 2) -join " " } }
+  return @{ ok = $true; message = "Refreshed $name" }
 }
 
 function Do-Unlink([string]$name) {
@@ -131,6 +151,10 @@ while ($listener.IsListening) {
     if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links) }; continue }
     if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from GM's page only" }; continue }
     if ($path -eq "/link") { Send $ctx 200 (Do-Link); continue }
+    if ($path -eq "/refresh") {
+      $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json
+      Send $ctx 200 (Do-Refresh ([string]$body.name)); continue
+    }
     if ($path -eq "/unlink") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json
       Send $ctx 200 (Do-Unlink ([string]$body.name)); continue

@@ -71,7 +71,8 @@ Windows (Tom's machine): edit/commit in `D:\github\SayGMAgent`, ship with
   through `redact()`.
 - Keep the sandbox walls: no new host mounts (the one exception is `/links`, read-only, filled only
   by `scripts/gm-wsl/link.ps1` on the PC, which the UI reaches through `link-helper.ps1`: the folder
-  is always chosen in a Windows dialog, never sent by GM; see README → Copy or link?), no docker.sock, nothing that lets the UI change
+  is always chosen in a Windows dialog, never sent by GM; folders with secrets, GM's repo included,
+  only as a filtered copy without them, never by hiding files inside a live mount; see README → Copy or link?), no docker.sock, nothing that lets the UI change
   `APP_TOKEN`/sandbox/proxy settings (see `EDITABLE` in settings.ts). New outbound domains go in
   `egress/allowlist.txt` deliberately; one-off needs go through Settings → Network / the agent's
   `request_network_access` (the user decides, never the agent).

@@ -6,6 +6,8 @@
       ... -Add "D:\code\thing" -Name thing     choose the name GM shows (default: the folder name)
       ... -List
       ... -Remove horner
+      ... -Hide              link a filtered read-only COPY without .env, keys, wallets (and, for GM's
+                             own repo, data\); refresh it with -Refresh <name>
       ... -InstallMenu       add "Link to GM (read-only)" to the right-click menu of folders in Explorer
       ... -UninstallMenu
 
@@ -18,8 +20,9 @@
 
   A linked folder is readable from EVERY chat in this GM (attaching it to a chat only points
   that chat at it), and anything in it may be sent to the model the agent uses. So folders
-  that hold keys, passwords or wallets are refused (override with -AllowSecrets). The check
-  runs once, when you link: don't save secrets into a linked folder later.
+  that hold keys, passwords or wallets are not linked as they are: link them with -Hide
+  (a read-only copy without those files: the agent never sees them) or, if you are sure,
+  -AllowSecrets. GM's own repo can only be linked with -Hide.
 #>
 param(
   [string]$Add,
@@ -32,6 +35,10 @@ param(
   # keep the window open at the end (used by the Explorer menu)
   [switch]$Pause,
   [switch]$AllowSecrets,
+  # link a filtered, read-only COPY that leaves out .env, keys, wallets (and GM's data\)
+  [switch]$Hide,
+  # filtered links only: copy again (after a fresh scan for secrets)
+  [string]$Refresh,
   [string]$Distro = "gm"
 )
 $ErrorActionPreference = "Stop"
@@ -42,6 +49,73 @@ $helper = "/usr/local/sbin/gm-links"
 function Invoke-Root([string[]]$cmd) {
   & wsl.exe -d $Distro -u root --exec @cmd
   if ($LASTEXITCODE -ne 0) { throw "failed: $($cmd -join ' ') ($LASTEXITCODE)" }
+}
+
+# Places that are never linked at all
+function Test-Linkable([string]$full) {
+  $lower = $full.ToLower()
+  $deny = @(
+    $env:WINDIR, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData,
+    (Join-Path $env:USERPROFILE "AppData"), (Join-Path $env:USERPROFILE ".ssh")
+  ) | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\').ToLower() }
+  if ($full -match '^[A-Za-z]:$') { throw "Refusing to link a whole drive ($full). Link the folder you need." }
+  if ($full.StartsWith('\\')) { throw "Network (UNC) paths can't be linked: link a folder on a local drive." }
+  if ($lower -eq $env:USERPROFILE.TrimEnd('\').ToLower()) { throw "Refusing to link your whole profile folder. Link the folder you need." }
+  foreach ($d in $deny) {
+    if ($lower -eq $d -or $lower.StartsWith("$d\")) { throw "Refusing to link a system or app-data folder ($full)." }
+  }
+  $repoData = (Join-Path $Repo "data").ToLower()
+  if ($lower -eq $repoData -or $lower.StartsWith("$repoData\")) { throw "Refusing to link GM's own data folder." }
+}
+
+# Everything in a folder that looks like a key, password store or wallet, as paths relative to
+# the folder (folders like .ssh count as a whole). For GM's own repo, its .env, data\ and
+# .gmtmp\ are added. Windows names are matched case-insensitively here; the copy then leaves out
+# exactly these paths (plus the same patterns, in gm-links.sh).
+function Get-HideList([string]$full) {
+  $secretNames = @(".env", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker", ".hippius", ".bittensor", ".npmrc", ".pypirc", ".netrc", ".git-credentials",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "credentials.json", "secrets.json", "wallet.dat", "login data", "cookies", "key4.db", "logins.json",
+    "settings.local.json")
+  $secretPatterns = @("*.pem", "*.key", "*.pfx", "*.p12", "*.ppk", "*.jks", "*.keystore", "*.kdbx", "*.ovpn", "*.wallet", "wallet*.json", "*seed*.txt", "*mnemonic*", ".env.*", "coldkey*", "hotkey*", "id_*")
+  $templates = @("*.example", "*.sample", "*.template")
+  Write-Host "==> Checking $full for keys and wallets" -ForegroundColor Cyan
+  $scanErrors = @()
+  $found = @(Get-ChildItem -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable +scanErrors |
+    Where-Object {
+      $n = $_.Name
+      (($secretNames -contains $n.ToLower()) -or ($secretPatterns | Where-Object { $n -like $_ })) -and -not ($templates | Where-Object { $n -like $_ })
+    })
+  $rel = @($found | ForEach-Object { $_.FullName.Substring($full.Length).TrimStart('\').Replace('\', '/') })
+  # GM's own repo (this folder, inside it, or containing it)
+  $lower = $full.ToLower(); $repoLower = $Repo.TrimEnd('\').ToLower()
+  $isRepo = $false
+  if ($lower -eq $repoLower -or $repoLower.StartsWith("$lower\")) {
+    $isRepo = $true
+    $prefix = $Repo.TrimEnd('\').Substring($full.Length).TrimStart('\').Replace('\', '/')
+    if ($prefix) { $prefix += "/" }
+    $rel += @("$($prefix).env", "$($prefix)data", "$($prefix).gmtmp", "$($prefix)links")
+  } elseif ($lower.StartsWith("$repoLower\")) {
+    $isRepo = $true
+  }
+  # Paths a scan couldn't read are hidden too (a copy can't include what wasn't checked)
+  $unreadable = @($scanErrors | ForEach-Object { "$($_.TargetObject)" } | Where-Object { $_.ToLower().StartsWith("$lower\") } |
+    ForEach-Object { $_.Substring($full.Length).TrimStart('\').Replace('\', '/') })
+  $rel += $unreadable
+  return @{ Paths = @($rel | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive); Repo = $isRepo; Unreadable = $unreadable.Count; Found = $found }
+}
+
+function Show-Found($scan) {
+  Write-Host "These look like keys, passwords or wallets (or couldn't be checked):" -ForegroundColor Yellow
+  $scan.Paths | Select-Object -First 15 | ForEach-Object { Write-Host "  $_" }
+  if ($scan.Paths.Count -gt 15) { Write-Host "  ... and $($scan.Paths.Count - 15) more" }
+}
+
+# The hide list goes to gm-links on stdin, UTF-8, one path per line (never on a command line)
+function Send-HideList([string[]]$paths, [string[]]$argv) {
+  # local to this function: PowerShell encodes what it pipes to a native program with this
+  $OutputEncoding = New-Object System.Text.UTF8Encoding $false
+  (@($paths) -join "`n") + "`n" | & wsl.exe -d $Distro -u root --exec @argv
+  if ($LASTEXITCODE -ne 0) { throw "failed: $($argv -join ' ') ($LASTEXITCODE)" }
 }
 
 # Install (or refresh) the helper inside the distro and make links come back after a reboot
@@ -104,7 +178,7 @@ function Main {
     return
   }
 
-  if ($Pick -or (-not $Add -and -not $Remove -and -not $List)) {
+  if ($Pick -or (-not $Add -and -not $Remove -and -not $List -and -not $Refresh)) {
     Add-Type -AssemblyName System.Windows.Forms
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
     $dlg.Description = "Choose a folder for GM to read (read-only: GM can't change it)"
@@ -124,6 +198,21 @@ function Main {
     return
   }
 
+  if ($Refresh) {
+    $Refresh = $Refresh.ToLower()
+    Install-Helper
+    $row = @(& wsl.exe -d $Distro -u root --exec $helper list) | Where-Object { $_ -match "^$([regex]::Escape($Refresh))\s" } | Select-Object -First 1
+    if ($row -notmatch '^\S+\s+\S+\s+filtered\s+(.+)$') { throw "$Refresh is not a filtered link (live links are always current)." }
+    $full = $Matches[1].Trim()
+    if (-not (Test-Path -LiteralPath $full -PathType Container)) { throw "The folder is gone: $full" }
+    # Scan again first: anything secret added since the last copy stays hidden too
+    $scan = Get-HideList $full
+    Write-Host "==> Refreshing $Refresh from $full ($($scan.Paths.Count) path(s) hidden)" -ForegroundColor Cyan
+    Send-HideList $scan.Paths @($helper, "refresh", $Refresh)
+    Write-Host "Refreshed. GM sees the new copy now (no restart needed)." -ForegroundColor Green
+    return
+  }
+
   if ($Remove) {
     Install-Helper
     Invoke-Root @($helper, "remove", $Remove.ToLower())
@@ -136,45 +225,28 @@ function Main {
   $item = Get-Item -LiteralPath $Add -Force -ErrorAction SilentlyContinue
   if (-not $item -or -not $item.PSIsContainer) { throw "Not a folder: $Add" }
   $full = $item.FullName.TrimEnd('\')
-  $lower = $full.ToLower()
+  Test-Linkable $full
+  $scan = Get-HideList $full
 
-  # Places that are never linked: whole drives, Windows, programs, your profile root and
-  # app data, and this repo (its .env holds GM's own keys).
-  $deny = @(
-    $env:WINDIR, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData,
-    (Join-Path $env:USERPROFILE "AppData"), (Join-Path $env:USERPROFILE ".ssh")
-  ) | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\').ToLower() }
-  if ($full -match '^[A-Za-z]:$') { throw "Refusing to link a whole drive ($full). Link the folder you need." }
-  if ($full.StartsWith('\\')) { throw "Network (UNC) paths can't be linked: link a folder on a local drive." }
-  if ($lower -eq $env:USERPROFILE.TrimEnd('\').ToLower()) { throw "Refusing to link your whole profile folder. Link the folder you need." }
-  foreach ($d in $deny) {
-    if ($lower -eq $d -or $lower.StartsWith("$d\")) { throw "Refusing to link a system or app-data folder ($full)." }
-  }
-  $repoLower = $Repo.TrimEnd('\').ToLower()
-  if ($lower -eq $repoLower -or $repoLower.StartsWith("$lower\") -or $lower.StartsWith("$repoLower\")) {
-    throw "Refusing to link GM's own repo or a folder containing it: its .env holds GM's keys."
-  }
-
-  # Anything that looks like a key, password store or wallet stops the link
-  $secretNames = @(".env", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker", ".hippius", ".bittensor", ".npmrc", ".pypirc", ".netrc", ".git-credentials",
-    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "credentials.json", "secrets.json", "wallet.dat", "login data", "cookies", "key4.db", "logins.json")
-  $secretPatterns = @("*.pem", "*.key", "*.pfx", "*.p12", "*.ppk", "*.jks", "*.keystore", "*.kdbx", "*.ovpn", "*.wallet", "wallet*.json", "*seed*.txt", "*mnemonic*", ".env.*", "coldkey*", "hotkey*", "id_*")
-  Write-Host "==> Checking $full for keys and wallets" -ForegroundColor Cyan
-  $scanErrors = @()
-  $found = Get-ChildItem -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable +scanErrors |
-    Where-Object {
-      $n = $_.Name
-      ($secretNames -contains $n.ToLower()) -or ($secretPatterns | Where-Object { $n -like $_ })
-    } | Select-Object -First 15
-  if ($scanErrors.Count -and -not $AllowSecrets) {
-    $script:exitCode = 3
-    throw "Some of the folder couldn't be read for the check ($($scanErrors[0].TargetObject)). Link a subfolder, or re-run with -AllowSecrets."
-  }
-  if ($found -and -not $AllowSecrets) {
-    Write-Host "These look like keys, passwords or wallets:" -ForegroundColor Yellow
-    $found | ForEach-Object { Write-Host "  $($_.FullName)" }
-    $script:exitCode = 3   # link-helper.ps1 asks you about these, then retries with -AllowSecrets
-    throw "Not linked. Move them out of the folder, link a subfolder, or re-run with -AllowSecrets if you are sure."
+  $mode = "live"
+  if ($scan.Repo) {
+    # GM's own repo: only ever as a filtered copy, without .env, data\ and other secrets
+    if ($AllowSecrets -and -not $Hide) { throw "GM's own repo can only be linked with its secrets hidden (-Hide)." }
+    if (-not $Hide) {
+      $script:exitCode = 4   # link-helper.ps1: asks to confirm hiding, then retries with -Hide
+      Show-Found $scan
+      throw "This is GM's own repo (or contains it). It can be linked as a filtered copy without .env, data\ and the files above: re-run with -Hide."
+    }
+    $mode = "filtered"
+  } elseif ($scan.Paths.Count -or $scan.Unreadable) {
+    if ($Hide) { $mode = "filtered" }
+    elseif (-not $AllowSecrets) {
+      $script:exitCode = 3   # link-helper.ps1 asks: hide them (filtered copy), link all, or cancel
+      Show-Found $scan
+      throw "Not linked. Re-run with -Hide to link a copy without these (recommended), or -AllowSecrets to link everything."
+    }
+  } elseif ($Hide) {
+    $mode = "filtered"
   }
 
   $chosen = [bool]$Name
@@ -192,11 +264,20 @@ function Main {
     while ($taken -contains "$Name-$n") { $n++ }
     $Name = "$Name-$n"
   }
-  Write-Host "==> Linking $full as /links/$Name (read-only)" -ForegroundColor Cyan
-  Invoke-Root @($helper, "add", $Name, $full)
+  if ($mode -eq "filtered") {
+    Write-Host "==> Linking $full as /links/${Name}: a read-only copy without $($scan.Paths.Count) hidden path(s)" -ForegroundColor Cyan
+    Send-HideList $scan.Paths @($helper, "add-filtered", $Name, $full)
+  } else {
+    Write-Host "==> Linking $full as /links/$Name (read-only)" -ForegroundColor Cyan
+    Invoke-Root @($helper, "add", $Name, $full)
+  }
   Restart-Gm
   Write-Host ""
+  Write-Host "GM-LINK-NAME: $Name"
   Write-Host "Linked. In GM: the folder button in the chat box -> Linked folders -> $Name." -ForegroundColor Green
+  if ($mode -eq "filtered") {
+    Write-Host "It is a copy: after changing files, press Refresh in Settings -> Folders (or link.ps1 -Refresh $Name)." -ForegroundColor DarkGray
+  }
   Write-Host "Remove it with: powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove $Name" -ForegroundColor DarkGray
 }
 

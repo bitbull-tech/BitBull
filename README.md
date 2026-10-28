@@ -307,6 +307,9 @@ powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Add "D:\Photos\Horner"
 # once: "Link to GM (read-only)" on Explorer's right-click menu for folders (-UninstallMenu removes it)
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -InstallMenu
+# a folder with secrets: a read-only copy without them (GM's own repo always links this way)
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Add "D:\github\SayGMAgent" -Hide
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Refresh saygmagent
 # list links (also re-mounts missing ones), remove one
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -List
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove horner
@@ -315,11 +318,22 @@ powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove horner
 **Linking with the mouse.** The page can't see your disks and never sends a path. It asks the
 **link helper** (`scripts/gm-wsl/link-helper.ps1`, started hidden by `start.ps1`, listening on
 `http://localhost:8790` only), which opens a Windows folder picker on the PC. Nothing is linked
-unless you pick a folder there; if the folder looks like it holds keys or wallets, a Windows
-Yes/No box asks first. The helper then runs `link.ps1`, so every check below applies. It only
+unless you pick a folder there; if the folder holds keys, `.env` files or wallets, a Windows box
+asks how to link it (below). The helper then runs `link.ps1`, so every check below applies. It only
 answers GM's own page (Origin `http://localhost:8787`/`8788`), and the agent can't reach it at all
 (its proxy refuses local addresses). Linking therefore works from the PC GM runs on, not from a
 phone or another computer.
+
+**Folders that hold secrets** (GM's own repo, any project with a `.env`) are linked as a
+**filtered copy**: a read-only copy that leaves out `.env` (templates like `.env.example` stay),
+keys, wallets, browser login stores, `node_modules`/caches and, for GM's repo, `data\` too. The
+agent never sees those files, because they aren't there. Hiding files inside a live Windows
+mount isn't reliable (Windows names are case-insensitive and have 8.3 short aliases, so a hidden
+`.env` could still be opened as `.ENV` or `ENV~1`), which is why it's a copy: the folder is
+mounted read-only somewhere only root in the distro can see, copied without the hidden paths,
+and unmounted again. The copy changes only when you press **Refresh** (Settings → Folders, or
+`link.ps1 -Refresh <name>`), which re-scans the folder for secrets first. Git history in a
+linked repo is included, so a secret that was ever committed is still in `.git`.
 
 How a link is held shut, layer by layer:
 
