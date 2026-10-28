@@ -11,6 +11,7 @@ import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, Sele
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
+import { NetworkPrompt } from './network'
 
 const MODEL_KEY = 'gm-agent-model'
 const EXPANDED_KEY = 'gm-agent-expanded'
@@ -97,11 +98,11 @@ function groupLabel(ts: number) {
   today.setHours(0, 0, 0, 0)
   const day = 86400000
   if (d.getTime() >= today.getTime()) return 'Today'
-  if (d.getTime() >= today.getTime() - day) return 'Yesterday'
   if (d.getTime() >= today.getTime() - 7 * day) return 'Previous 7 days'
-  if (d.getTime() >= today.getTime() - 30 * day) return 'Previous 30 days'
   return 'Older'
 }
+// Date groups in the Chats list: open unless the user collapsed them; "Older" starts collapsed
+const GROUP_DEFAULT_OPEN: Record<string, boolean> = { Today: true, 'Previous 7 days': true, Older: false }
 
 function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthorized: () => void; onLogout: () => void }) {
   const [theme, setTheme] = useTheme()
@@ -379,12 +380,25 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <div className="section-head chats-head">
             <span>Chats</span>
           </div>
-          {unfiled.map(([label, list]) => (
-            <div key={label}>
-              <div className="group-label">{label}</div>
-              {list.map(row)}
-            </div>
-          ))}
+          {unfiled.map(([label, list]) => {
+            const key = `group:${label}`
+            const isOpen = !!f || (expanded[key] ?? GROUP_DEFAULT_OPEN[label] ?? true)
+            return (
+              <div key={label} className="chat-group">
+                <button
+                  className="group-label"
+                  aria-expanded={isOpen}
+                  onClick={() => setExpand(key, !isOpen)}
+                  title={isOpen ? 'Collapse' : 'Expand'}
+                >
+                  <IconChevronRight size={12} className={`chev ${isOpen ? 'open' : ''}`} />
+                  <span>{label}</span>
+                  <span className="count">{list.length}</span>
+                </button>
+                {isOpen && <div className="group-chats">{list.map(row)}</div>}
+              </div>
+            )
+          })}
           {!sessions.length && <p className="muted small pad">Your chats will appear here.</p>}
         </nav>
         <footer className="side-foot">
@@ -466,6 +480,12 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         <ActivityDock sessionId={active?.id} onOpenFull={() => (clearToasts(), setActivityOpen(true))} />
       </main>
       {!activityOpen && <ErrorToasts onOpen={() => (clearToasts(), setActivityOpen(true))} />}
+      <NetworkPrompt
+        onOpenSession={(id) => {
+          const s = sessions.find((x) => x.id === id)
+          if (s) openSession(s)
+        }}
+      />
       {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
       <SelectionAsk />
 

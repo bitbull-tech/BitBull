@@ -29,6 +29,8 @@ export interface RunInput {
   cwd: string;
   /** Integration MCP servers enabled for this chat's project */
   mcp: Record<string, { url: string; headers: Record<string, string> }>;
+  /** GM's chat id (lets GM's own MCP tools say which chat asked) */
+  gmSessionId?: string;
   /** Read-only planning turn: investigate and propose, change nothing */
   plan?: boolean;
 }

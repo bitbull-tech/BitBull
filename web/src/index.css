@@ -300,7 +300,14 @@ code, pre, kbd { font-family: var(--mono); }
 }
 .side-search input { flex: 1; border: none; background: none; padding: 8px 0; outline: none; color: var(--text); min-width: 0; }
 .sessions { flex: 1; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
-.group-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 14px 10px 4px; }
+.group-label {
+  display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; cursor: pointer; text-align: left;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+  padding: 12px 6px 4px; border-radius: 6px;
+}
+.group-label:hover { color: var(--text-2); }
+.group-label .count { margin-left: auto; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.group-chats { margin-left: 11px; padding-left: 6px; border-left: 1px solid var(--line); }
 .session {
   display: flex; align-items: center; gap: 4px; padding: 7px 6px 7px 10px; border-radius: 9px; cursor: pointer;
   color: var(--text-2); font-size: 13.5px;
@@ -817,3 +824,33 @@ button.file-row:hover { background: var(--hover); }
 .split-btn .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .split-btn .btn.caret { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; padding: 0 8px; font-size: 11px; }
 .copy-agent { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--muted); }
+
+/* ---------- network access: the agent asks, the user answers ---------- */
+.mono { font-family: var(--mono); }
+.linklike { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+.net-prompts { position: fixed; right: 16px; bottom: 52px; z-index: 75; display: flex; flex-direction: column; gap: 10px; width: min(460px, calc(100vw - 32px)); }
+.net-prompt {
+  border-radius: 14px; padding: 12px 14px; background: var(--panel); border: 1px solid color-mix(in srgb, var(--warn, #d97706) 45%, var(--line));
+  border-left: 4px solid var(--warn, #d97706); box-shadow: 0 14px 40px rgb(0 0 0 / 0.22); animation: toast-in 0.18s ease-out;
+}
+.net-head { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.net-head b { overflow-wrap: anywhere; }
+.net-reason { margin: 8px 0 4px; font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+.net-meta { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.net-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.net-actions .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-panel h3 { font-size: 13px; margin: 18px 0 6px; }
+.net-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; }
+.net-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 13px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.net-list li:first-child { border-top: none; }
+.net-list li .mono { overflow-wrap: anywhere; }
+.net-list li > :last-child { margin-left: auto; }
+.net-why { flex: 1; min-width: 120px; }
+.net-add { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.net-add input, .net-add select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+.net-add input { flex: 1; min-width: 200px; font-family: var(--mono); }
+.net-static { margin-top: 16px; font-size: 12.5px; color: var(--muted); }
+.net-static p { line-height: 1.7; overflow-wrap: anywhere; }
+.pill { font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); }
+.pill.ok { color: var(--ok); }
+.pill.bad { color: var(--bad); }

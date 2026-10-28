@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
-import { filterItems, fromDrop, hasFolder, uploadItems } from './uploads'
+import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadItem } from './uploads'
 import { reportLocal } from './activity'
 import { BrandMark } from './BrandMark'
 
@@ -93,6 +93,7 @@ export function Chat({
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
   const fileRef = useRef<HTMLInputElement>(null)
+  const folderRef = useRef<HTMLInputElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   // When the first message of a draft creates a session, keep the local stream going
   const createdHere = useRef<string | null>(null)
@@ -191,6 +192,24 @@ export function Chat({
     setPending((p) => [...p, ...arr.filter((f) => f.size <= 25 * 1024 * 1024)].slice(0, 20))
   }
 
+  // Folders (dropped or picked): upload now into uploads/, keeping structure, then attach the folder paths
+  const addFolder = async (items: UploadItem[], tops: string[]) => {
+    const keep = filterItems(items, true)
+    if (!keep.length) return setNotice('That folder has nothing to upload (only dependency/build folders or system files).')
+    const names = tops.join(', ')
+    setNotice(`Uploading ${keep.length} files from ${names}…`)
+    try {
+      await uploadItems(project?.id ?? 'general', keep, {
+        target: 'uploads',
+        onProgress: (d, t) => setNotice(`Uploading ${d}/${t} files from ${names}…`),
+      })
+      setFolders((f) => [...f, ...tops.map((t) => `uploads/${t}`).filter((t) => !f.includes(t))])
+      setNotice(`Added ${keep.length} files from ${names} (dependency/build folders skipped). Use the Files button for more options.`)
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Upload failed')
+    }
+  }
+
   const send = async (override?: string) => {
     const text = (override ?? input).trim()
     if (!text || busy) return
@@ -252,22 +271,7 @@ export function Chat({
         e.preventDefault()
         setDragging(false)
         if (!hasFolder(e.dataTransfer)) return addFiles(e.dataTransfer.files)
-        // Folders: upload now (keeping structure) into uploads/, attach the folder paths
-        void (async () => {
-          const { items, folders: tops } = await fromDrop(e.dataTransfer)
-          const keep = filterItems(items, true)
-          setNotice(`Uploading ${keep.length} files from ${tops.join(', ')}…`)
-          try {
-            await uploadItems(project?.id ?? 'general', keep, {
-              target: 'uploads',
-              onProgress: (d, t) => setNotice(`Uploading ${d}/${t} files from ${tops.join(', ')}…`),
-            })
-            setFolders((f) => [...f, ...tops.map((t) => `uploads/${t}`)])
-            setNotice(`Added ${keep.length} files (dependency/build folders skipped). Use the Files button for more options.`)
-          } catch (err) {
-            setNotice(err instanceof Error ? err.message : 'Upload failed')
-          }
-        })()
+        void fromDrop(e.dataTransfer).then(({ items, folders: tops }) => addFolder(items, tops))
       }}
     >
       <div
@@ -380,6 +384,21 @@ export function Chat({
               <IconClip />
             </button>
             <input ref={fileRef} type="file" multiple hidden onChange={(e) => (addFiles(e.target.files), (e.target.value = ''))} />
+            <button type="button" className="icon-btn" title="Attach a folder (uploaded into uploads/, keeping its structure)" onClick={() => folderRef.current?.click()}>
+              <IconFolder size={16} />
+            </button>
+            <input
+              ref={folderRef}
+              type="file"
+              hidden
+              {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+              onChange={(e) => {
+                const items = fromInput(e.target.files)
+                e.target.value = ''
+                const tops = [...new Set(items.map((it) => it.path.split('/')[0]))]
+                if (items.length) void addFolder(items, tops)
+              }}
+            />
             <button
               type="button"
               className={`toggle ${plan ? 'on' : ''}`}

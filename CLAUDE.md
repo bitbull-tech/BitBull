@@ -25,6 +25,8 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   turns.ts           turns outlive their connection: event log per turn, attach/replay by seq
   brand.ts           white-label (DATA_DIR/brand.json + brand/): validated name, logos, CSS tokens
   storage.ts         Hippius mirror: AES-256-GCM, background queue, restore+verify, probe
+  egress.ts          network approvals: squid asks /internal/egress/check; agent requests wait for the user
+  mcp.ts             GM's own MCP server ("gm") for the engines: request_network_access
   engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, gm-guard plugin
   engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
   config.ts          env + UI overrides (DATA_DIR/settings.local.json), live reloadConfig()
@@ -66,7 +68,8 @@ Windows (Tom's machine): edit/commit in `D:\github\SayGMAgent`, ship with
   through `redact()`.
 - Keep the sandbox walls: no new host mounts, no docker.sock, nothing that lets the UI change
   `APP_TOKEN`/sandbox/proxy settings (see `EDITABLE` in settings.ts). New outbound domains go in
-  `egress/allowlist.txt` deliberately.
+  `egress/allowlist.txt` deliberately; one-off needs go through Settings → Network / the agent's
+  `request_network_access` (the user decides, never the agent).
 - Engine-neutral events only (`server/src/engines/types.ts`); the UI must not care which engine ran.
 - SayGM models are routed by their `api_shapes`: messages→Anthropic, responses→OpenAI Responses,
   generateContent→Google, else chat.completions. GPT-5.x rejects tools+reasoning on chat.completions.

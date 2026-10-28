@@ -4,8 +4,9 @@ import { IconCheck, IconLogout, IconMonitor, IconMoon, IconRefresh, IconSun, Ico
 import type { ThemePref } from './theme'
 import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
+import { NetworkPanel } from './network'
 
-type Tab = 'status' | 'integrations' | 'config' | 'appearance'
+type Tab = 'status' | 'integrations' | 'network' | 'config' | 'appearance'
 
 export function Settings({
   cfg,
@@ -61,6 +62,7 @@ export function Settings({
             [
               ['status', 'Status'],
               ['integrations', 'Integrations'],
+              ['network', 'Network'],
               ['config', 'Configuration'],
               ['appearance', 'Appearance'],
             ] as const
@@ -175,6 +177,7 @@ export function Settings({
           )}
 
           {tab === 'integrations' && <Integrations />}
+          {tab === 'network' && <NetworkPanel />}
 
           {tab === 'config' && (
             <>

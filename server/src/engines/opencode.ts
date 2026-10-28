@@ -5,6 +5,7 @@ import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
 import { config, configVersion, paths, ROOT, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
+import { gmMcpServer } from "../mcp.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
 import { listModels, type ModelApi, type ModelInfo } from "../models.js";
 import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
@@ -93,6 +94,10 @@ function buildConfig(models: ModelInfo[]) {
     mcp: {
       ...(config.ditto.apiKey
         ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
+        : {}),
+      // GM's own tools (network access requests); waits for the user, hence the long timeout
+      ...(gmMcpServer()
+        ? { gm: { type: "remote" as const, url: gmMcpServer()!.url, headers: gmMcpServer()!.headers, oauth: false as const, timeout: 660000 } }
         : {}),
       // Integration MCPs are registered once here and switched on/off per prompt by project
       ...Object.fromEntries(

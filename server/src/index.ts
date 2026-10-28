@@ -31,6 +31,8 @@ import { listModels, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
+import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
+import { handleMcp, MCP_PATH, GM_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -113,6 +115,41 @@ app.put("/api/settings", async (c) => {
   }
 });
 app.get("/api/status", async (c) => c.json(await status()));
+
+// ---------- network access (egress approvals) ----------
+// Asked by squid's external ACL helper for every host not on egress/allowlist.txt.
+// Not under /api (no APP_TOKEN in the proxy); only the egress container's address is answered.
+app.get("/internal/egress/check", async (c) => {
+  const remote = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming?.socket?.remoteAddress;
+  if (!(await fromEgress(remote))) return c.text("ERR", 403);
+  return c.text(proxyCheck(c.req.query("host") ?? "") ? "OK" : "ERR");
+});
+
+// GM's own MCP server for the engines (loopback + startup token; see mcp.ts)
+app.all(MCP_PATH, async (c) => {
+  if (!mcpTokenOk(c.req.header(GM_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
+  return handleMcp(c.req.raw);
+});
+
+app.get("/api/network", (c) => c.json(networkState()));
+app.post("/api/network/requests/:id", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { decision?: string };
+  if (body.decision !== "host" && body.decision !== "domain" && body.decision !== "deny") return c.json({ error: "decision must be host, domain or deny" }, 400);
+  const r = decide(c.req.param("id"), body.decision);
+  if (!r) return c.json({ error: "not found" }, 404);
+  return c.json({ request: r, ...networkState() });
+});
+app.post("/api/network/approved", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { host?: string; scope?: string };
+  const a = addApproval(String(body.host ?? ""), body.scope === "domain" ? "domain" : "host", "added in Settings");
+  if (!a) return c.json({ error: "Not a valid domain name (no IPs, ports or paths)" }, 400);
+  return c.json({ approval: a, ...networkState() });
+});
+app.delete("/api/network/approved/:host", (c) => {
+  const scope = c.req.query("scope");
+  revoke(c.req.param("host"), scope === "domain" || scope === "host" ? scope : undefined);
+  return c.json(networkState());
+});
 
 // ---------- export a chat (for pasting into another agent) ----------
 app.get("/api/sessions/:id/export", (c) => {

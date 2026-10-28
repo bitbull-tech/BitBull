@@ -43,8 +43,9 @@ npm run build && npm start    # UI + API together on :8787
 The agent can run shell commands, so it runs in a hardened container: an unprivileged
 user with no Linux capabilities, a read-only system, and only its data folder writable.
 Its network is internal. The only way out is an egress proxy that allows just the
-domains in [`egress/allowlist.txt`](egress/allowlist.txt), so the agent can't reach your
-home network, Windows, or any site you haven't listed. Outside the container the agent's
+domains in [`egress/allowlist.txt`](egress/allowlist.txt) plus any you approve in the UI
+(see "Network access" below), so the agent can't reach your home network, Windows, or any
+site you haven't allowed. Outside the container the agent's
 shell is switched off (set `ALLOW_HOST_SHELL=true` only if you accept the risk).
 
 ```bash
@@ -261,11 +262,31 @@ The agent can start specialists in parallel, like Claude Code's Task tool: `revi
 [`subagents/`](subagents/README.md). Their progress shows live under each reply. Give them
 a different model for a second opinion, e.g. `SUBAGENT_MODEL_REVIEWER=gpt-5.5`.
 
+## Network access
+
+The static list in `egress/allowlist.txt` is always allowed. For anything else:
+
+- **The agent asks.** When the proxy refuses a host, the agent calls `request_network_access`
+  (GM's own MCP tool, `gm`) with the host and one sentence of why. A card appears bottom-right:
+  **Allow** that host, **Allow all of** its domain (every subdomain), or **Deny**. The agent's
+  tool call waits for your answer (5 minutes, `NETWORK_REQUEST_TIMEOUT_S`); a denied host isn't
+  asked about again for 10 minutes.
+- **You allow it yourself** in Settings → Network, which also lists every host refused since GM
+  started (one click to allow) and what you've approved (one click to remove).
+- Approvals apply within seconds and need no redeploy: squid asks GM about any host not on the
+  static list (`egress/gm-approved.sh` → `/internal/egress/check`, answered only for the egress
+  container), caching a yes for 15 s. They're kept in `/data/egress-approved.json`, read at
+  startup (so an edit to that file, by anyone, does nothing until GM restarts).
+- Private and local addresses stay refused whatever is approved. Anything you allow is
+  somewhere the agent could send data, so prefer one host over a whole domain.
+- Domains you'll always need still belong in `egress/allowlist.txt` (in git, reviewed).
+
 ## Files and folders
 
 **Files** (top bar, or the folder icon on a project) browses a project's workspace and adds
 local files or whole folders, keeping their structure and skipping `node_modules`, `.git`
-and build output. Folders dropped on the chat are uploaded to `uploads/` and attached.
+and build output. In the chat, the paperclip attaches files and the folder button attaches
+a whole folder; folders (picked or dropped) are uploaded to `uploads/` and attached.
 
 ## GitHub
 
@@ -296,6 +317,9 @@ All routes need `Authorization: Bearer $APP_TOKEN`.
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
 | `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `exchange=last` or an assistant message id; `compact=1` (prompt + reply only); `tools=0`, `activity=0`, `limit=` (chars per tool output) |
+| `GET` | `/api/network` | Static allowlist, your approvals, pending/recent agent requests, recently blocked hosts |
+| `POST` | `/api/network/requests/:id` | Answer an agent's request: `{decision: "host" \| "domain" \| "deny"}` |
+| `POST/DELETE` | `/api/network/approved` | Allow `{host, scope: "host" \| "domain"}` / remove `/:host?scope=` |
 | `GET` | `/api/activity` | Activity events (`?after=&level=&sessionId=&limit=`) |
 | `GET` | `/api/activity/stream` | Live activity (SSE; `?token=` for EventSource) |
 

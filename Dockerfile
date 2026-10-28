@@ -34,6 +34,8 @@ COPY agent agent
 COPY skills skills
 COPY subagents subagents
 COPY tools tools
+# The proxy's static allowlist, so Settings -> Network can show it (the proxy has its own copy)
+COPY egress/allowlist.txt egress/allowlist.txt
 RUN mkdir -p /data && chown node:node /data
 # Non-root. The app and its code are root-owned and read-only to the agent.
 USER node

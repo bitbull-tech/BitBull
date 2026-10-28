@@ -2,6 +2,7 @@ import { listSubagents } from "../subagents.js";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
+import { gmMcpServer } from "../mcp.js";
 import type { AgentEngine, AgentEvent, RunInput } from "./types.js";
 import { listModels } from "../models.js";
 
@@ -65,6 +66,7 @@ export const claudeEngine: AgentEngine = {
       }),
     );
 
+    const gmMcp = gmMcpServer(input.gmSessionId);
     const options: Options = {
       agents,
       model: input.model,
@@ -83,6 +85,8 @@ export const claudeEngine: AgentEngine = {
       mcpServers: {
         ...(config.ditto.apiKey ? { ditto: { type: "http" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders() } } : {}),
         ...Object.fromEntries(Object.entries(input.mcp).map(([k, v]) => [k, { type: "http" as const, ...v }])),
+        // GM's own tools (network access requests); tagged with this chat
+        ...(gmMcp ? { gm: { type: "http" as const, ...gmMcp } } : {}),
       },
       env: {
         ...cleanEnv(),
@@ -93,6 +97,8 @@ export const claudeEngine: AgentEngine = {
         CLAUDE_CONFIG_DIR: paths.claudeConfig,
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
         DISABLE_TELEMETRY: "1",
+        // request_network_access waits for the user; don't time the call out before it does
+        MCP_TOOL_TIMEOUT: "660000",
       },
     };
 

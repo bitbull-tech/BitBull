@@ -24,7 +24,7 @@ export type EngineId = "opencode" | "claude";
  * <DATA_DIR>/settings.local.json (mode 600, never in git) and win over .env.
  * They're applied to process.env before the config below is built, and again live on save.
  */
-const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, "data"));
+export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, "data"));
 export const overridesFile = path.join(DATA_DIR, "settings.local.json");
 /** process.env as it came from .env / the container, before any UI overrides */
 const baseEnv: Record<string, string | undefined> = { ...process.env };

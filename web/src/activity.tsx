@@ -40,8 +40,18 @@ const emit = () => {
   subs.forEach((f) => f())
 }
 
+const liveSubs = new Set<(e: ActivityEvent) => void>()
+/** Called for each event as it arrives live (not for history). */
+export function onLiveActivity(fn: (e: ActivityEvent) => void) {
+  liveSubs.add(fn)
+  return () => {
+    liveSubs.delete(fn)
+  }
+}
+
 function add(e: ActivityEvent, live: boolean) {
   if (!e.local && events.some((x) => x.id === e.id)) return
+  if (live) liveSubs.forEach((f) => f(e))
   events = [...events, e].slice(-MAX)
   // Only events that arrive while the page is open pop up; history doesn't
   if (live && e.level === 'error') {

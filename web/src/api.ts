@@ -156,6 +156,26 @@ export type AgentEvent =
   | { type: 'end'; status: TurnStatus; seq: number }
 
 const TOKEN_KEY = 'gm-agent-token'
+export interface NetworkRequest {
+  id: string
+  host: string
+  domain: string
+  reason: string
+  sessionId?: string
+  sessionTitle?: string
+  status: 'pending' | 'approved' | 'denied' | 'expired'
+  createdAt: string
+  decidedAt?: string
+  scope?: 'host' | 'domain'
+}
+export interface NetworkState {
+  proxied: boolean
+  allowlist: string[]
+  approved: { host: string; scope: 'host' | 'domain'; approvedAt: string; reason?: string }[]
+  requests: NetworkRequest[]
+  blocked: { host: string; count: number; firstAt: string; lastAt: string }[]
+}
+
 export const getToken = () => {
   try { return localStorage.getItem(TOKEN_KEY) ?? '' } catch { return '' }
 }
@@ -208,6 +228,13 @@ export const api = {
   updateSettings: (values: Record<string, string | null>) =>
     req<{ changed: string[]; groups: SettingGroup[] }>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
   status: () => req<Status>('/api/status'),
+  network: () => req<NetworkState>('/api/network'),
+  decideNetwork: (id: string, decision: 'host' | 'domain' | 'deny') =>
+    req<NetworkState>(`/api/network/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  allowNetwork: (host: string, scope: 'host' | 'domain') =>
+    req<NetworkState>('/api/network/approved', { method: 'POST', body: JSON.stringify({ host, scope }) }),
+  revokeNetwork: (host: string, scope: 'host' | 'domain') =>
+    req<NetworkState>(`/api/network/approved/${encodeURIComponent(host)}?scope=${scope}`, { method: 'DELETE' }),
   refreshModels: () => req<{ models: Model[] }>('/api/models/refresh', { method: 'POST' }),
   async upload(id: string, files: File[]): Promise<Uploaded[]> {
     const fd = new FormData()
