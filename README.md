@@ -302,8 +302,12 @@ and build output. In the chat, the paperclip attaches files and the folder butto
 # copy a big folder in, fast (no browser); -Project "<name>" for a project's workspace
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\copy-in.ps1 -Path "D:\code\roadwolf" -Project "Game Development"
 
-# link a folder read-only, list links (also re-mounts missing ones), remove one
+# link a folder read-only: pick it in a dialog, or give the path
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Add "D:\Photos\Horner"
+# once: "Link to GM (read-only)" on Explorer's right-click menu for folders (-UninstallMenu removes it)
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -InstallMenu
+# list links (also re-mounts missing ones), remove one
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -List
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove horner
 ```

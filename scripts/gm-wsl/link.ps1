@@ -1,10 +1,13 @@
 <#
   Give GM read-only access to a folder on this PC, without copying it.
 
-      powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Add "D:\Photos\Horner"
+      powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1                  pick a folder in a dialog
+      ... -Add "D:\Photos\Horner"
       ... -Add "D:\code\thing" -Name thing     choose the name GM shows (default: the folder name)
       ... -List
       ... -Remove horner
+      ... -InstallMenu       add "Link to GM (read-only)" to the right-click menu of folders in Explorer
+      ... -UninstallMenu
 
   The agent sees the folder at /links/<name>. It can read and analyse it but cannot change,
   delete, encrypt or run anything in it: the kernel mounts it read-only, no-exec. Only this
@@ -23,6 +26,11 @@ param(
   [string]$Name,
   [string]$Remove,
   [switch]$List,
+  [switch]$Pick,
+  [switch]$InstallMenu,
+  [switch]$UninstallMenu,
+  # keep the window open at the end (used by the Explorer menu)
+  [switch]$Pause,
   [switch]$AllowSecrets,
   [string]$Distro = "gm"
 )
@@ -74,74 +82,121 @@ function Restart-Gm {
   }
 }
 
-if ($List -or (-not $Add -and -not $Remove)) {
-  Install-Helper
-  # also re-mounts anything missing (e.g. after a reboot without the boot hook)
-  Invoke-Root @($helper, "mount-all")
-  Invoke-Root @($helper, "list")
-  return
-}
+function Main {
+  $menuKeys = @("HKCU:\Software\Classes\Directory\shell\GMAgentLink", "HKCU:\Software\Classes\Directory\Background\shell\GMAgentLink")
+  if ($InstallMenu) {
+    # Right-click a folder (or inside one) -> "Link to GM (read-only)". Only for you (HKCU), and
+    # it just runs this script, which shows what it is doing and asks nothing of GM.
+    $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Add `"%V`" -Pause"
+    foreach ($k in $menuKeys) {
+      New-Item -Path "$k\command" -Force | Out-Null
+      Set-ItemProperty -Path $k -Name "MUIVerb" -Value "Link to GM (read-only)"
+      Set-ItemProperty -Path $k -Name "Icon" -Value "imageres.dll,-1028"
+      Set-ItemProperty -Path "$k\command" -Name "(default)" -Value $cmd
+    }
+    Write-Host "Added 'Link to GM (read-only)' to the right-click menu of folders." -ForegroundColor Green
+    Write-Host "On Windows 11 it is under 'Show more options' (or Shift+right-click)." -ForegroundColor DarkGray
+    return
+  }
+  if ($UninstallMenu) {
+    foreach ($k in $menuKeys) { if (Test-Path $k) { Remove-Item -Recurse -Force $k } }
+    Write-Host "Removed the right-click menu entry." -ForegroundColor Green
+    return
+  }
 
-if ($Remove) {
+  if ($Pick -or (-not $Add -and -not $Remove -and -not $List)) {
+    Add-Type -AssemblyName System.Windows.Forms
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "Choose a folder for GM to read (read-only: GM can't change it)"
+    $dlg.ShowNewFolderButton = $false
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK -or -not $dlg.SelectedPath) {
+      Write-Host "No folder chosen." -ForegroundColor Yellow
+      return
+    }
+    $Add = $dlg.SelectedPath
+  }
+
+  if ($List) {
+    Install-Helper
+    # also re-mounts anything missing (e.g. after a reboot without the boot hook)
+    Invoke-Root @($helper, "mount-all")
+    Invoke-Root @($helper, "list")
+    return
+  }
+
+  if ($Remove) {
+    Install-Helper
+    Invoke-Root @($helper, "remove", $Remove.ToLower())
+    Restart-Gm
+    Write-Host "Removed. GM can no longer see it." -ForegroundColor Green
+    return
+  }
+
+  # ---------- add ----------
+  $item = Get-Item -LiteralPath $Add -Force -ErrorAction SilentlyContinue
+  if (-not $item -or -not $item.PSIsContainer) { throw "Not a folder: $Add" }
+  $full = $item.FullName.TrimEnd('\')
+  $lower = $full.ToLower()
+
+  # Places that are never linked: whole drives, Windows, programs, your profile root and
+  # app data, and this repo (its .env holds GM's own keys).
+  $deny = @(
+    $env:WINDIR, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData,
+    (Join-Path $env:USERPROFILE "AppData"), (Join-Path $env:USERPROFILE ".ssh")
+  ) | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\').ToLower() }
+  if ($full -match '^[A-Za-z]:$') { throw "Refusing to link a whole drive ($full). Link the folder you need." }
+  if ($full.StartsWith('\\')) { throw "Network (UNC) paths can't be linked: link a folder on a local drive." }
+  if ($lower -eq $env:USERPROFILE.TrimEnd('\').ToLower()) { throw "Refusing to link your whole profile folder. Link the folder you need." }
+  foreach ($d in $deny) {
+    if ($lower -eq $d -or $lower.StartsWith("$d\")) { throw "Refusing to link a system or app-data folder ($full)." }
+  }
+  $repoLower = $Repo.TrimEnd('\').ToLower()
+  if ($lower -eq $repoLower -or $repoLower.StartsWith("$lower\") -or $lower.StartsWith("$repoLower\")) {
+    throw "Refusing to link GM's own repo or a folder containing it: its .env holds GM's keys."
+  }
+
+  # Anything that looks like a key, password store or wallet stops the link
+  $secretNames = @(".env", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker", ".hippius", ".bittensor", ".npmrc", ".pypirc", ".netrc", ".git-credentials",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "credentials.json", "secrets.json", "wallet.dat", "login data", "cookies", "key4.db", "logins.json")
+  $secretPatterns = @("*.pem", "*.key", "*.pfx", "*.p12", "*.ppk", "*.jks", "*.keystore", "*.kdbx", "*.ovpn", "*.wallet", "wallet*.json", "*seed*.txt", "*mnemonic*", ".env.*", "coldkey*", "hotkey*", "id_*")
+  Write-Host "==> Checking $full for keys and wallets" -ForegroundColor Cyan
+  $scanErrors = @()
+  $found = Get-ChildItem -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable +scanErrors |
+    Where-Object {
+      $n = $_.Name
+      ($secretNames -contains $n.ToLower()) -or ($secretPatterns | Where-Object { $n -like $_ })
+    } | Select-Object -First 15
+  if ($scanErrors.Count -and -not $AllowSecrets) {
+    throw "Some of the folder couldn't be read for the check ($($scanErrors[0].TargetObject)). Link a subfolder, or re-run with -AllowSecrets."
+  }
+  if ($found -and -not $AllowSecrets) {
+    Write-Host "These look like keys, passwords or wallets:" -ForegroundColor Yellow
+    $found | ForEach-Object { Write-Host "  $($_.FullName)" }
+    throw "Not linked. Move them out of the folder, link a subfolder, or re-run with -AllowSecrets if you are sure."
+  }
+
+  if (-not $Name) { $Name = $item.Name }
+  $Name = ($Name.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
+  if ($Name.Length -gt 40) { $Name = $Name.Substring(0, 40).Trim('-') }
+  if (-not $Name) { throw "Give it a name with -Name" }
+
   Install-Helper
-  Invoke-Root @($helper, "remove", $Remove.ToLower())
+  Write-Host "==> Linking $full as /links/$Name (read-only)" -ForegroundColor Cyan
+  Invoke-Root @($helper, "add", $Name, $full)
   Restart-Gm
-  Write-Host "Removed. GM can no longer see it." -ForegroundColor Green
-  return
+  Write-Host ""
+  Write-Host "Linked. In GM: the folder button in the chat box -> Linked folders -> $Name." -ForegroundColor Green
+  Write-Host "Remove it with: powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove $Name" -ForegroundColor DarkGray
 }
 
-# ---------- add ----------
-$item = Get-Item -LiteralPath $Add -Force -ErrorAction SilentlyContinue
-if (-not $item -or -not $item.PSIsContainer) { throw "Not a folder: $Add" }
-$full = $item.FullName.TrimEnd('\')
-$lower = $full.ToLower()
-
-# Places that are never linked: whole drives, Windows, programs, your profile root and
-# app data, and this repo (its .env holds GM's own keys).
-$deny = @(
-  $env:WINDIR, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData,
-  (Join-Path $env:USERPROFILE "AppData"), (Join-Path $env:USERPROFILE ".ssh")
-) | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\').ToLower() }
-if ($full -match '^[A-Za-z]:$') { throw "Refusing to link a whole drive ($full). Link the folder you need." }
-if ($full.StartsWith('\\')) { throw "Network (UNC) paths can't be linked: link a folder on a local drive." }
-if ($lower -eq $env:USERPROFILE.TrimEnd('\').ToLower()) { throw "Refusing to link your whole profile folder. Link the folder you need." }
-foreach ($d in $deny) {
-  if ($lower -eq $d -or $lower.StartsWith("$d\")) { throw "Refusing to link a system or app-data folder ($full)." }
+$failed = $false
+try { Main }
+catch {
+  Write-Host ""
+  Write-Host $_.Exception.Message -ForegroundColor Red
+  $failed = $true
 }
-$repoLower = $Repo.TrimEnd('\').ToLower()
-if ($lower -eq $repoLower -or $repoLower.StartsWith("$lower\") -or $lower.StartsWith("$repoLower\")) {
-  throw "Refusing to link GM's own repo or a folder containing it: its .env holds GM's keys."
+finally {
+  if ($Pause) { Read-Host "Press Enter to close" | Out-Null }
 }
-
-# Anything that looks like a key, password store or wallet stops the link
-$secretNames = @(".env", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker", ".hippius", ".bittensor", ".npmrc", ".pypirc", ".netrc", ".git-credentials",
-  "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "credentials.json", "secrets.json", "wallet.dat", "login data", "cookies", "key4.db", "logins.json")
-$secretPatterns = @("*.pem", "*.key", "*.pfx", "*.p12", "*.ppk", "*.jks", "*.keystore", "*.kdbx", "*.ovpn", "*.wallet", "wallet*.json", "*seed*.txt", "*mnemonic*", ".env.*", "coldkey*", "hotkey*", "id_*")
-Write-Host "==> Checking $full for keys and wallets" -ForegroundColor Cyan
-$scanErrors = @()
-$found = Get-ChildItem -LiteralPath $full -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable +scanErrors |
-  Where-Object {
-    $n = $_.Name
-    ($secretNames -contains $n.ToLower()) -or ($secretPatterns | Where-Object { $n -like $_ })
-  } | Select-Object -First 15
-if ($scanErrors.Count -and -not $AllowSecrets) {
-  throw "Some of the folder couldn't be read for the check ($($scanErrors[0].TargetObject)). Link a subfolder, or re-run with -AllowSecrets."
-}
-if ($found -and -not $AllowSecrets) {
-  Write-Host "These look like keys, passwords or wallets:" -ForegroundColor Yellow
-  $found | ForEach-Object { Write-Host "  $($_.FullName)" }
-  throw "Not linked. Move them out of the folder, link a subfolder, or re-run with -AllowSecrets if you are sure."
-}
-
-if (-not $Name) { $Name = $item.Name }
-$Name = ($Name.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
-if ($Name.Length -gt 40) { $Name = $Name.Substring(0, 40).Trim('-') }
-if (-not $Name) { throw "Give it a name with -Name" }
-
-Install-Helper
-Write-Host "==> Linking $full as /links/$Name (read-only)" -ForegroundColor Cyan
-Invoke-Root @($helper, "add", $Name, $full)
-Restart-Gm
-Write-Host ""
-Write-Host "Linked. In GM: the folder button in the chat box -> Linked folders -> $Name." -ForegroundColor Green
-Write-Host "Remove it with: powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove $Name" -ForegroundColor DarkGray
+if ($failed) { exit 1 }

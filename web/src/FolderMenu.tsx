@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconCheck, IconCopy, IconFolder, IconLock } from './icons'
 
-const LINK_CMD = 'powershell -ExecutionPolicy Bypass -File scripts\\gm-wsl\\link.ps1 -Add "D:\\path\\to\\folder"'
+const LINK_CMD = 'powershell -ExecutionPolicy Bypass -File scripts\\gm-wsl\\link.ps1'
 
 /**
  * The composer's folder button: upload a copy (the agent may change it), or attach a folder
@@ -90,7 +90,8 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                 <p className="fm-note">Every chat in this GM can read linked folders; attaching one tells this chat to use it.</p>
               )}
               <p className="fm-note">
-                {state.links.length ? 'Link another' : 'No linked folders yet. Link one'} from PowerShell on this PC (GM can't add links itself):
+                {state.links.length ? 'Link another' : 'No linked folders yet. Link one'} from PowerShell on this PC (GM can't add links itself). This opens a folder picker; add{' '}
+                <code>-InstallMenu</code> once to get "Link to GM" on Explorer's right-click menu instead:
               </p>
               <div className="fm-cmd">
                 <code>{LINK_CMD}</code>
