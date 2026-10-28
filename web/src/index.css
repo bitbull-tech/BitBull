@@ -875,3 +875,9 @@ button.file-row:hover { background: var(--hover); }
 .fm-cmd { display: flex; align-items: center; gap: 6px; margin: 4px 9px 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .fm-cmd code { flex: 1; font-family: var(--mono); font-size: 11.5px; overflow-wrap: anywhere; }
 .chip.linked { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.fm-note.good, .good { color: var(--ok); }
+.fm-busy { color: var(--text-2); }
+.fm-busy::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1s ease-in-out infinite; vertical-align: 1px; }
+@keyframes pulse-dot { 50% { opacity: 0.3; } }
+.fm-item:disabled { opacity: 0.55; cursor: default; }
+.net-add .btn { display: inline-flex; align-items: center; gap: 6px; }

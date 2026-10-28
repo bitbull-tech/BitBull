@@ -167,20 +167,31 @@ function Main {
       ($secretNames -contains $n.ToLower()) -or ($secretPatterns | Where-Object { $n -like $_ })
     } | Select-Object -First 15
   if ($scanErrors.Count -and -not $AllowSecrets) {
+    $script:exitCode = 3
     throw "Some of the folder couldn't be read for the check ($($scanErrors[0].TargetObject)). Link a subfolder, or re-run with -AllowSecrets."
   }
   if ($found -and -not $AllowSecrets) {
     Write-Host "These look like keys, passwords or wallets:" -ForegroundColor Yellow
     $found | ForEach-Object { Write-Host "  $($_.FullName)" }
+    $script:exitCode = 3   # link-helper.ps1 asks you about these, then retries with -AllowSecrets
     throw "Not linked. Move them out of the folder, link a subfolder, or re-run with -AllowSecrets if you are sure."
   }
 
+  $chosen = [bool]$Name
   if (-not $Name) { $Name = $item.Name }
   $Name = ($Name.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
-  if ($Name.Length -gt 40) { $Name = $Name.Substring(0, 40).Trim('-') }
-  if (-not $Name) { throw "Give it a name with -Name" }
+  if ($Name.Length -gt 36) { $Name = $Name.Substring(0, 36).Trim('-') }
+  if (-not $Name) { $Name = "folder" }
 
   Install-Helper
+  # A name you didn't choose yourself gets -2, -3 ... if it is already taken
+  $taken = @(& wsl.exe -d $Distro -u root --exec $helper list) | ForEach-Object { ($_ -split '\s+')[0] }
+  if ($taken -contains $Name) {
+    if ($chosen) { throw "A link called $Name already exists. Remove it first, or choose another -Name." }
+    $n = 2
+    while ($taken -contains "$Name-$n") { $n++ }
+    $Name = "$Name-$n"
+  }
   Write-Host "==> Linking $full as /links/$Name (read-only)" -ForegroundColor Cyan
   Invoke-Root @($helper, "add", $Name, $full)
   Restart-Gm
@@ -190,6 +201,7 @@ function Main {
 }
 
 $failed = $false
+$script:exitCode = 1
 try { Main }
 catch {
   Write-Host ""
@@ -199,4 +211,4 @@ catch {
 finally {
   if ($Pause) { Read-Host "Press Enter to close" | Out-Null }
 }
-if ($failed) { exit 1 }
+if ($failed) { exit $script:exitCode }

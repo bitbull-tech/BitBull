@@ -8,7 +8,11 @@
 param([string]$Distro = "gm", [switch]$InstallAtLogin, [switch]$Stop)
 $env:WSL_UTF8 = "1"
 
+$helperScript = Join-Path $PSScriptRoot "link-helper.ps1"
 if ($Stop) {
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*link-helper.ps1*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   & wsl.exe -d $Distro --cd ~/SayGMAgent --exec sh -c "docker compose stop" 2>$null
   & wsl.exe --terminate $Distro
   Write-Host "GM stopped."
@@ -18,6 +22,8 @@ if ($Stop) {
 # One plain argument string: Windows PowerShell's Start-Process doesn't quote array items.
 # Docker itself is started by the [boot] command in the distro's /etc/wsl.conf.
 Start-Process wsl.exe -WindowStyle Hidden -ArgumentList "-d $Distro -u root --exec sleep infinity"
+# The link helper: lets GM's page open a folder picker on this PC (it exits at once if already running)
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$helperScript`" -Distro $Distro"
 Write-Host "gm distro starting in the background (this window can be closed afterwards)..."
 $ok = $false
 for ($i = 0; $i -lt 45; $i++) {

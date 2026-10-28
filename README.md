@@ -295,7 +295,7 @@ and build output. In the chat, the paperclip attaches files and the folder butto
 | Use it for | building, storing, anything the agent should change | reviews and analysis of your real files |
 | What the agent gets | its own copy in the workspace (read-write) | your folder in place at `/links/<name>`, **read-only, no-exec** |
 | Your original | never touched | can't be changed, deleted or encrypted (the kernel refuses writes) |
-| How | folder button → Upload a copy, drag and drop, or `copy-in.ps1` for big folders | `link.ps1` on the PC only; GM and the agent can't add, widen or change a link |
+| How | folder button → Upload a copy, drag and drop, or `copy-in.ps1` for big folders | folder button → **Link a folder from this PC…** (or Settings → Folders): a Windows folder picker opens on the PC and you choose there. Also `link.ps1` |
 | Who can see it | that workspace's chats | **every chat in this GM**; attaching it tells a chat to use it |
 
 ```powershell
@@ -311,6 +311,15 @@ powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -InstallMenu
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -List
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove horner
 ```
+
+**Linking with the mouse.** The page can't see your disks and never sends a path. It asks the
+**link helper** (`scripts/gm-wsl/link-helper.ps1`, started hidden by `start.ps1`, listening on
+`http://localhost:8790` only), which opens a Windows folder picker on the PC. Nothing is linked
+unless you pick a folder there; if the folder looks like it holds keys or wallets, a Windows
+Yes/No box asks first. The helper then runs `link.ps1`, so every check below applies. It only
+answers GM's own page (Origin `http://localhost:8787`/`8788`), and the agent can't reach it at all
+(its proxy refuses local addresses). Linking therefore works from the PC GM runs on, not from a
+phone or another computer.
 
 How a link is held shut, layer by layer:
 

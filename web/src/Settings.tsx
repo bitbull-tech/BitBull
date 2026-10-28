@@ -5,8 +5,9 @@ import type { ThemePref } from './theme'
 import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { NetworkPanel } from './network'
+import { FoldersPanel } from './Folders'
 
-type Tab = 'status' | 'integrations' | 'network' | 'config' | 'appearance'
+type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'appearance'
 
 export function Settings({
   cfg,
@@ -62,6 +63,7 @@ export function Settings({
             [
               ['status', 'Status'],
               ['integrations', 'Integrations'],
+              ['folders', 'Folders'],
               ['network', 'Network'],
               ['config', 'Configuration'],
               ['appearance', 'Appearance'],
@@ -177,6 +179,7 @@ export function Settings({
           )}
 
           {tab === 'integrations' && <Integrations />}
+          {tab === 'folders' && <FoldersPanel />}
           {tab === 'network' && <NetworkPanel />}
 
           {tab === 'config' && (

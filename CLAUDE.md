@@ -44,7 +44,8 @@ skills/              skills mirrored into every workspace (.claude/skills) and b
 subagents/           reviewer, challenger, debugger, tester, worker, fact-checker
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
 scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps1, test-stack.ps1,
-                     link.ps1 + gm-links.sh (read-only folder links), copy-in.ps1 (fast copy)
+                     link.ps1 + gm-links.sh (read-only folder links), link-helper.ps1 (lets the UI open
+                     a folder picker on the PC, localhost:8790), copy-in.ps1 (fast copy)
 docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md
 ```
 
@@ -69,7 +70,8 @@ Windows (Tom's machine): edit/commit in `D:\github\SayGMAgent`, ship with
   `settings.local.json` and Atlas workflow specs stay out of git. Everything user-visible goes
   through `redact()`.
 - Keep the sandbox walls: no new host mounts (the one exception is `/links`, read-only, filled only
-  by `scripts/gm-wsl/link.ps1` on the PC; see README → Copy or link?), no docker.sock, nothing that lets the UI change
+  by `scripts/gm-wsl/link.ps1` on the PC, which the UI reaches through `link-helper.ps1`: the folder
+  is always chosen in a Windows dialog, never sent by GM; see README → Copy or link?), no docker.sock, nothing that lets the UI change
   `APP_TOKEN`/sandbox/proxy settings (see `EDITABLE` in settings.ts). New outbound domains go in
   `egress/allowlist.txt` deliberately; one-off needs go through Settings → Network / the agent's
   `request_network_access` (the user decides, never the agent).
