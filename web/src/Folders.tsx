@@ -90,8 +90,7 @@ export function FoldersPanel() {
                       title={`Remove ${r.name}`}
                       disabled={!!busy}
                       onClick={() => {
-                        if (!confirm(`Remove the link "${r.name}"? GM restarts and can no longer read it. Your folder isn't touched.`)) return
-                        setBusy(`Removing ${r.name}…`)
+                        setBusy(`Confirm in the Windows box to remove ${r.name}…`)
                         void run(() => unlinkFolder(r.name, setBusy), `Removed ${r.name}.`)
                       }}
                     >

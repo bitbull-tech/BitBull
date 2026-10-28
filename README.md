@@ -11,7 +11,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - Engine per chat: **OpenCode** (native for every model) or **Claude Agent SDK**
 - Ditto MCP wired into the agent + every turn and skill archived to Ditto
 - Skills in `/skills`, versioned in Git, shared by both engines
-- One Docker image, one data volume; reachable by URL with a bearer token
+- Three small containers (the agent, an allowlist proxy, a localhost-only gateway) and one data folder; reachable by URL with a bearer token
 - `POST /api/v1/chat` for scripts and other agents
 
 New here (or a new agent session)? Start with [CLAUDE.md](CLAUDE.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
@@ -391,25 +391,41 @@ See [docs/GAPS.md](docs/GAPS.md) for what's still missing compared with other co
 
 ## API
 
-All routes need `Authorization: Bearer $APP_TOKEN`.
+Every `/api/*` route needs `Authorization: Bearer $APP_TOKEN`, except `GET /api/health` and
+`GET /api/brand` (+ `/api/brand/asset/:file`), which the login screen needs before there is a
+token. The browser's live streams (EventSource can't send headers) pass the same token as
+`?token=`; that is fine on localhost and is due to move to a header or cookie before GM is put
+behind a tunnel (docs/CLIENTS.md 0.3). `/internal/egress/check` answers only the egress
+container, and `/mcp/gm` only the engines (a token minted at startup).
 
 | Method | Path | |
 |---|---|---|
-| `POST` | `/api/v1/chat` | `{message, model?, engine?, sessionId?}` → `{sessionId, text, tools, errors, usage}` |
+| `POST` | `/api/v1/chat` | `{message, model?, engine?, sessionId?, projectId?, attachments?, plan?}` → `{sessionId, turnId, text, tools, errors, usage}` |
+| `GET` | `/api/health` | `{ok: true}` (public) |
+| `GET` | `/api/config` | Engines, default engine and model, Ditto on/off |
+| `GET` | `/api/status` | Live SayGM / Ditto / sandbox checks (no model tokens spent) |
+| `GET` | `/api/debug` | Tries each SayGM API shape and logs which fail |
 | `GET` | `/api/models` | Live SayGM model list (`?refresh=1`) |
-| `GET/POST` | `/api/sessions` | List / create (`{engine, model}`) |
-| `GET/PATCH/DELETE` | `/api/sessions/:id` | History / rename / delete |
+| `POST` | `/api/models/refresh` | Re-read the model list and reload OpenCode |
+| `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
+| `GET/POST` | `/api/sessions` | List / create (`{engine, model, projectId?}`) |
+| `GET/PATCH/DELETE` | `/api/sessions/:id` | History / rename or move (`{title?, projectId?}`) / delete |
 | `POST` | `/api/sessions/:id/messages` | Start a turn. Streams it as SSE (`text`, `thinking`, `tool_start`, `tool_end`, `error`, `done`, `end`); `?stream=0` returns `{turnId}` instead |
 | `GET` | `/api/sessions/:id/stream` | Attach to a turn and follow it: `?turnId=` (default: the running one, else the last) and `?from=<seq>` to replay what you missed |
 | `POST` | `/api/sessions/:id/abort` | Stop a running turn |
-| `GET` | `/api/brand` | Name, logos and colour overrides (public, no token) |
+| `POST` | `/api/sessions/:id/files` | Upload attachments for a chat (multipart `file`, up to 20) |
+| `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `exchange=last` or an assistant message id; `compact=1` (prompt + reply only); `tools=0`, `activity=0`, `limit=` (chars per tool output) |
+| `GET/POST` | `/api/projects` | List / create a project |
+| `PATCH/DELETE` | `/api/projects/:id` | Update (name, instructions, colour, integrations) / delete |
+| `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |
 | `POST` | `/api/stored/:id/restore` | Pull a stored file back into its workspace and verify it |
 | `POST` | `/api/stored/:id/retry` | Queue a failed upload again |
+| `POST` | `/api/storage/key` | Generate a Hippius encryption key (shown once) |
+| `GET` | `/api/integrations`, `/api/integrations/status` | Atlas / 404 / GitHub: configuration, and live checks |
+| `GET` | `/api/ditto/tools` | The tools Ditto's MCP server offers |
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
-| `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
-| `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
-| `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `exchange=last` or an assistant message id; `compact=1` (prompt + reply only); `tools=0`, `activity=0`, `limit=` (chars per tool output) |
+| `GET` | `/api/brand` | Name, logos and colour overrides (public) |
 | `GET` | `/api/links` | Read-only linked folders (name, path, entries, readOnly, noExec); listed only, never changed |
 | `GET` | `/api/network` | Static allowlist, your approvals, pending/recent agent requests, recently blocked hosts |
 | `POST` | `/api/network/requests/:id` | Answer an agent's request: `{decision: "host" \| "domain" \| "deny"}` |

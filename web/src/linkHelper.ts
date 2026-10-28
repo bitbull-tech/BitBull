@@ -69,9 +69,10 @@ export async function linkFolder(onStep?: (s: string) => void) {
 }
 
 export async function unlinkFolder(name: string, onStep?: (s: string) => void) {
-  onStep?.(`Removing ${name}. GM restarts…`)
+  onStep?.(`Confirm in the Windows box to remove ${name}…`)
   const r = await post('/unlink', { name })
   if (!r.ok) return r
+  onStep?.(`Removed ${name}. GM is restarting…`)
   await waitForGm(name, false)
   return r
 }

@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { assertConfig, config, paths, type EngineId } from "./config.js";
 import "./log.js";
@@ -381,6 +382,12 @@ app.post("/api/sessions/:id/abort", (c) => {
 });
 
 const MAX_UPLOAD = config.uploadMaxMb * 1024 * 1024;
+// Refuse oversized requests before the body is read into memory (the per-file check below runs
+// after parsing). Files dialog: one UI batch (<= 40 MB) or one big file; chat: up to 20 files
+// of at most 25 MB each (the composer's own limit).
+const tooBig = (c: Context) => c.json({ error: `Upload too large for one request (files up to ${config.uploadMaxMb} MB each)` }, 413);
+const filesLimit = bodyLimit({ maxSize: Math.max(MAX_UPLOAD, 50 * 1024 * 1024) + 1024 * 1024, onError: tooBig });
+const chatLimit = bodyLimit({ maxSize: 20 * Math.min(MAX_UPLOAD, 25 * 1024 * 1024) + 1024 * 1024, onError: tooBig });
 const safeName = (n: string) => n.replace(/[^\w.\- ]+/g, "_").replace(/^\.+/, "").slice(0, 120) || "file";
 
 /** Workspace of a project id, or the general workspace for "general". */
@@ -409,7 +416,7 @@ function safeRel(...parts: string[]) {
  * multipart: file (repeated), path (repeated, relative path for each file), target (folder, default "uploads").
  * The UI sends folders in batches, so each request stays small.
  */
-app.post("/api/projects/:id/files", async (c) => {
+app.post("/api/projects/:id/files", filesLimit, async (c) => {
   const ws = workspaceOf(c.req.param("id"));
   if (!ws) return c.json({ error: "project not found" }, 404);
   const body = await c.req.parseBody({ all: true });
@@ -521,7 +528,7 @@ app.get("/api/projects/:id/files", (c) => {
 });
 
 /** Upload files into the agent's workspace so any engine/model can read them with its tools. */
-app.post("/api/sessions/:id/files", async (c) => {
+app.post("/api/sessions/:id/files", chatLimit, async (c) => {
   const s = sessions.get(c.req.param("id"));
   if (!s) return c.json({ error: "not found" }, 404);
   const body = await c.req.parseBody({ all: true });

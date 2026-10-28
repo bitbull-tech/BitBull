@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type LinkedFolder } from './api'
-import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus } from './icons'
-import { helperStatus, linkFolder, onThisPc, type HelperLink } from './linkHelper'
+import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus, IconRefresh } from './icons'
+import { helperStatus, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
 
 const HELPER_CMD = 'powershell -ExecutionPolicy Bypass -STA -File scripts\\gm-wsl\\link-helper.ps1'
 
@@ -44,6 +44,22 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
 
   const info = (name: string) => (helper && helper !== 'checking' ? helper.links.find((h) => h.name === name) : undefined)
   const winPath = (name: string) => info(name)?.path
+
+  const startRefresh = async (name: string) => {
+    setMsg(null)
+    setBusy(`Refreshing ${name}…`)
+    try {
+      const r = await refreshFolder(name, (t) => setBusy(t))
+      if (r.ok) {
+        setMsg({ ok: true, text: `Refreshed ${name}: the agent now sees the folder as it is.` })
+        load()
+      } else setMsg({ ok: false, text: r.message ?? 'Refresh failed' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const startLink = async () => {
     setMsg(null)
@@ -94,29 +110,42 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
             <>
               {state.links.map((l) =>
                 l.readOnly ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    key={l.name}
-                    className="fm-item"
-                    disabled={!!busy}
-                    onClick={() => {
-                      setOpen(false)
-                      onLink(l.name)
-                    }}
-                  >
-                    <IconLock size={15} />
-                    <span>
-                      <b>{l.name}</b>
-                      <small>
-                        {winPath(l.name) ? `${winPath(l.name)} · ` : ''}
-                        {info(l.name)?.mode === 'filtered'
-                          ? 'a read-only copy without its secrets (.env, keys, wallets); refresh it in Settings → Folders.'
-                          : 'read in place: the agent can read and analyse, never change.'}{' '}
-                        {l.entries ?? '?'} items.
-                      </small>
-                    </span>
-                  </button>
+                  <div className="fm-row" key={l.name}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="fm-item"
+                      disabled={!!busy}
+                      onClick={() => {
+                        setOpen(false)
+                        onLink(l.name)
+                      }}
+                    >
+                      <IconLock size={15} />
+                      <span>
+                        <b>{l.name}</b>
+                        <small>
+                          {winPath(l.name) ? `${winPath(l.name)} · ` : ''}
+                          {info(l.name)?.mode === 'filtered'
+                            ? 'a read-only copy without its secrets (.env, keys, wallets). Refresh it after changing the folder.'
+                            : 'read in place: the agent can read and analyse, never change.'}{' '}
+                          {l.entries ?? '?'} items.
+                        </small>
+                      </span>
+                    </button>
+                    {info(l.name)?.mode === 'filtered' && (
+                      <button
+                        type="button"
+                        className="icon-btn sm fm-refresh"
+                        title={`Refresh ${l.name}: re-check the folder for secrets and copy it again`}
+                        aria-label={`Refresh ${l.name}`}
+                        disabled={!!busy}
+                        onClick={() => void startRefresh(l.name)}
+                      >
+                        <IconRefresh size={14} />
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <p className="fm-note bad" key={l.name}>
                     {l.name} is not read-only, so GM won't use it. Remove it in Settings → Folders and link it again.

@@ -14,8 +14,10 @@
 
   Who can reach it: only programs on this PC. The agent can't: its container has no route
   here (the egress proxy refuses private and local addresses). Other web pages can't either:
-  requests must come from GM's own page (Origin http://localhost:8787 / 8788), and even
-  then the worst they can do is open the picker or remove a link, never choose a folder.
+  requests must come from GM's own page (Origin http://localhost:8787 / 8788). Another program
+  on this PC could fake that header, but every action still needs you in a Windows dialog:
+  linking needs you to pick the folder, removing needs you to press OK. Refresh only re-copies
+  a filtered link after a fresh scan for secrets.
 
       powershell -ExecutionPolicy Bypass -STA -File scripts\gm-wsl\link-helper.ps1
 #>
@@ -134,6 +136,13 @@ function Do-Refresh([string]$name) {
 
 function Do-Unlink([string]$name) {
   if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,39}$') { return @{ ok = $false; message = "bad name" } }
+  # Asked here, in Windows: the Origin check stops web pages, not other programs on this PC
+  $owner = New-Owner
+  try {
+    $q = [System.Windows.Forms.MessageBox]::Show($owner, "Remove the GM link '$name'? GM restarts and can no longer read it. Your folder isn't touched.",
+      "GM: remove link?", "OKCancel", "Question", "Button2")
+  } finally { $owner.Close() }
+  if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not removed." } }
   $r = Invoke-Link @("-Remove", $name)
   if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 2) -join " " } }
   return @{ ok = $true; message = "Removed $name" }

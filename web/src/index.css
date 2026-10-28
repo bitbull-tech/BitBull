@@ -881,3 +881,6 @@ button.file-row:hover { background: var(--hover); }
 @keyframes pulse-dot { 50% { opacity: 0.3; } }
 .fm-item:disabled { opacity: 0.55; cursor: default; }
 .net-add .btn { display: inline-flex; align-items: center; gap: 6px; }
+.fm-row { display: flex; align-items: flex-start; gap: 2px; }
+.fm-row .fm-item { flex: 1; min-width: 0; }
+.fm-refresh { margin-top: 8px; flex: none; }
