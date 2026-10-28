@@ -10,7 +10,7 @@ Front matter:
 |---|---|
 | `name` | id the main agent uses (`reviewer`, `debugger`…) |
 | `description` | when to use it; the main agent reads this to decide |
-| `access` | `read` (no file edits) or `write` |
+| `access` | `read`: reads files only, with no edits, no shell and no starting other agents (on both engines); or `write`: full tools |
 | `model` | `inherit` (same as the chat) or a SayGM model id. Override per agent with `SUBAGENT_MODEL_<NAME>` or for all with `SUBAGENT_MODEL` |
 
 A different model family for `reviewer` and `challenger` (e.g. GPT reviewing Claude's work)

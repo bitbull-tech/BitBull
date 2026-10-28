@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { listSubagents, parseSubagent, READ_ONLY_BASH, subagentGuide, subagentsSignature } from "./subagents.js";
+import { CLAUDE_READ_ONLY_DISALLOWED, listSubagents, opencodeAgentAccess, parseSubagent, subagentGuide, subagentsSignature } from "./subagents.js";
 
 const agent = (name: string, extra = "") => `---\nname: ${name}\ndescription: does ${name} things\n${extra}---\nYou are ${name}.\n`;
 
@@ -71,17 +71,21 @@ test("guide only names habits for agents that exist", () => {
   assert.match(subagentGuide("claude", onlyWorker), /Task\/Agent tool/);
 });
 
-// Mirrors OpenCode's evaluation: wildcard match on the whole command, last matching rule wins.
-function bashAllowed(cmd: string) {
-  const rx = (p: string) => new RegExp("^" + p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$", "s");
-  let action = "ask";
-  for (const [p, a] of Object.entries(READ_ONLY_BASH)) if (rx(p).test(cmd)) action = a;
-  return action === "allow";
-}
+test("read-only agents: no shell, no edits, no delegation, on both engines", () => {
+  const ro = opencodeAgentAccess({ access: "read" }, { editAllowed: true, shell: true });
+  assert.equal(ro.permission.bash, "deny");
+  assert.equal(ro.permission.edit, "deny");
+  assert.equal(ro.tools?.task, false);
+  assert.equal(ro.tools?.bash, false);
+  for (const t of ["Bash", "Write", "Edit", "Task", "Agent"]) assert.ok(CLAUDE_READ_ONLY_DISALLOWED.includes(t), t);
+});
 
-test("read-only shell: inspection and tests allowed, writes denied", () => {
-  for (const ok of ["git diff --stat", "git log -5", "ls -la", "rg TODO src", "npm test", "npx tsc --noEmit -p .", "pytest -q", "find . -name '*.ts'"])
-    assert.ok(bashAllowed(ok), `should allow: ${ok}`);
-  for (const no of ["rm -rf src", "sed -i s/a/b/ x.ts", "git checkout main", "git reset --hard", "npm install left-pad", "cat a.ts > b.ts", "echo hi >> x", "find . -name x -delete", "find . -exec rm {} ;", "mv a b", "curl https://x"])
-    assert.ok(!bashAllowed(no), `should deny: ${no}`);
+test("write agents: shell and edits follow the sandbox settings", () => {
+  const rw = opencodeAgentAccess({ access: "write" }, { editAllowed: true, shell: true });
+  assert.equal(rw.permission.bash, "allow");
+  assert.equal(rw.permission.edit, "allow");
+  assert.equal(rw.tools, undefined);
+  const noShell = opencodeAgentAccess({ access: "write" }, { editAllowed: false, shell: false });
+  assert.equal(noShell.permission.bash, "deny");
+  assert.equal(noShell.permission.edit, "deny");
 });

@@ -191,14 +191,22 @@ app.get("/api/activity", (c) => {
 app.get("/api/activity/stream", (c) =>
   streamSSE(c, async (stream) => {
     const after = Number(c.req.query("after") ?? 0);
-    for (const e of recent({ after, limit: 200 })) await stream.writeSSE({ data: JSON.stringify(e), id: String(e.id) });
+    // Subscribe BEFORE reading the backlog, so nothing recorded while the backlog is being
+    // written can fall in the gap; events already in the backlog are skipped by id.
     let closed = false;
-    const queue: string[] = [];
+    const queue: Array<{ id: number; data: string }> = [];
     let wake: (() => void) | null = null;
     const off = subscribe((e) => {
-      queue.push(JSON.stringify(e));
+      queue.push({ id: e.id, data: JSON.stringify(e) });
+      // a stalled client must not grow this without limit: keep the newest
+      if (queue.length > 1000) queue.splice(0, queue.length - 1000);
       wake?.();
     });
+    let sent = after;
+    for (const e of recent({ after, limit: 200 })) {
+      await stream.writeSSE({ data: JSON.stringify(e), id: String(e.id) });
+      sent = Math.max(sent, e.id);
+    }
     stream.onAbort(() => {
       closed = true;
       off();
@@ -212,7 +220,10 @@ app.get("/api/activity/stream", (c) =>
         if (!queue.length && !closed) await stream.writeSSE({ event: "ping", data: "" });
         continue;
       }
-      await stream.writeSSE({ data: queue.shift()! });
+      const next = queue.shift()!;
+      if (next.id <= sent) continue; // already sent as backlog
+      sent = next.id;
+      await stream.writeSSE({ data: next.data, id: String(next.id) });
     }
   }),
 );

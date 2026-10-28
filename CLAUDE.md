@@ -34,7 +34,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   settings.ts        Settings API (EDITABLE allowlist), status probes
   activity.ts        activity feed (memory + logs/activity.jsonl, SSE), redact()
   export.ts          chat/exchange export (full or compact) for other agents
-  subagents.ts       loads subagents/*.md for both engines; READ_ONLY_BASH rules
+  subagents.ts       loads subagents/*.md for both engines; read agents: no edits, no shell, no delegation
   integrations.ts    Atlas, 404, GitHub (+ probes); ditto.ts; models.ts; skills.ts; db.ts
 web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ExportMenu, activity.tsx)
   brand.ts           brand fetch + CSS-token injection;  BrandMark.tsx  logo/initials
@@ -45,7 +45,7 @@ subagents/           reviewer, challenger, debugger, tester, worker, fact-checke
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
 scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps1, test-stack.ps1,
                      link.ps1 + gm-links.sh (read-only folder links), link-helper.ps1 (lets the UI open
-                     a folder picker on the PC, localhost:8790), copy-in.ps1 (fast copy)
+                     a folder picker on the PC, localhost:8790), copy-in.ps1 (fast copy), backup.ps1
 docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md
 ```
 

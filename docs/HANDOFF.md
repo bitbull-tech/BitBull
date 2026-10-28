@@ -50,8 +50,8 @@ conversation of 7–14 Oct 2026. Short version in `CLAUDE.md`.
   archive-ingest, heritage-experience, atlas-studio, taostats-api.
 - **Subagents** (`subagents/*.md`): reviewer, challenger (read-only), debugger, tester, worker
   (write), fact-checker (read-only). Per-agent model via `SUBAGENT_MODEL_<NAME>`. Read-only on
-  OpenCode = edit deny + shell allowlist (`READ_ONLY_BASH`, last-match-wins, redirects denied);
-  on Claude engine = no edit tools and no shell. Disabled in Plan mode. Tests in
+  OpenCode = edit/bash deny and `task` off (a shell allowlist proved bypassable, 28 Oct review: `cat a>b`, `cat x | sh`, `xargs rm`; and a read agent could start a write agent);
+  on Claude engine = no edit tools, no shell, no Task/Agent. Disabled in Plan mode. Tests in
   `server/src/subagents.test.ts` (8 passing).
 - **Ditto**: MCP at https://api.heyditto.ai/mcp (Bearer key, 24 tools). Server archives every
   turn (`DITTO_ARCHIVE=turn`, vendorId-idempotent) and every skill; transient failures retried
@@ -99,6 +99,15 @@ conversation of 7–14 Oct 2026. Short version in `CLAUDE.md`.
   actually sees against the file on disk and recreates the proxy only when they differ.
   Check after any allowlist change:
   `docker compose exec -T egress grep <domain> /etc/squid/allowlist.txt`.
+- 28 Oct: GM's own full-repo review (kimi-k3) found the read-only subagent shell allowlist
+  bypassable (`cat a>b`, `cat x | sh`, `find . | xargs rm`) and that read agents could start
+  write agents. Fixed by removing the shell and delegation from read agents altogether
+  (`opencodeAgentAccess`, `CLAUDE_READ_ONLY_DISALLOWED`), not by patching patterns. Same review:
+  activity SSE replay/subscribe race (now subscribe-first, bounded queue), stored-file restore
+  trusting `rel_path` from agent-writable `agent.db` (now `insideWorkspace()`), approved
+  egress domains persisted in agent-writable `/data` (now memory-only), CI not running tests
+  (now does), no backup of `gm-data` (`backup.ps1`). Lesson: anything the server reads back
+  from `/data` is agent-controlled input.
 - Windows PowerShell 5.1: `Start-Process -ArgumentList @(...)` doesn't quote items → pass one
   string. `{…}` in a `wsl … sh -c "…"` line is parsed as a script block → use a here-string piped
   to `sh`. Native-arg quoting differs between PS 5.1 and 7 → deploy writes a temp `.cmd`.

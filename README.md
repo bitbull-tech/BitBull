@@ -168,6 +168,19 @@ powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -InstallAtLogi
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -Stop
 ```
 
+### Backups
+
+Hippius mirrors uploads only. To keep everything else (chats in `agent.db`, projects,
+settings), back up the data folder to a file on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\backup.ps1            # to Documents\GM backups
+powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\backup.ps1 -Keep 10   # and keep only the newest 10
+```
+
+The file includes any keys you saved in the UI, so keep it private. The script header shows
+how to restore.
+
 ### Trying a branch before you merge it
 
 A second, isolated GM on another port, with its own containers and its own empty data
@@ -275,8 +288,9 @@ The static list in `egress/allowlist.txt` is always allowed. For anything else:
   started (one click to allow) and what you've approved (one click to remove).
 - Approvals apply within seconds and need no redeploy: squid asks GM about any host not on the
   static list (`egress/gm-approved.sh` → `/internal/egress/check`, answered only for the egress
-  container), caching a yes for 15 s. They're kept in `/data/egress-approved.json`, read at
-  startup (so an edit to that file, by anyone, does nothing until GM restarts).
+  container), caching a yes for 15 s. They last until GM restarts and are deliberately never
+  saved: everything in `/data` is writable by the agent's shell, so a saved list could have a
+  domain planted in it. Domains you always need go in `egress/allowlist.txt`.
 - Private and local addresses stay refused whatever is approved. Anything you allow is
   somewhere the agent could send data, so prefer one host over a whole domain.
 - Domains you'll always need still belong in `egress/allowlist.txt` (in git, reviewed).

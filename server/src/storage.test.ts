@@ -152,3 +152,19 @@ test("nothing is mirrored while storage is switched off", () => {
   reload();
   assert.equal(storage.storageEnabled(), true);
 });
+
+test("stored paths from the database can't leave the workspace", async () => {
+  const { insideWorkspace } = await import("./storage.js");
+  const { symlinkSync } = await import("node:fs");
+  const ws = mkdtempSync(path.join(tmpdir(), "gm-ws-"));
+  mkdirSync(path.join(ws, "uploads"));
+  assert.equal(insideWorkspace(ws, "uploads/a.txt"), path.join(ws, "uploads", "a.txt"));
+  assert.equal(insideWorkspace(ws, "new/dir/b.txt"), path.join(ws, "new", "dir", "b.txt"));
+  for (const bad of ["../x", "uploads/../../x", "/etc/passwd", "C:/x", "", "a\0b", "."]) {
+    assert.throws(() => insideWorkspace(ws, bad), Error, JSON.stringify(bad));
+  }
+  // a symlinked folder pointing out of the workspace
+  symlinkSync(tmpdir(), path.join(ws, "out"));
+  assert.throws(() => insideWorkspace(ws, "out/evil.txt"));
+  assert.throws(() => insideWorkspace(ws, "out/deeper/evil.txt"));
+});

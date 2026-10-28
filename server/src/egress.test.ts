@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -53,9 +53,8 @@ test("an agent request waits for the user; host approval lets only that host thr
   assert.equal(res.ok, true);
   assert.equal(eg.proxyCheck("api.cwgc.org"), true);
   assert.equal(eg.proxyCheck("www.cwgc.org"), false);
-  // persisted
-  const saved = JSON.parse(readFileSync(path.join(dir, "egress-approved.json"), "utf8"));
-  assert.deepEqual(saved.map((a: { host: string; scope: string }) => [a.host, a.scope]), [["api.cwgc.org", "host"]]);
+  // in memory only: nothing the agent's shell could edit is written
+  assert.equal(existsSync(path.join(dir, "egress-approved.json")), false);
 });
 
 test("domain approval covers subdomains; revoke removes it", async () => {

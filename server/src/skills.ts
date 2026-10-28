@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { config, paths, ROOT } from "./config.js";
 import { projects, workspaceFor } from "./db.js";
@@ -32,7 +32,14 @@ function parseFrontmatter(md: string): Record<string, string> {
 export function listSkills(): SkillInfo[] {
   if (!existsSync(config.skillsDir)) return [];
   return readdirSync(config.skillsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && existsSync(path.join(config.skillsDir, d.name, "SKILL.md")))
+    .filter((d) => {
+      // a folder (or anything else) named SKILL.md must not break startup
+      try {
+        return d.isDirectory() && statSync(path.join(config.skillsDir, d.name, "SKILL.md")).isFile();
+      } catch {
+        return false;
+      }
+    })
     .map((d) => {
       const md = readFileSync(path.join(config.skillsDir, d.name, "SKILL.md"), "utf8");
       const fm = parseFrontmatter(md);

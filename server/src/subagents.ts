@@ -11,7 +11,7 @@ import { config } from "./config.js";
 export interface Subagent {
   name: string;
   description: string;
-  /** read = no file edits and only inspection/test shell commands; write = full tools */
+  /** read = read files only (no edits, no shell, no delegation); write = full tools */
   access: "read" | "write";
   /** "inherit" or a SayGM model id */
   model: string;
@@ -105,29 +105,27 @@ export function checkSubagentModels(known: Set<string>, list = listSubagents()) 
 }
 
 /**
- * Shell rules for read-access subagents (OpenCode bash permission patterns; last match wins).
- * Everything is denied except inspection and test commands, so a reviewer running in parallel
- * with a worker can look and run tests but not rewrite, move, delete, checkout or install.
+ * What a subagent may use, per engine. Read-only means no file edits, NO SHELL and no further
+ * delegation, on both engines:
+ *  - Shell allowlists can't be made safe (redirects without spaces, pipes into `sh`, `xargs rm`,
+ *    `find -exec`, and the engine's own parsing all differ), so read agents get none. They read
+ *    with the file tools; the caller passes them the diff.
+ *  - A read agent that could start a write agent (task / Task / Agent) would have write access
+ *    by proxy, so delegation is off for them.
  */
-export const READ_ONLY_BASH: Record<string, "allow" | "deny"> = {
-  "*": "deny",
-  ...Object.fromEntries(
-    [
-      "git status*", "git diff*", "git log*", "git show*", "git blame*", "git ls-files*", "git grep*", "git branch", "git branch -a*", "git branch --list*", "git rev-parse*",
-      "ls*", "pwd", "cat *", "head *", "tail *", "wc *", "grep *", "rg *", "find *", "tree*", "stat *", "file *", "which *", "du *", "diff *",
-      "npm test*", "npm run test*", "npm run typecheck*", "npm run lint*", "npx tsc --noEmit*", "node --test*",
-      "pytest*", "python -m pytest*", "python3 -m pytest*", "go test*", "go vet*", "cargo test*", "cargo check*",
-    ].map((p) => [p, "allow" as const]),
-  ),
-  // allowed prefixes that can still write or run arbitrary programs
-  "find * -delete*": "deny",
-  "find * -exec*": "deny",
-  "find * -execdir*": "deny",
-  "find * -fprint*": "deny",
-  "* > *": "deny",
-  "* >> *": "deny",
-  "* | tee*": "deny",
-};
+export function opencodeAgentAccess(a: Pick<Subagent, "access">, opts: { editAllowed: boolean; shell: boolean }) {
+  const write = a.access === "write";
+  return {
+    permission: {
+      edit: write && opts.editAllowed ? ("allow" as const) : ("deny" as const),
+      bash: write && opts.shell ? ("allow" as const) : ("deny" as const),
+      webfetch: "allow" as const,
+    },
+    ...(write ? {} : { tools: { bash: false, task: false, edit: false, write: false, patch: false } }),
+  };
+}
+
+export const CLAUDE_READ_ONLY_DISALLOWED = ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "BashOutput", "KillShell", "Task", "Agent"];
 
 /** Guidance appended to the system prompt so the main agent actually delegates. */
 export function subagentGuide(engine: "opencode" | "claude", list = listSubagents()) {
@@ -143,7 +141,7 @@ export function subagentGuide(engine: "opencode" | "claude", list = listSubagent
     "\n## Subagents",
     "",
     `You can delegate to specialist subagents with the ${tool}. Each runs in its own context and returns a report; you see only the report, so give each a complete, self-contained brief (goal, relevant files, how to verify, what to return).`,
-    "Start independent subagents in parallel by issuing several task calls in the same response. Never give two write-access agents the same files. Read-only agents can inspect and run tests but cannot change files.",
+    "Start independent subagents in parallel by issuing several task calls in the same response. Never give two write-access agents the same files. Read-only agents can read files but have no shell and cannot change files or start other agents: put the diff or the exact files in their brief, and use `tester` to run tests.",
     "",
     ...list.map((a) => `- **${a.name}** (${a.access === "write" ? "can edit" : "read-only"}): ${a.description}`),
     ...(habits.length ? ["", `Default habits: ${habits.join("; ")}. Act on their findings or explain why not.`] : []),

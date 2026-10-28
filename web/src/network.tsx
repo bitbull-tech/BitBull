@@ -146,7 +146,7 @@ export function NetworkPanel() {
     <div className="net-panel">
       <p className="muted small">
         The agent reaches the internet only through the egress proxy. The list in <code>egress/allowlist.txt</code> is always allowed; anything
-        else needs your approval here. Approvals apply within seconds, with no redeploy, and are kept in the data folder.
+        else needs your approval here. Approvals apply within seconds and last until GM restarts (a deploy, a folder link change or a reboot). They are deliberately not saved, because anything saved where GM keeps its data could be edited by the agent. Add domains you always need to egress/allowlist.txt and deploy.
       </p>
 
       <h3>Approved by you</h3>

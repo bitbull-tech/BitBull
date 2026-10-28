@@ -1,4 +1,4 @@
-import { listSubagents } from "../subagents.js";
+import { CLAUDE_READ_ONLY_DISALLOWED, listSubagents } from "../subagents.js";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
@@ -60,8 +60,8 @@ export const claudeEngine: AgentEngine = {
             prompt: a.prompt,
             // Only models SayGM serves on its Anthropic API can run in this engine
             model: sm && sm.api === "anthropic" ? sm.id : "inherit",
-            // read-only: no file edits and no shell (this engine can't limit shell to inspection commands)
-            ...(a.access === "read" ? { disallowedTools: ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "BashOutput", "KillShell"] } : {}),
+            // read-only: no file edits, no shell, no starting other agents
+            ...(a.access === "read" ? { disallowedTools: CLAUDE_READ_ONLY_DISALLOWED } : {}),
           },
         ];
       }),

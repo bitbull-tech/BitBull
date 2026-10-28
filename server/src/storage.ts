@@ -15,7 +15,7 @@
  * own at-rest encryption doesn't say who can read a chunk on a storage miner.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { open, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -259,7 +259,13 @@ export function resumeMirror(workspaceOf: (projectId: string | null) => string |
   for (const row of pending) {
     const ws = workspaceOf(row.project_id);
     if (!ws) continue;
-    const absPath = path.join(ws, row.rel_path);
+    let absPath: string;
+    try {
+      absPath = insideWorkspace(ws, row.rel_path);
+    } catch (e) {
+      storedFiles.update(row.id, { status: "failed", error: e instanceof Error ? e.message : String(e) });
+      continue;
+    }
     if (!existsSync(absPath)) {
       storedFiles.update(row.id, { status: "failed", error: "the local file is gone" });
       continue;
@@ -277,6 +283,27 @@ export function resumeMirror(workspaceOf: (projectId: string | null) => string |
 // ---------- restore ----------
 
 /**
+ * rel_path comes from agent.db, which the agent's shell can write (GAPS #11), so it is never
+ * trusted: it must be a plain relative path that stays inside the workspace, including after
+ * resolving symlinks in the folders on the way.
+ */
+export function insideWorkspace(workspace: string, rel: string): string {
+  if (!rel || typeof rel !== "string" || rel.includes("\0") || path.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) {
+    throw new Error(`refusing an unsafe stored path: ${JSON.stringify(rel)}`);
+  }
+  const root = path.resolve(workspace);
+  const dest = path.resolve(root, rel);
+  if (!dest.startsWith(root + path.sep)) throw new Error(`refusing a stored path outside the workspace: ${JSON.stringify(rel)}`);
+  // the nearest existing folder must also resolve inside the workspace (no symlinked folders out)
+  let dir = path.dirname(dest);
+  while (!existsSync(dir) && dir.startsWith(root + path.sep)) dir = path.dirname(dir);
+  const realRoot = realpathSync(root);
+  const realDir = realpathSync(dir);
+  if (realDir !== realRoot && !realDir.startsWith(realRoot + path.sep)) throw new Error(`refusing a stored path that leaves the workspace through a link: ${JSON.stringify(rel)}`);
+  return dest;
+}
+
+/**
  * Pull a stored file back into a workspace and verify it. The SHA-256 is of the *plaintext*,
  * so a match proves the round trip through Hippius and the encryption were both clean.
  */
@@ -286,7 +313,7 @@ export async function restoreFile(row: StoredFileRow, workspace: string): Promis
   const tmpDir = path.join(config.dataDir, "tmp");
   mkdirSync(tmpDir, { recursive: true });
   const tmp = path.join(tmpDir, `restore-${randomUUID()}`);
-  const dest = path.join(workspace, row.rel_path);
+  const dest = insideWorkspace(workspace, row.rel_path);
   try {
     const res = await s3().send(new GetObjectCommand({ Bucket: config.storage.bucket, Key: row.key }));
     if (!res.Body) throw new Error("empty response from Hippius");

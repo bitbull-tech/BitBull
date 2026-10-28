@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { record } from "./activity.js";
 import { config, DATA_DIR, ROOT } from "./config.js";
@@ -18,9 +18,11 @@ import { config, DATA_DIR, ROOT } from "./config.js";
  * domain + why. The user sees a card with Allow / Allow the whole domain / Deny; the tool
  * call waits for that answer.
  *
- * Approvals live in DATA_DIR/egress-approved.json. Like every other file in DATA_DIR the
- * agent's shell could edit it (GAPS.md #11: same user as the server); the guard against a
- * *careless* agent is that the tool only ever asks.
+ * Approvals live in memory only and end when GM restarts. They used to be saved in DATA_DIR,
+ * but everything there is writable by the agent's shell (GAPS.md #11: same user as the
+ * server), so a prompt-injected agent could have planted a domain that the next restart
+ * would quietly allow. Domains needed for good belong in egress/allowlist.txt (in git,
+ * reviewed, and outside the agent's reach).
  */
 
 export type Scope = "host" | "domain";
@@ -57,24 +59,36 @@ const WAIT_MS = Math.max(30, Number(process.env.NETWORK_REQUEST_TIMEOUT_S ?? 300
 /** a host the user just denied isn't asked about again for this long */
 const DENY_MEMORY_MS = 10 * 60 * 1000;
 
-let approved: Approval[] = load();
+let approved: Approval[] = [];
+noteOldFile();
 const requests: AccessRequest[] = [];
 const waiters = new Map<string, Array<(r: AccessRequest) => void>>();
 const blocked = new Map<string, Blocked>();
 const listeners = new Set<() => void>();
 
-function load(): Approval[] {
+/** The old on-disk list is never loaded; say what was in it, so nothing is lost silently. */
+function noteOldFile() {
   try {
+    if (!existsSync(FILE)) return;
     const v = JSON.parse(readFileSync(FILE, "utf8"));
-    return Array.isArray(v) ? v.filter((a) => a && typeof a.host === "string" && validHost(a.host)) : [];
+    const hosts = Array.isArray(v) ? v.filter((a) => a && typeof a.host === "string" && validHost(a.host)).map((a) => (a.scope === "domain" ? `*.${a.host}` : a.host)) : [];
+    if (hosts.length)
+      setTimeout(
+        () =>
+          record({
+            level: "warn",
+            source: "network",
+            message: `Approved domains no longer survive a restart; these were not restored: ${hosts.join(", ")}`,
+            detail: `Approve them again when the agent asks, or add the ones you always need to egress/allowlist.txt and deploy. The old list (${FILE}) can be deleted.`,
+          }),
+        0,
+      );
   } catch {
-    return [];
+    /* unreadable: ignore */
   }
 }
 function save() {
-  const tmp = `${FILE}.tmp`;
-  writeFileSync(tmp, JSON.stringify(approved, null, 2), { mode: 0o600 });
-  renameSync(tmp, FILE);
+  /* in memory only, by design (see the top of this file) */
 }
 function changed() {
   for (const fn of listeners) {

@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { checkSubagentModels, listSubagents, READ_ONLY_BASH, subagentsSignature } from "../subagents.js";
+import { checkSubagentModels, listSubagents, opencodeAgentAccess, subagentsSignature } from "../subagents.js";
 import { createServer } from "node:net";
 import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
@@ -117,12 +117,8 @@ function buildConfig(models: ModelInfo[]) {
               mode: "subagent",
               prompt: a.prompt,
               ...(sm ? { model: `${providerFor(sm)}/${sm.id}` } : {}),
-              permission: {
-                edit: a.access === "write" && allow ? "allow" : "deny",
-                // read-only agents: inspection and test commands only
-                bash: !shellAllowed() ? "deny" : a.access === "write" ? "allow" : READ_ONLY_BASH,
-                webfetch: "allow",
-              },
+              // read-only agents: file reading only (no shell, no edits, no further delegation)
+              ...opencodeAgentAccess(a, { editAllowed: allow, shell: shellAllowed() }),
             },
           ];
         }),
