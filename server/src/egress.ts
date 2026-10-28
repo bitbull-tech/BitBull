@@ -155,14 +155,18 @@ let egressIps: { at: number; ips: string[] } = { at: 0, ips: [] };
 export async function fromEgress(remote: string | undefined) {
   if (!proxied() || !remote) return false;
   const ip = remote.replace(/^::ffff:/, "");
-  if (Date.now() - egressIps.at > 60_000 || !egressIps.ips.length) {
+  const refresh = async () => {
     try {
       const host = new URL(config.sandbox.egressProxy).hostname;
       egressIps = { at: Date.now(), ips: (await lookup(host, { all: true })).map((a) => a.address) };
     } catch {
       egressIps = { at: Date.now(), ips: [] };
     }
-  }
+  };
+  if (Date.now() - egressIps.at > 60_000 || !egressIps.ips.length) await refresh();
+  // an unknown caller may be the proxy with a new address (recreated on deploy): look again,
+  // at most once every few seconds so a stranger can't make this a DNS hammer
+  if (!egressIps.ips.includes(ip) && Date.now() - egressIps.at > 3_000) await refresh();
   return egressIps.ips.includes(ip);
 }
 

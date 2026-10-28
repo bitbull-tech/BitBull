@@ -10,10 +10,10 @@ import { proxied, requestAccess } from "./egress.js";
  * GM's own MCP server, attached to both engines as "gm": tools that need the user or the
  * server rather than the sandbox. Today: request_network_access.
  *
- * Reached on the loopback interface only, with a token minted at startup (never written
- * anywhere). The token is not a security boundary against the agent itself (it could read
- * it from its engine's config); it stops anything else on the network from calling in.
- * The tools only ever *ask* the user.
+ * Served by the main listener (the engines reach it at 127.0.0.1) and guarded by a token
+ * minted at startup, never written anywhere. The token is not a boundary against the agent
+ * itself (it is in its engine's config); it stops anything else from calling in. x-gm-session
+ * is a hint for attribution, not an identity. The tools only ever *ask* the user.
  */
 
 export const MCP_PATH = "/mcp/gm";

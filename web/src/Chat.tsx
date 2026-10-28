@@ -452,6 +452,28 @@ function useCopy() {
   return [copied, copy] as const
 }
 
+/**
+ * Images in replies are never fetched by the browser: a reply the agent wrote could point at
+ * https://evil/?<data> and the browser sits outside the egress proxy. Shown as a link instead
+ * (the page's CSP blocks remote images anyway; this keeps the UI tidy and says why).
+ */
+function MdImage({ src, alt }: { src?: string; alt?: string }) {
+  const s = src ?? ''
+  return (
+    <span className="md-img" title="Images in replies aren't loaded (they could carry data out of the sandbox). Open the link to see it.">
+      <IconFile size={13} /> {alt || 'image'}
+      {s && !s.startsWith('data:') && (
+        <>
+          {' '}
+          <a href={s} target="_blank" rel="noreferrer">
+            {s.length > 60 ? s.slice(0, 57) + '…' : s}
+          </a>
+        </>
+      )}
+    </span>
+  )
+}
+
 function CodeBlock({ children }: { children?: ReactNode }) {
   const ref = useRef<HTMLPreElement>(null)
   const [copied, copy] = useCopy()
@@ -529,7 +551,7 @@ function MessageView({ m, sessionId }: { m: ViewMessage; sessionId?: string }) {
         )}
         <div className="md" data-askable="reply">
           {m.content ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: (p) => <a {...p} target="_blank" rel="noreferrer" /> }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: (p) => <a {...p} target="_blank" rel="noreferrer" />, img: MdImage }}>
               {m.content}
             </ReactMarkdown>
           ) : m.streaming && !m.tools.length ? (

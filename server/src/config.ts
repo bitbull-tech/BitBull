@@ -25,15 +25,62 @@ export type EngineId = "opencode" | "claude";
  * They're applied to process.env before the config below is built, and again live on save.
  */
 export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, "data"));
+/**
+ * The only keys the UI may set, and the only keys ever read from settings.local.json.
+ * That file lives in DATA_DIR, which the agent's shell can write, so anything not listed here
+ * is ignored (and reported) rather than applied: APP_TOKEN, sandbox/proxy settings, paths,
+ * and service URLs stay .env-only. URLs are excluded on purpose: changing where a key is sent
+ * is as good as reading the key.
+ */
+export const EDITABLE: Record<string, { options?: string[] }> = {
+  SAYGM_API_KEY: {},
+  DITTO_API_KEY: {},
+  DITTO_ARCHIVE: { options: ["turn", "off"] },
+  DEFAULT_ENGINE: { options: ["opencode", "claude"] },
+  DEFAULT_MODEL: {},
+  SMALL_MODEL: {},
+  SUBAGENT_MODEL: {},
+  OWNER_NAME: {},
+  GITHUB_TOKEN: {},
+  GIT_USER_NAME: {},
+  GIT_USER_EMAIL: {},
+  ATLAS_API_KEY: {},
+  FOUR04_API_KEY: {},
+  TAOSTATS_API_KEY: {},
+  HIPPIUS_ACCESS_KEY: {},
+  HIPPIUS_SECRET_KEY: {},
+  HIPPIUS_BUCKET: {},
+  // Changing this makes everything already stored unreadable, so the UI confirms first
+  HIPPIUS_ENCRYPTION_KEY: {},
+  STORAGE_MIRROR: { options: ["uploads", "off"] },
+  HERITAGE_LIKENESS_POLICY: { options: ["ground-only", "private-likeness"] },
+  UPLOAD_MAX_MB: {},
+  ENABLE_WEB_SEARCH: { options: ["true", "false"] },
+  ENABLE_LSP: { options: ["true", "false"] },
+};
+
 export const overridesFile = path.join(DATA_DIR, "settings.local.json");
 /** process.env as it came from .env / the container, before any UI overrides */
 const baseEnv: Record<string, string | undefined> = { ...process.env };
 
+let warnedIgnored = false;
 export function readOverrides(): Record<string, string> {
   try {
     if (!existsSync(overridesFile)) return {};
     const raw = JSON.parse(readFileSync(overridesFile, "utf8"));
-    return raw && typeof raw === "object" ? Object.fromEntries(Object.entries(raw).filter(([, v]) => typeof v === "string")) as Record<string, string> : {};
+    if (!raw || typeof raw !== "object") return {};
+    const out: Record<string, string> = {};
+    const ignored: string[] = [];
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v !== "string") continue;
+      if (k in EDITABLE) out[k] = v;
+      else ignored.push(k);
+    }
+    if (ignored.length && !warnedIgnored) {
+      warnedIgnored = true;
+      console.error(`[config] settings.local.json has keys the UI can't set; ignored: ${ignored.join(", ")} (only .env may set them; something other than the UI wrote this file)`);
+    }
+    return out;
   } catch (e) {
     console.error("[config] settings.local.json is unreadable; ignoring it:", e instanceof Error ? e.message : e);
     return {};

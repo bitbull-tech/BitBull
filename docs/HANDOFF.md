@@ -108,6 +108,12 @@ conversation of 7–14 Oct 2026. Short version in `CLAUDE.md`.
   egress domains persisted in agent-writable `/data` (now memory-only), CI not running tests
   (now does), no backup of `gm-data` (`backup.ps1`). Lesson: anything the server reads back
   from `/data` is agent-controlled input.
+- 28 Oct (second review, Claude Fable 5.1): **settings.local.json applied every key**, so an
+  agent writing `APP_TOKEN` there took over GM at the next reload (confirmed, fixed: only
+  `EDITABLE` keys are read, URLs removed from `EDITABLE`); the browser was an egress bypass via
+  markdown images / brand CSS (fixed: CSP + images shown as links); Hippius keys weren't
+  redacted (fixed); a failed upload read crashed the server (fixed). Still structural: the
+  agent can read `APP_TOKEN` from the server's environment (GAPS #11).
 - Windows PowerShell 5.1: `Start-Process -ArgumentList @(...)` doesn't quote items → pass one
   string. `{…}` in a `wsl … sh -c "…"` line is parsed as a script block → use a here-string piped
   to `sh`. Native-arg quoting differs between PS 5.1 and 7 → deploy writes a temp `.cmd`.

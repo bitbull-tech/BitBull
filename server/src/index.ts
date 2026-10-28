@@ -40,6 +40,11 @@ import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 assertConfig();
 
 const app = new Hono();
+app.onError((err, c) => {
+  if (err instanceof z.ZodError) return c.json({ error: "bad request", issues: err.issues.map((i) => `${i.path.join(".")}: ${i.message}`) }, 400);
+  console.error("[server]", err);
+  return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+});
 
 // ---------- auth: single owner bearer token (header; ?token= only for the SSE streams) ----------
 function tokenOk(given: string | undefined) {
@@ -705,6 +710,27 @@ app.post("/api/v1/chat", async (c) => {
 
 // ---------- web UI ----------
 if (existsSync(config.webDist)) {
+  // The browser must not become a way round the egress proxy: a reply or brand.json the agent
+  // controls could otherwise make the browser fetch https://evil/?<data>. Images and media may
+  // only come from GM itself (or data: URIs); scripts only from GM; connections to GM and the
+  // link helper on this PC; fonts from Google as index.html does.
+  const CSP = [
+    "default-src 'self'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' http://localhost:8790 http://127.0.0.1:8790",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+  app.use("/*", async (c, next) => {
+    await next();
+    if (!c.req.path.startsWith("/api/")) c.header("content-security-policy", CSP);
+  });
   app.use("/*", serveStatic({ root: path.relative(process.cwd(), config.webDist) }));
   const index = readFileSync(path.join(config.webDist, "index.html"), "utf8");
   app.get("*", (c) => c.html(index));

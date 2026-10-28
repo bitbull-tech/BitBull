@@ -218,18 +218,30 @@ can also be set from the UI. They're saved on the server in `data/settings.local
 `set here` or `default`.
 
 Access and sandbox settings (`APP_TOKEN`, `ALLOW_*`, `GM_SANDBOX`, permissions, ports,
-paths, proxy) can only be changed in `.env` plus a deploy, so a browser session can't
-lower the walls. The UI can't write your Windows `.env` (the container can't see Windows,
-by design); copy a value there yourself if you want it to be the long-term default.
+paths, proxy) and every service URL can only be changed in `.env` plus a deploy, so a browser
+session can't lower the walls or redirect a key to another host. `settings.local.json` lives
+in the data folder, which the agent's shell can write, so GM reads only the UI-editable keys
+from it and ignores (and reports) anything else. The UI can't write your Windows `.env` (the
+container can't see Windows, by design); copy a value there yourself if you want it to be the
+long-term default.
 
-GM's own credentials (SayGM, Ditto, Atlas, 404, `APP_TOKEN`) are blanked in every shell the
-agent starts, and any known key that turns up in a tool's output is replaced with
-`[REDACTED]` before the model, the chat history or Ditto sees it
+GM's own credentials (SayGM, Ditto, Atlas, 404, Hippius, `APP_TOKEN`) are blanked in every
+shell the **OpenCode** engine starts, and any known key that turns up in a tool's output, a
+reply, an export or the Ditto archive is replaced with `[REDACTED]`
 ([`agent/opencode-plugin/gm-guard.js`](agent/opencode-plugin/gm-guard.js) for OpenCode; the
 server redacts again for both engines). Keys meant for the agent (`GITHUB_TOKEN`,
-`TAOSTATS_API_KEY`) stay available to it but are masked in output. This prevents accidental
-leaks; it isn't a hard wall, because the shell runs as the same user as GM (GAPS.md item 11).
-Use scoped keys where the service offers them.
+`TAOSTATS_API_KEY`) stay available to it but are masked in output. The **Claude Agent SDK**
+engine has no equivalent of gm-guard: its shell inherits the SayGM key, and only the server's
+redaction stands between it and the chat. This all prevents accidental leaks; it isn't a hard
+wall, because the shell runs as the same user as GM and can read the server's environment,
+`APP_TOKEN` included, and with the token it can call GM's own API (approve its own domains,
+change UI settings, read chats). That is GAPS.md item 11, the next structural fix: a separate
+tool container with no secrets. Until then, treat GM as safe against a careless agent, not a
+determined one, and use scoped keys where the service offers them.
+
+The page itself is not a way round the proxy: a Content-Security-Policy lets the browser load
+images, media and scripts only from GM, so a reply or brand file that points at
+`https://evil/?<data>` is never fetched. Images in replies are shown as links.
 
 ## Activity and errors
 

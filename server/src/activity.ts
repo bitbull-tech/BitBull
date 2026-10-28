@@ -38,6 +38,9 @@ const secrets = () =>
     config.integrations.four04.apiKey,
     config.integrations.github.token,
     config.integrations.taostats.apiKey,
+    config.storage.accessKey,
+    config.storage.secretKey,
+    config.storage.encryptionKey,
   ].filter((s) => s && s.length > 6);
 export const redact = (s: string) => secrets().reduce((acc, k) => acc.split(k).join("[REDACTED]"), s);
 

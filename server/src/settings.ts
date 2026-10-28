@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { config, githubTokenKind, paths, readOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides } from "./config.js";
+import { config, githubTokenKind, paths, readOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
 import { record } from "./activity.js";
 import { resetDitto } from "./ditto.js";
 import { probeDitto } from "./ditto.js";
@@ -33,36 +33,7 @@ export interface SettingRow {
  * access or the sandbox (APP_TOKEN, ALLOW_*, GM_SANDBOX, permissions, ports, paths, proxy),
  * so a compromised browser session can't switch off the walls.
  */
-export const EDITABLE: Record<string, { options?: string[] }> = {
-  SAYGM_API_KEY: {},
-  DITTO_API_KEY: {},
-  DITTO_ARCHIVE: { options: ["turn", "off"] },
-  DEFAULT_ENGINE: { options: ["opencode", "claude"] },
-  DEFAULT_MODEL: {},
-  SMALL_MODEL: {},
-  SUBAGENT_MODEL: {},
-  OWNER_NAME: {},
-  GITHUB_TOKEN: {},
-  GIT_USER_NAME: {},
-  GIT_USER_EMAIL: {},
-  ATLAS_API_KEY: {},
-  ATLAS_MCP_URL: {},
-  FOUR04_API_KEY: {},
-  FOUR04_API_BASE: {},
-  FOUR04_MCP_URL: {},
-  TAOSTATS_API_KEY: {},
-  HIPPIUS_ACCESS_KEY: {},
-  HIPPIUS_SECRET_KEY: {},
-  HIPPIUS_BUCKET: {},
-  HIPPIUS_S3_ENDPOINT: {},
-  // Changing this makes everything already stored unreadable, so the UI confirms first
-  HIPPIUS_ENCRYPTION_KEY: {},
-  STORAGE_MIRROR: { options: ["uploads", "off"] },
-  HERITAGE_LIKENESS_POLICY: { options: ["ground-only", "private-likeness"] },
-  UPLOAD_MAX_MB: {},
-  ENABLE_WEB_SEARCH: { options: ["true", "false"] },
-  ENABLE_LSP: { options: ["true", "false"] },
-};
+export { EDITABLE };
 
 /**
  * Save values from the UI and apply them live. null or "" removes the UI value so .env

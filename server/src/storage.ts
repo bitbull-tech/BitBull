@@ -15,7 +15,7 @@
  * own at-rest encryption doesn't say who can read a chunk on a storage miner.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { open, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -220,6 +220,9 @@ async function upload(job: Job) {
   const key = encryptionKey();
   const size = statSync(job.absPath).size;
   const { body, sha256 } = encryptStream(job.absPath, key);
+  // If the read fails, the upload below fails too; make sure the hash promise's rejection is
+  // observed either way (an unobserved one would take the whole server down).
+  sha256.catch(() => {});
   await s3().send(
     new PutObjectCommand({
       Bucket: config.storage.bucket,
@@ -300,6 +303,12 @@ export function insideWorkspace(workspace: string, rel: string): string {
   const realRoot = realpathSync(root);
   const realDir = realpathSync(dir);
   if (realDir !== realRoot && !realDir.startsWith(realRoot + path.sep)) throw new Error(`refusing a stored path that leaves the workspace through a link: ${JSON.stringify(rel)}`);
+  // and the file itself must not be a link planted where the restore will write
+  try {
+    if (lstatSync(dest).isSymbolicLink()) throw new Error(`refusing to restore over a symlink: ${JSON.stringify(rel)}`);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
   return dest;
 }
 

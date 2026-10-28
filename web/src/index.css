@@ -884,3 +884,4 @@ button.file-row:hover { background: var(--hover); }
 .fm-row { display: flex; align-items: flex-start; gap: 2px; }
 .fm-row .fm-item { flex: 1; min-width: 0; }
 .fm-refresh { margin-top: 8px; flex: none; }
+.md-img { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px dashed var(--line-2); border-radius: 8px; font-size: 12.5px; color: var(--muted); }
