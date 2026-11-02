@@ -29,7 +29,7 @@ Gemini CLI and stock OpenCode, as of October 2026. "Have" means working in this 
 4. **Hooks.** Claude Code runs your scripts before/after tool calls and at the end of a turn (format, lint, block dangerous commands, notify). GM has none.
 5. **Browser for testing what it builds.** Claude Code and Cursor can drive a browser to check a web UI. Adding the Playwright MCP plus Chromium to the image would let the agent test the games and pages it builds and screenshot them.
 6. **Background and scheduled runs with notifications.** Codex, Cursor and Claude Code run tasks while you're away and notify you. GM turns now outlive the browser (detached turns, `turns.ts`) but there's no queue, schedule or notification.
-7. **Pull-request workflow.** With the token and `gh` the agent can open PRs, but there's no PR-review bot on GitHub (Claude Code GitHub Actions, Codex review) and no CI-status awareness in the UI.
+7. **Pull-request workflow.** The Repositories view (Nov 2026) shows clones, branches and status and hands git actions to the agent. With the token and `gh` the agent can open PRs, but there's no PR-review bot on GitHub (Claude Code GitHub Actions, Codex review) and no CI-status awareness in the UI.
 8. **Composer conveniences.** @-mention files, slash commands for saved prompts, paste screenshots straight to vision models, a context-usage meter and a manual /compact.
 9. **Code intelligence after edits.** OpenCode supports LSP diagnostics (`ENABLE_LSP`, off by default). Turning it on per project gives the "edit, see type errors, fix" loop Cursor and Claude Code have.
 10. **Spend controls.** A per-chat and per-day budget, and a cheap default model for subagents. SayGM makes per-model routing easy; the cap is missing.

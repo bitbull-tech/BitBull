@@ -16,9 +16,9 @@ function BackupMark({ file }: { file?: StoredFile }) {
  * Browse a project's workspace and add local files or whole folders to it (structure kept).
  * project = null → the general workspace used by chats outside projects.
  */
-export function FilesDialog({ project, onClose }: { project: Project | null; onClose: () => void }) {
+export function FilesDialog({ project, onClose, startDir = '' }: { project: Project | null; onClose: () => void; startDir?: string }) {
   const pid = project?.id ?? 'general'
-  const [dir, setDir] = useState('')
+  const [dir, setDir] = useState(startDir)
   const [entries, setEntries] = useState<{ name: string; dir: boolean; size: number }[] | null>(null)
   const [target, setTarget] = useState('uploads')
   const [picked, setPicked] = useState<UploadItem[]>([])

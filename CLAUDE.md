@@ -28,6 +28,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   egress.ts          network approvals: squid asks /internal/egress/check; agent requests wait for the user
   mcp.ts             GM's own MCP server ("gm") for the engines: request_network_access
   links.ts           read-only linked folders at /links (lists them; mount flags from mountinfo)
+  repos.ts           git clones in a workspace, read-only (status/branches via git); actions go via the agent
   engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, gm-guard plugin
   engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
   config.ts          env + UI overrides (DATA_DIR/settings.local.json), live reloadConfig()
@@ -36,7 +37,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   export.ts          chat/exchange export (full or compact) for other agents
   subagents.ts       loads subagents/*.md for both engines; read agents: no edits, no shell, no delegation
   integrations.ts    Atlas, 404, GitHub (+ probes); ditto.ts; models.ts; skills.ts; db.ts
-web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ExportMenu, activity.tsx)
+web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ReposDialog, ExportMenu, activity.tsx)
   brand.ts           brand fetch + CSS-token injection;  BrandMark.tsx  logo/initials
   index.css          all colour lives in tokens at the top; the sidebar re-declares its own
 agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/gm-guard.js  secret guard

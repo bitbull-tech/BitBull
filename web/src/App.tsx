@@ -3,9 +3,10 @@ import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type
 import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
-import { IconChevronRight, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
+import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
@@ -132,6 +133,22 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [projectDialog, setProjectDialog] = useState<Project | 'new' | null>(null)
   // Files dialog: a project, or 'general' for the workspace of unfiled chats
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
+  const [filesDir, setFilesDir] = useState('')
+  const [reposFor, setReposFor] = useState<Project | 'general' | null>(null)
+  // right-click menu on a project row
+  const [ctx, setCtx] = useState<{ p: Project; x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!ctx) return
+    const close = () => setCtx(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', close)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [ctx])
   const [filter, setFilter] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [status, setStatus] = useState<Status | null>(null)
@@ -320,6 +337,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                 <div
                   className={`project-row ${currentProjectId === p.id ? 'current' : ''}`}
                   onClick={() => setExpand(p.id, !expanded[p.id])}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setCtx({ p, x: Math.min(e.clientX, window.innerWidth - 220), y: Math.min(e.clientY, window.innerHeight - 200) })
+                  }}
                 >
                   <IconChevronRight size={13} className={`chev ${open ? 'open' : ''}`} />
                   <span className={`pdot pc-${p.color}`} />
@@ -341,10 +362,21 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                       title={`Files in ${p.name}`}
                       onClick={(e) => {
                         e.stopPropagation()
+                        setFilesDir('')
                         setFilesFor(p)
                       }}
                     >
                       <IconFolder size={13} />
+                    </button>
+                    <button
+                      className="icon-btn sm"
+                      title={`Repositories in ${p.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setReposFor(p)
+                      }}
+                    >
+                      <IconBranch size={13} />
                     </button>
                     <button
                       className="icon-btn sm"
@@ -461,8 +493,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             )}
           </div>
           {active && <ExportMenu session={active} />}
-          <button className="btn files-btn" title="Browse and add files and folders" onClick={() => setFilesFor(currentProject ?? 'general')}>
+          <button className="btn files-btn" title="Browse and add files and folders" onClick={() => (setFilesDir(''), setFilesFor(currentProject ?? 'general'))}>
             <IconFolder size={14} /> Files
+          </button>
+          <button className="btn files-btn" title="Git repositories in this workspace: branches, status, actions via the agent" onClick={() => setReposFor(currentProject ?? 'general')}>
+            <IconBranch size={14} /> Repos
           </button>
           <ModelPicker models={models} value={model} onChange={setModel} />
         </header>
@@ -502,7 +537,35 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           onModelsRefreshed={() => void loadModels()}
         />
       )}
-      {filesFor && <FilesDialog project={filesFor === 'general' ? null : filesFor} onClose={() => setFilesFor(null)} />}
+      {filesFor && <FilesDialog project={filesFor === 'general' ? null : filesFor} startDir={filesDir} onClose={() => setFilesFor(null)} />}
+      {reposFor && (
+        <ReposDialog
+          project={reposFor === 'general' ? null : reposFor}
+          onClose={() => setReposFor(null)}
+          onBrowse={(dir) => {
+            setFilesDir(dir)
+            setFilesFor(reposFor)
+            setReposFor(null)
+          }}
+        />
+      )}
+      {ctx && (
+        <div className="ctx-menu" style={{ left: ctx.x, top: ctx.y }} role="menu" onMouseDown={(e) => e.stopPropagation()}>
+          <button onClick={() => (setCtx(null), newChat(ctx.p.id))}>
+            <IconPlus size={14} /> New chat in {ctx.p.name}
+          </button>
+          <button onClick={() => (setCtx(null), setReposFor(ctx.p))}>
+            <IconBranch size={14} /> Repositories
+          </button>
+          <button onClick={() => (setCtx(null), setFilesDir(''), setFilesFor(ctx.p))}>
+            <IconFolder size={14} /> Files
+          </button>
+          <div className="sep" />
+          <button onClick={() => (setCtx(null), setProjectDialog(ctx.p))}>
+            <IconSettings size={14} /> Project settings
+          </button>
+        </div>
+      )}
       {projectDialog && (
         <ProjectDialog
           project={projectDialog === 'new' ? null : projectDialog}

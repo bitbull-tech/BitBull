@@ -402,6 +402,16 @@ dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The
 route (per-device upload-only tokens, tunnel, capture page) is planned in
 [docs/CAPTURE.md](docs/CAPTURE.md).
 
+## Repositories
+
+**Repos** (top bar), the branch icon on a project, or right-click a project → **Repositories**
+lists every git clone in that workspace: current branch, what's uncommitted, ahead/behind its
+upstream, last commit, remote, branches (local, and remote on request), stashes, and a summary
+of the uncommitted changes. **Browse files** opens the Files view at that clone. The view only
+reads; every other button (explain changes, fetch and compare, pull, review and propose a
+commit, new branch, switch, compare) puts a request in the chat for the agent, so git actions
+run in the sandbox where you can see them and the reviewer can check them.
+
 ## GitHub
 
 Set `GITHUB_TOKEN` to a fine-grained token (`github_pat_…`, recommended, limited to the repos
@@ -440,6 +450,8 @@ container, and `/mcp/gm` only the engines (a token minted at startup).
 | `GET/POST` | `/api/projects` | List / create a project |
 | `PATCH/DELETE` | `/api/projects/:id` | Update (name, instructions, colour, integrations) / delete |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
+| `GET` | `/api/projects/:id/repos` | Git clones in the workspace: branch, status, ahead/behind, branches, last commit (read-only) |
+| `GET` | `/api/projects/:id/repos/diff` | `?repo=<path>` uncommitted-changes stat; `&base=<ref>` compares base...HEAD |
 | `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |
 | `POST` | `/api/stored/:id/restore` | Pull a stored file back into its workspace and verify it |
 | `POST` | `/api/stored/:id/retry` | Queue a failed upload again |

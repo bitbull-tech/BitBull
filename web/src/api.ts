@@ -175,6 +175,33 @@ export interface LinkedFolder {
   readOnly: boolean
   noExec: boolean
 }
+export interface RepoBranch {
+  name: string
+  current: boolean
+  remote: boolean
+  upstream?: string
+  ahead?: number
+  behind?: number
+  last?: string
+}
+export interface RepoInfo {
+  path: string
+  name: string
+  branch: string | null
+  detached: boolean
+  ahead: number
+  behind: number
+  upstream: string | null
+  changed: number
+  untracked: number
+  staged: number
+  conflicts: number
+  remote: string | null
+  head: { sha: string; subject: string; author: string; when: string } | null
+  branches: RepoBranch[]
+  stashes: number
+  error?: string
+}
 export interface NetworkState {
   proxied: boolean
   allowlist: string[]
@@ -237,6 +264,9 @@ export const api = {
   status: () => req<Status>('/api/status'),
   network: () => req<NetworkState>('/api/network'),
   links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),
+  repos: (projectId: string) => req<{ repos: RepoInfo[] }>(`/api/projects/${projectId}/repos`),
+  repoDiff: (projectId: string, repo: string, base?: string) =>
+    req<{ stat: string }>(`/api/projects/${projectId}/repos/diff?repo=${encodeURIComponent(repo)}${base ? `&base=${encodeURIComponent(base)}` : ''}`),
   decideNetwork: (id: string, decision: 'host' | 'domain' | 'deny') =>
     req<NetworkState>(`/api/network/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
   allowNetwork: (host: string, scope: 'host' | 'domain') =>

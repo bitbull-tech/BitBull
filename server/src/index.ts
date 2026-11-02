@@ -35,6 +35,7 @@ import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
 import { handleMcp, MCP_PATH, GM_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
+import { listRepos, repoDiffStat } from "./repos.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -510,6 +511,20 @@ app.post("/api/stored/:id/retry", (c) => {
  * route: the user saves it through Settings like any other value, and backs it up.
  */
 app.post("/api/storage/key", (c) => c.json({ key: newEncryptionKey() }));
+
+/** Git clones in a project's workspace: branch, status, branches (read-only; actions go via the agent). */
+app.get("/api/projects/:id/repos", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  return c.json({ repos: await listRepos(ws) });
+});
+app.get("/api/projects/:id/repos/diff", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const rel = safeRel(c.req.query("repo") ?? "");
+  if (rel === null) return c.json({ error: "invalid path" }, 400);
+  return c.json({ stat: await repoDiffStat(ws, rel || ".", c.req.query("base") || undefined) });
+});
 
 /** List one folder of a project's workspace (for the Files panel and picking an upload target). */
 app.get("/api/projects/:id/files", (c) => {
