@@ -15,6 +15,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - `POST /api/v1/chat` for scripts and other agents
 
 New here (or a new agent session)? Start with [CLAUDE.md](CLAUDE.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
+Agents *using* GM (rather than changing it) read [agent-readme.md](agent-readme.md).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the
 OpenCode-vs-Agent-SDK proposal.
 
@@ -309,7 +310,9 @@ The static list in `egress/allowlist.txt` is always allowed. For anything else:
 
 ## Files and folders
 
-**Files** (top bar, or the folder icon on a project) browses a project's workspace and adds
+**Files** (top bar, or the folder icon on a project) browses a project's workspace, sortable by
+name, kind, size or modified time, and shows the folder's real path inside the container and on
+the host (copy buttons) so you can open the same place with `wsl -d gm`. It adds
 local files or whole folders, keeping their structure and skipping `node_modules`, `.git`
 and build output. In the chat, the paperclip attaches files and the folder button offers
 **Upload a copy** or one of your **linked folders**.

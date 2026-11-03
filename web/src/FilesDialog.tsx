@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type Project, type StoredFile } from './api'
-import { IconChevronRight, IconFile, IconFolder, IconRefresh, IconX } from './icons'
+import { api, type FileEntry, type Project, type StoredFile } from './api'
+import { IconCheck, IconChevronRight, IconCopy, IconFile, IconFolder, IconRefresh, IconX } from './icons'
 import { filterItems, fmtBytes, fromDrop, fromInput, SKIP_DIRS, uploadItems, type UploadItem } from './uploads'
 
 /** Whether a file has reached Hippius yet. Nothing is shown when storage is switched off. */
@@ -19,7 +19,10 @@ function BackupMark({ file }: { file?: StoredFile }) {
 export function FilesDialog({ project, onClose, startDir = '' }: { project: Project | null; onClose: () => void; startDir?: string }) {
   const pid = project?.id ?? 'general'
   const [dir, setDir] = useState(startDir)
-  const [entries, setEntries] = useState<{ name: string; dir: boolean; size: number }[] | null>(null)
+  const [entries, setEntries] = useState<FileEntry[] | null>(null)
+  const [where, setWhere] = useState<{ container: string; host: string | null } | null>(null)
+  const [sort, setSort] = useState<{ key: 'name' | 'kind' | 'size' | 'mtime'; asc: boolean }>({ key: 'name', asc: true })
+  const [copied, setCopied] = useState<string | null>(null)
   const [target, setTarget] = useState('uploads')
   const [picked, setPicked] = useState<UploadItem[]>([])
   const [skipBuild, setSkipBuild] = useState(true)
@@ -36,7 +39,10 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
   const load = (d = dir) =>
     void api
       .projectFiles(pid, d)
-      .then((r) => setEntries(r.entries))
+      .then((r) => {
+        setEntries(r.entries)
+        setWhere({ container: r.container, host: r.host })
+      })
       .catch((e) => setMsg(e instanceof Error ? e.message : String(e)))
 
   /** What of this workspace is backed up on Hippius, keyed by path within it. */
@@ -92,6 +98,30 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
 
   const crumbs = dir ? dir.split('/') : []
 
+  const copy = (text: string) => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(text)
+      setTimeout(() => setCopied(null), 1500)
+    })
+  }
+  const sortBy = (key: typeof sort.key) => setSort((s) => (s.key === key ? { key, asc: !s.asc } : { key, asc: key === 'name' || key === 'kind' }))
+  const sorted = (entries ?? []).slice().sort((a, b) => {
+    const dirFirst = Number(b.dir) - Number(a.dir)
+    let v = 0
+    if (sort.key === 'name') v = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    else if (sort.key === 'kind') v = dirFirst || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    else if (sort.key === 'size') v = (a.dir ? -1 : a.size) - (b.dir ? -1 : b.size)
+    else v = a.mtime - b.mtime
+    return sort.asc ? v : -v
+  })
+  const arrow = (key: typeof sort.key) => (sort.key === key ? (sort.asc ? ' ▲' : ' ▼') : '')
+  const when = (ms: number) => {
+    if (!ms) return ''
+    const d = new Date(ms)
+    const today = new Date()
+    return d.toDateString() === today.toDateString() ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString()
+  }
+
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && !progress && onClose()}>
       <div className="modal files-modal" role="dialog" aria-label="Project files">
@@ -115,19 +145,54 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
               <IconRefresh size={13} />
             </button>
           </div>
+          {where && (
+            <div className="files-where">
+              <span className="muted small">Inside GM:</span>
+              <code title="Path inside the gm-agent container (what the agent sees)">{where.container}</code>
+              <button className="icon-btn sm" title="Copy container path" onClick={() => copy(where.container)}>
+                {copied === where.container ? <IconCheck size={13} /> : <IconCopy size={13} />}
+              </button>
+              {where.host && (
+                <>
+                  <span className="muted small">On the host:</span>
+                  <code title="The same folder inside the gm WSL distro (wsl -d gm)">{where.host}</code>
+                  <button className="icon-btn sm" title="Copy host path" onClick={() => copy(where.host!)}>
+                    {copied === where.host ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           <div className="files-list">
+            <div className="file-row file-head">
+              <button className="col-sort" onClick={() => sortBy('kind')} title="Sort folders/files">
+                {arrow('kind') || '·'}
+              </button>
+              <button className="col-sort grow" onClick={() => sortBy('name')}>
+                Name{arrow('name')}
+              </button>
+              <button className="col-sort col-when" onClick={() => sortBy('mtime')}>
+                Modified{arrow('mtime')}
+              </button>
+              <button className="col-sort col-size" onClick={() => sortBy('size')}>
+                Size{arrow('size')}
+              </button>
+            </div>
             {entries === null && <p className="muted small pad">Loading…</p>}
             {entries?.length === 0 && <p className="muted small pad">Empty folder.</p>}
-            {entries?.map((e) =>
+            {sorted.map((e) =>
               e.dir ? (
                 <button key={e.name} className="file-row" onClick={() => setDir(dir ? `${dir}/${e.name}` : e.name)}>
                   <IconFolder size={14} /> <span className="grow">{e.name}</span>
+                  <span className="muted small col-when">{when(e.mtime)}</span>
+                  <span className="muted small col-size" />
                 </button>
               ) : (
                 <div key={e.name} className="file-row">
                   <IconFile size={14} /> <span className="grow">{e.name}</span>
                   {storage && <BackupMark file={stored.get(dir ? `${dir}/${e.name}` : e.name)} />}
-                  <span className="muted small">{fmtBytes(e.size)}</span>
+                  <span className="muted small col-when">{when(e.mtime)}</span>
+                  <span className="muted small col-size">{fmtBytes(e.size)}</span>
                 </div>
               ),
             )}

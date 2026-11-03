@@ -41,6 +41,7 @@ web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ReposDia
   brand.ts           brand fetch + CSS-token injection;  BrandMark.tsx  logo/initials
   index.css          all colour lives in tokens at the top; the sidebar re-declares its own
 agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/gm-guard.js  secret guard
+agent-readme.md      for agents USING GM (copied into the image at /app): services, rules, what they may touch
 skills/              skills mirrored into every workspace (.claude/skills) and backed up to Ditto
 subagents/           reviewer, challenger, debugger, tester, worker, fact-checker
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image

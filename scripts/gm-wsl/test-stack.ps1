@@ -41,7 +41,7 @@ function Invoke-Sh([string]$script, [string]$cd = $dir, [switch]$AsRoot) {
   if ($LASTEXITCODE -ne 0) { throw "step failed ($LASTEXITCODE)" }
 }
 
-$envLine = "export GM_SUFFIX=-$Name GM_TAG=$Name GM_PORT=$Port GM_DATA_DIR=$data GM_LINKS_DIR=/srv/gm-links COMPOSE_PROJECT_NAME=$proj"
+$envLine = "export GM_SUFFIX=-$Name GM_TAG=$Name GM_PORT=$Port GM_DATA_DIR=$data GM_HOST_DATA_DIR=$data GM_LINKS_DIR=/srv/gm-links COMPOSE_PROJECT_NAME=$proj"
 
 if ($Logs) {
   Invoke-Sh "$envLine`ndocker compose logs -f --tail 80 gm-agent"

@@ -34,6 +34,8 @@ COPY agent agent
 COPY skills skills
 COPY subagents subagents
 COPY tools tools
+# Read by agents working inside GM (the system prompt points at it)
+COPY agent-readme.md agent-readme.md
 # The proxy's static allowlist, so Settings -> Network can show it (the proxy has its own copy)
 COPY egress/allowlist.txt egress/allowlist.txt
 RUN mkdir -p /data && chown node:node /data

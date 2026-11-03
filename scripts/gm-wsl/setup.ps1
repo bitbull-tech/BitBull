@@ -61,7 +61,7 @@ Write-Host ("  Windows drives visible in gm : " + $(if ($mnt) { "YES ($mnt) - ch
 Write-Host ("  Launch Windows programs     : " + $interop)
 
 Step "Building and starting GM (first build takes several minutes)"
-Wsl @("-d", $Distro, "--cd", "~/SayGMAgent", "--exec", "sh", "-c", "GM_DATA_DIR=`$HOME/gm-data GM_LINKS_DIR=/srv/gm-links docker compose up -d --build && docker compose ps")
+Wsl @("-d", $Distro, "--cd", "~/SayGMAgent", "--exec", "sh", "-c", "GM_DATA_DIR=`$HOME/gm-data GM_HOST_DATA_DIR=`$HOME/gm-data GM_LINKS_DIR=/srv/gm-links docker compose up -d --build && docker compose ps")
 
 Write-Host "`nDone. Open http://localhost:8787" -ForegroundColor Green
 Write-Host "Keep editing and committing in $Repo as before; run scripts\gm-wsl\deploy.ps1 to ship changes into gm."

@@ -33,7 +33,7 @@ Write-Host "==> Rebuilding" -ForegroundColor Cyan
 # PowerShell's native-argument quoting (see docs/HANDOFF.md).
 $rebuild = @'
 set -e
-export GM_DATA_DIR=$HOME/gm-data GM_LINKS_DIR=/srv/gm-links
+export GM_DATA_DIR=$HOME/gm-data GM_HOST_DATA_DIR=$HOME/gm-data GM_LINKS_DIR=/srv/gm-links
 docker compose up -d --build --remove-orphans
 if docker compose exec -T egress cat /etc/squid/allowlist.txt 2>/dev/null | diff -q - egress/allowlist.txt >/dev/null 2>&1; then
   docker compose exec -T egress squid -k reconfigure -f /etc/squid/squid.conf 2>/dev/null || docker compose restart egress

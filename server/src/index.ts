@@ -533,21 +533,29 @@ app.get("/api/projects/:id/files", (c) => {
   const rel = safeRel(c.req.query("dir") ?? "") ?? "";
   const abs = path.join(ws, rel);
   if (abs !== ws && !abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
-  if (!existsSync(abs)) return c.json({ dir: rel, entries: [] });
+  // Where this folder really is, for anyone who wants to open it outside GM: inside the
+  // container, and (when GM's data is a mounted host folder) the host's path to the same place.
+  const container = abs;
+  const hostData = process.env.GM_HOST_DATA_DIR || "";
+  const host = hostData && abs.startsWith(config.dataDir) ? hostData.replace(/[\\/]+$/, "") + abs.slice(config.dataDir.length) : null;
+  if (!existsSync(abs)) return c.json({ dir: rel, entries: [], container, host });
   const entries = readdirSync(abs, { withFileTypes: true })
     .filter((d) => !(rel === "" && (d.name === ".claude" || d.name === ".opencode")))
     .map((d) => {
       const isDir = d.isDirectory();
       let size = 0;
+      let mtime = 0;
       try {
-        if (!isDir) size = statSync(path.join(abs, d.name)).size;
+        const st = statSync(path.join(abs, d.name));
+        if (!isDir) size = st.size;
+        mtime = st.mtimeMs;
       } catch {
         /* vanished */
       }
-      return { name: d.name, dir: isDir, size };
+      return { name: d.name, dir: isDir, size, mtime };
     })
     .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
-  return c.json({ dir: rel, entries });
+  return c.json({ dir: rel, entries, container, host });
 });
 
 /** Upload files into the agent's workspace so any engine/model can read them with its tools. */

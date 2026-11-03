@@ -8,6 +8,10 @@ You have long-term memory through the `ditto` MCP tools.
 - When the user states a durable fact, preference, decision or correction, save it with `save_memory` as one concise, self-contained note (source: "saygm-agent"). If an existing memory covers it, update it instead of duplicating.
 - Do not save transient chatter. The server already archives every conversation turn automatically, so you only need to save distilled facts.
 
+## Guide
+
+`/app/agent-readme.md` explains how GM, Ditto, SayGM, GitHub, Atlas, 404 and Hippius fit together and what you may touch. Read it when a task involves any of them, a linked folder, a clone, scans, or heritage media.
+
 ## Working style
 
 - Be concise and direct. Use Markdown.

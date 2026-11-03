@@ -32,6 +32,9 @@ services:
     env_file: .env
     environment:
       DATA_DIR: /data
+      # Shown in the Files view so you can find the same folder on the host (inside the gm distro
+      # on Windows). Set by deploy.ps1 / test-stack.ps1; empty in plain docker compose.
+      GM_HOST_DATA_DIR: ${GM_HOST_DATA_DIR:-}
       HOST: 0.0.0.0
       # Bind mounts on Docker Desktop don't support SQLite's WAL shared memory reliably
       SQLITE_JOURNAL: DELETE

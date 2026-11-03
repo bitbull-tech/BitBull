@@ -140,6 +140,7 @@ export function buildConfig(models: ModelInfo[]) {
         "*": "deny",
         "/tmp/*": "allow",
         [`${path.join(ROOT, "tools")}/*`]: "allow",
+        [path.join(ROOT, "agent-readme.md")]: "allow",
         [`${config.integrations.atlas.workflowsDir}/*`]: "allow",
         // read-only links from the user's computer (the mount itself refuses writes)
         ...(linksAvailable() ? { [`${LINKS_ROOT}/*`]: "allow" } : {}),

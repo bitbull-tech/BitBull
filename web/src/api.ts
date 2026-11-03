@@ -105,6 +105,12 @@ export interface SettingGroup {
   title: string
   rows: SettingRow[]
 }
+export interface FileEntry {
+  name: string
+  dir: boolean
+  size: number
+  mtime: number
+}
 export interface StoredFile {
   id: string
   project_id: string | null
@@ -304,7 +310,7 @@ export const api = {
   newStorageKey: () => req<{ key: string }>('/api/storage/key', { method: 'POST' }),
 
   projectFiles: (projectId: string, dir = '') =>
-    req<{ dir: string; entries: { name: string; dir: boolean; size: number }[] }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
+    req<{ dir: string; entries: FileEntry[]; container: string; host: string | null }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
 
   /** Chat export for pasting into another agent: format md (default) or json */
   async exportChat(id: string, format: 'md' | 'json' = 'md', opts: { tools?: boolean; activity?: boolean; exchange?: string; compact?: boolean } = {}) {
