@@ -127,6 +127,7 @@ function nextStep(s) {
   if (!s.distro.ok) return 'Run the first-time setup below to create the bitbob distro.';
   if (!s.docker.ok) return 'The distro is there but Docker is not answering: press Start.';
   if (!s.containers.ok && /no containers/.test(s.containers.detail)) return 'Press Deploy to build and start the containers for the first time.';
+  if (!s.containers.ok) return 'Containers are stopped: press Start (it brings them up), or Deploy after a code change.';
   if (!s.healthy) return 'Press Start (or wait: containers can take a minute after a reboot).';
   return 'BitBob is running. Open it, or close this window — it stays in the tray.';
 }

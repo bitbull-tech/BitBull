@@ -177,7 +177,7 @@ pub fn status(s: &Settings) -> Status {
     if st.docker.ok {
         st.containers = match run_capture(
             "wsl.exe",
-            &["-d", &s.distro, "--cd", "~/BitBob", "--exec", "docker", "compose", "ps", "--format", "{{.Name}} {{.State}}"],
+            &["-d", &s.distro, "--cd", "~/BitBob", "--exec", "docker", "compose", "ps", "-a", "--format", "{{.Name}} {{.State}}"],
             Duration::from_secs(20),
         ) {
             Ok((0, out)) => summarise_compose_ps(&out),
@@ -218,7 +218,7 @@ pub fn summarise_compose_ps(out: &str) -> Check {
         })
         .collect();
     if rows.is_empty() {
-        return Check { ok: false, detail: "no containers (run Deploy)".into() };
+        return Check { ok: false, detail: "no containers yet (run Deploy)".into() };
     }
     let running = rows.iter().filter(|(_, st)| *st == "running").count();
     let detail = rows.iter().map(|(n, st)| format!("{n}: {st}")).collect::<Vec<_>>().join(", ");

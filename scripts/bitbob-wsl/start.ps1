@@ -25,6 +25,25 @@ Start-Process wsl.exe -WindowStyle Hidden -ArgumentList "-d $Distro -u root --ex
 # The link helper: lets BitBob's page open a folder picker on this PC (it exits at once if already running)
 Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$helperScript`" -Distro $Distro"
 Write-Host "bitbob distro starting in the background (this window can be closed afterwards)..."
+# -Stop uses `docker compose stop`, an explicit stop that the containers' restart policy honours,
+# so they do not come back by themselves: wait for Docker, then bring them up (idempotent).
+$dockerUp = $false
+for ($i = 0; $i -lt 30; $i++) {
+  Start-Sleep -Seconds 2
+  & wsl.exe -d $Distro --exec docker info *> $null
+  if ($LASTEXITCODE -eq 0) { $dockerUp = $true; break }
+}
+if ($dockerUp) {
+  & wsl.exe -d $Distro --exec sh -c 'test -f ~/BitBob/docker-compose.yml' 2>$null
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Starting the containers..."
+    & wsl.exe -d $Distro --cd ~/BitBob --exec sh -c 'BITBOB_DATA_DIR=$HOME/bitbob-data BITBOB_HOST_DATA_DIR=$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links docker compose up -d 2>&1 | tail -n 4'
+  } else {
+    Write-Host "No deployed code in the distro yet: run deploy.ps1 (or Deploy in the launcher)." -ForegroundColor Yellow
+  }
+} else {
+  Write-Host "Docker in the $Distro distro didn't start within 60s." -ForegroundColor Yellow
+}
 $ok = $false
 for ($i = 0; $i -lt 45; $i++) {
   Start-Sleep -Seconds 2
