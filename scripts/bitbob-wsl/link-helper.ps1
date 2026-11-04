@@ -161,9 +161,34 @@ function Do-Open([string]$p) {
   $unc = "\\wsl.localhost\$Distro$rel"
   if (-not (Test-Path -LiteralPath $unc)) { $unc = "\\wsl$\$Distro$rel" }
   if (-not (Test-Path -LiteralPath $unc)) { return @{ ok = $false; message = "Not found or not readable from Windows: $unc. Run start.ps1 once after updating (it makes the data folder readable from this PC)." } }
-  Start-Process explorer.exe -ArgumentList @("`"$unc`"")
-  return @{ ok = $true; message = "Opened $unc" }
+  # The helper runs hidden, and Windows only lets the foreground process raise a new window:
+  # take the foreground with the owner form first, then find the new Explorer window and raise it.
+  $owner = New-Owner
+  try {
+    Start-Process explorer.exe -ArgumentList @("`"$unc`"")
+    $shell = New-Object -ComObject Shell.Application
+    $want = ($unc -replace '\\', '/').ToLower()
+    for ($i = 0; $i -lt 30; $i++) {
+      Start-Sleep -Milliseconds 150
+      foreach ($w in @($shell.Windows())) {
+        try {
+          $loc = [string]$w.LocationURL
+          if ($loc -and ([uri]::UnescapeDataString($loc) -replace '^file:', '' -replace '\\', '/').ToLower().TrimEnd('/') -eq $want.TrimEnd('/')) {
+            [Win32.Native]::ShowWindow([IntPtr]$w.HWND, 9) | Out-Null   # SW_RESTORE
+            [Win32.Native]::SetForegroundWindow([IntPtr]$w.HWND) | Out-Null
+            return @{ ok = $true; message = "Opened $unc" }
+          }
+        } catch {}
+      }
+    }
+  } finally { $owner.Close() }
+  return @{ ok = $true; message = "Opened $unc (look for the Explorer window on the taskbar)" }
 }
+Add-Type -Namespace Win32 -Name Native -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
+'@
+
 
 # The vault key: 32 random bytes made once, kept under %LOCALAPPDATA%\BitBob\vault.key protected
 # with Windows DPAPI for this user only. BitBob's page fetches it to unlock the vault on the
