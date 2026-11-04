@@ -421,20 +421,24 @@ route (per-device upload-only tokens, tunnel, capture page) is planned in
 Two routes, both safe to re-run.
 
 **Everything at once**: the account export. On claude.ai go to Settings → Privacy → **Export
-data**; Anthropic emails a zip with `conversations.json` and `projects.json`. Then:
+data**; Anthropic emails a manifest with links to several zips (`projects-000.zip`,
+`conversations-000.zip`, `memories-000.zip`, `frames-000.zip`, `light_metadata-000.zip`).
+Download them all into one folder, then:
 
 ```powershell
-node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\data-2026-11-04.zip" --dry-run   # what would happen
-node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\data-2026-11-04.zip"
+node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\claude-export" --dry-run   # what would happen
+node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\claude-export"
 ```
 
 Every project becomes a BitBob project (description, instructions, its docs under
-`uploads/claude-import/docs/`) and every conversation becomes a chat with its original dates and
-messages, filed under its project when the export says which (`--project "<name>"` files them all
-under one project; `--since 2026-01-01` skips older ones; `--projects-only` /
-`--conversations-only`). Attachments keep their extracted text; images are named only, the
-export doesn't carry them. Imported chats have no engine session yet, so the first message you
-send in one hands the whole history to the agent as context.
+`uploads/claude-import/docs/`, and Claude's memory of the project under
+`uploads/claude-import/memory/`); the account-level memory files and your artifacts go to the
+general workspace's `uploads/claude-import/`; every conversation becomes a chat with its original
+dates and messages. The export doesn't record which project a chat belonged to, so chats arrive
+unfiled unless `--project "<name>"` files them all under one; `--since 2026-01-01` skips older
+ones; `--projects-only` / `--conversations-only`; `--no-artifacts`. Attachments keep their
+extracted text; images are named only. Imported chats have no engine session yet, so the first
+message you send in one hands the whole history to the agent as context.
 
 **One project, with Claude's memory files**: ask Claude, in that project, to "export this
 project for BitBob". It writes a folder with `project.json`, `docs/` and `memory/` (Claude's
