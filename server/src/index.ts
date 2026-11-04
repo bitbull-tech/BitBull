@@ -878,9 +878,14 @@ if (existsSync(config.webDist)) {
     await next();
     if (!c.req.path.startsWith("/api/")) c.header("content-security-policy", CSP);
   });
-  app.use("/*", serveStatic({ root: path.relative(process.cwd(), config.webDist) }));
   const index = readFileSync(path.join(config.webDist, "index.html"), "utf8");
-  app.get("*", (c) => c.html(index));
+  // index.html must never be cached: it names the hashed bundle, and a stale copy after a deploy
+  // keeps showing the old UI (the bundles themselves are content-hashed, so they may cache).
+  const page = (c: Context) => c.html(index, 200, { "cache-control": "no-cache, no-store, must-revalidate" });
+  app.get("/", page);
+  app.get("/index.html", page);
+  app.use("/*", serveStatic({ root: path.relative(process.cwd(), config.webDist) }));
+  app.get("*", page);
 } else {
   app.get("/", (c) => c.text("BitBob API is running. Build the UI with `npm run build` to serve it here."));
 }
