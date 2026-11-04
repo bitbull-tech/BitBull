@@ -35,4 +35,4 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/saygmagent:latest
+          tags: ghcr.io/${{ github.repository_owner }}/bitbob:latest

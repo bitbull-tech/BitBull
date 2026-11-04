@@ -1,5 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -23,19 +23,20 @@ import {
   type TurnStatus,
 } from "./turns.js";
 import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
-import { mirrorFile, newEncryptionKey, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
+import { insideWorkspace, mirrorFile, newEncryptionKey, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
-import { recent, subscribe, type Level } from "./activity.js";
+import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
-import { handleMcp, MCP_PATH, GM_MCP_HEADER, mcpTokenOk } from "./mcp.js";
+import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { listRepos, repoDiffStat } from "./repos.js";
+import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -136,9 +137,9 @@ app.get("/internal/egress/check", async (c) => {
   return c.text(proxyCheck(c.req.query("host") ?? "") ? "OK" : "ERR");
 });
 
-// GM's own MCP server for the engines (loopback + startup token; see mcp.ts)
+// BitBob's own MCP server for the engines (loopback + startup token; see mcp.ts)
 app.all(MCP_PATH, async (c) => {
-  if (!mcpTokenOk(c.req.header(GM_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
+  if (!mcpTokenOk(c.req.header(BITBOB_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
   return handleMcp(c.req.raw);
 });
 
@@ -190,7 +191,8 @@ app.get("/api/activity", (c) => {
   return c.json({
     events: recent({
       after: q.after ? Number(q.after) : undefined,
-      level: (q.level as Level) || undefined,
+      // an unknown level must not silently widen the filter
+      level: q.level ? ((["debug", "info", "warn", "error"] as Level[]).includes(q.level as Level) ? (q.level as Level) : "error") : undefined,
       sessionId: q.sessionId || undefined,
       limit: q.limit ? Math.min(2000, Number(q.limit)) : 500,
     }),
@@ -292,9 +294,10 @@ const ProjectSchema = z.object({
   instructions: z.string().max(20000).optional(),
   color: z.string().max(20).optional(),
   integrations: z.array(z.enum(["atlas", "four04"])).optional(),
+  dittoSync: z.boolean().optional(),
 });
 const projectOut = (p: ReturnType<typeof projects.get>) =>
-  p && { ...p, integrations: projects.integrations(p), workspace: workspaceFor(p) };
+  p && { ...p, integrations: projects.integrations(p), workspace: workspaceFor(p), dittoSync: !!p.ditto_sync, dittoSyncedAt: p.ditto_synced_at ?? null };
 
 app.get("/api/projects", (c) => c.json({ projects: projects.list().map(projectOut) }));
 
@@ -310,6 +313,31 @@ app.patch("/api/projects/:id", async (c) => {
   const body = ProjectSchema.partial().parse(await c.req.json());
   const p = projects.update(c.req.param("id"), body);
   return p ? c.json({ project: projectOut(p) }) : c.json({ error: "not found" }, 404);
+});
+
+/**
+ * Ditto sync for a project: a seed/refresh run in its own chat ("Ditto sync · <project>") that
+ * reads the project's imported material and workspace and saves the durable facts to Ditto.
+ * Turning sync on (PATCH dittoSync) also tells the agent to keep Ditto current on every turn.
+ */
+function dittoSyncPrompt(name: string) {
+  return [
+    `Ditto sync for project "${name}". Bring Ditto up to date with this project's record.`,
+    `1. Search Ditto for what it already holds about "${name}" (search_memories, and search_subjects for the project) so you merge rather than duplicate.`,
+    `2. Read, if present: uploads/claude-import/memory/ (Claude's memory files: lines tagged [stated] are things the owner said, untagged lines are what Claude found or did; keep that distinction as "Tom said" vs "Claude found"), uploads/claude-import/docs/, uploads/claude-import/INDEX.md, and any README or docs in the workspace.`,
+    `3. For every durable fact, decision, preference, lesson, person, open question or current status, save one concise, self-contained memory with save_memory (source "bitbob", include "Project: ${name}"), using update_memory when a related memory already covers it. Skip chatter, secrets, keys and anything that looks like one.`,
+    `4. Finish with a table of what you saved (memory, source file) and what you skipped as duplicates, and one line on what in this project Ditto still knows nothing about.`,
+  ].join("\n");
+}
+app.post("/api/projects/:id/ditto-sync", async (c) => {
+  const p = projects.get(c.req.param("id"));
+  if (!p) return c.json({ error: "not found" }, 404);
+  if (!dittoEnabled()) return c.json({ error: "Ditto is not configured (DITTO_API_KEY)" }, 400);
+  const s = sessions.create({ title: `Ditto sync · ${p.name}`, engine: config.agent.defaultEngine as EngineId, model: config.agent.defaultModel, projectId: p.id });
+  const { turnId } = startTurn(s, { prompt: dittoSyncPrompt(p.name), model: s.model });
+  projects.update(p.id, { dittoSyncedAt: Date.now() });
+  record({ level: "info", source: "ditto", sessionId: s.id, sessionTitle: s.title, message: `Ditto sync started for project "${p.name}"` });
+  return c.json({ sessionId: s.id, turnId }, 201);
 });
 
 /** Deletes the project record only: its chats become unfiled and its workspace folder stays on disk. */
@@ -440,8 +468,14 @@ app.post("/api/projects/:id/files", filesLimit, async (c) => {
     if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over ${config.uploadMaxMb} MB` }, 413);
     const rel = safeRel(target, rels[i] || f.name);
     if (!rel) return c.json({ error: "invalid path" }, 400);
-    const abs = path.join(ws, rel);
-    if (!abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
+    // lexical check plus realpath: a symlinked folder or file planted in the workspace by the
+    // agent must not turn an upload into a write somewhere else
+    let abs: string;
+    try {
+      abs = insideWorkspace(ws, rel);
+    } catch {
+      return c.json({ error: "invalid path" }, 400);
+    }
     if (existsSync(abs) && !overwrite) {
       skipped.push(rel);
       continue;
@@ -463,6 +497,103 @@ app.post("/api/projects/:id/files", filesLimit, async (c) => {
     });
   }
   return c.json({ saved, skipped });
+});
+
+// ---------- import (conversations from another assistant) ----------
+/**
+ * Bring chats in from somewhere else (tools/import-claude-export.mjs): sessions + messages are
+ * written straight into history with their original timestamps. Each conversation gets a
+ * stable id from its source id, so re-running an import skips what is already here. No engine
+ * session is attached; the next turn replays the history as context, like a moved chat.
+ */
+const ImportSchema = z.object({
+  projectId: z.string().nullable().optional(),
+  source: z.string().min(1).max(40).regex(/^[a-z0-9.-]+$/),
+  conversations: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+        title: z.string().max(200).optional(),
+        createdAt: z.number().int().positive(),
+        updatedAt: z.number().int().positive().optional(),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(["user", "assistant"]),
+              content: z.string().max(400_000),
+              createdAt: z.number().int().positive(),
+            }),
+          )
+          .max(5000),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+app.post("/api/import/conversations", bodyLimit({ maxSize: 64 * 1024 * 1024, onError: tooBig }), async (c) => {
+  const body = ImportSchema.parse(await c.req.json());
+  if (body.projectId && !projects.get(body.projectId)) return c.json({ error: "unknown project" }, 400);
+  let imported = 0;
+  let skipped = 0;
+  let msgs = 0;
+  for (const conv of body.conversations) {
+    const id = `${body.source}-${conv.id}`.slice(0, 120);
+    const ok = sessions.importRow({
+      id,
+      title: (conv.title ?? "").trim().slice(0, 200) || "Imported chat",
+      engine: config.agent.defaultEngine as EngineId,
+      model: config.agent.defaultModel,
+      engine_session_id: null,
+      project_id: body.projectId ?? null,
+      created_at: conv.createdAt,
+      updated_at: conv.updatedAt ?? conv.createdAt,
+    });
+    if (!ok) {
+      skipped++;
+      continue;
+    }
+    imported++;
+    let t = conv.createdAt;
+    for (const m of conv.messages) {
+      // keep order even when the source has equal timestamps
+      t = Math.max(t + 1, m.createdAt);
+      messages.importRow({
+        id: randomUUID(),
+        session_id: id,
+        role: m.role,
+        content: m.content,
+        model: m.role === "assistant" ? body.source : null,
+        tools_json: null,
+        usage_json: null,
+        created_at: t,
+      });
+      msgs++;
+    }
+  }
+  console.log(`[import] ${body.source}: ${imported} conversation(s), ${msgs} message(s), ${skipped} already here`);
+  return c.json({ imported, skipped, messages: msgs });
+});
+
+// ---------- QA swarm ----------
+const SwarmSchema = z.object({
+  sessionId: z.string().min(1),
+  target: z.string().min(1).max(400),
+  models: z.array(z.string().min(1).max(120)).min(1).max(2),
+  focus: z.array(z.enum(FOCUS)).optional(),
+});
+app.post("/api/swarm", async (c) => {
+  const body = SwarmSchema.parse(await c.req.json());
+  if (activeTurnId(body.sessionId)) return c.json({ error: "This chat is already running a turn; wait for it to finish." }, 409);
+  try {
+    return c.json({ swarm: publicSwarm(startSwarm(body)) }, 201);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+app.get("/api/swarm", (c) => c.json({ swarms: listSwarms(c.req.query("sessionId") || undefined).map(publicSwarm) }));
+app.get("/api/swarm/:id", (c) => {
+  const s = getSwarm(c.req.param("id"));
+  return s ? c.json({ swarm: publicSwarm(s) }) : c.json({ error: "not found" }, 404);
 });
 
 // ---------- storage (Hippius) ----------
@@ -530,13 +661,22 @@ app.get("/api/projects/:id/repos/diff", async (c) => {
 app.get("/api/projects/:id/files", (c) => {
   const ws = workspaceOf(c.req.param("id"));
   if (!ws) return c.json({ error: "project not found" }, 404);
-  const rel = safeRel(c.req.query("dir") ?? "") ?? "";
+  const rel = safeRel(c.req.query("dir") ?? "");
+  if (rel === null) return c.json({ error: "invalid path" }, 400);
   const abs = path.join(ws, rel);
   if (abs !== ws && !abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
-  // Where this folder really is, for anyone who wants to open it outside GM: inside the
-  // container, and (when GM's data is a mounted host folder) the host's path to the same place.
+  // a symlinked folder inside the workspace must not list what lies outside it
+  try {
+    const real = realpathSync(abs);
+    const realWs = realpathSync(ws);
+    if (real !== realWs && !real.startsWith(realWs + path.sep)) return c.json({ error: "invalid path" }, 400);
+  } catch {
+    return c.json({ dir: rel, entries: [], container: abs, host: null });
+  }
+  // Where this folder really is, for anyone who wants to open it outside BitBob: inside the
+  // container, and (when BitBob's data is a mounted host folder) the host's path to the same place.
   const container = abs;
-  const hostData = process.env.GM_HOST_DATA_DIR || "";
+  const hostData = process.env.BITBOB_HOST_DATA_DIR || "";
   const host = hostData && abs.startsWith(config.dataDir) ? hostData.replace(/[\\/]+$/, "") + abs.slice(config.dataDir.length) : null;
   if (!existsSync(abs)) return c.json({ dir: rel, entries: [], container, host });
   const entries = readdirSync(abs, { withFileTypes: true })
@@ -573,7 +713,13 @@ app.post("/api/sessions/:id/files", chatLimit, async (c) => {
     if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over ${config.uploadMaxMb} MB` }, 413);
     let name = safeName(f.name);
     for (let i = 1; existsSync(path.join(dir, name)); i++) name = safeName(f.name).replace(/(\.[^.]*)?$/, `-${i}$1`);
-    writeFileSync(path.join(dir, name), Buffer.from(await f.arrayBuffer()));
+    let dest: string;
+    try {
+      dest = insideWorkspace(workspaceFor(projects.get(s.project_id)), path.join(rel, name));
+    } catch {
+      return c.json({ error: "invalid upload folder" }, 400);
+    }
+    writeFileSync(dest, Buffer.from(await f.arrayBuffer()));
     saved.push({ name: f.name, path: path.posix.join("uploads", s.id.slice(0, 8), name), size: f.size });
   }
   console.log(`[upload] ${saved.length} file(s) -> ${rel}`);
@@ -735,7 +881,7 @@ app.post("/api/v1/chat", async (c) => {
 if (existsSync(config.webDist)) {
   // The browser must not become a way round the egress proxy: a reply or brand.json the agent
   // controls could otherwise make the browser fetch https://evil/?<data>. Images and media may
-  // only come from GM itself (or data: URIs); scripts only from GM; connections to GM and the
+  // only come from BitBob itself (or data: URIs); scripts only from BitBob; connections to BitBob and the
   // link helper on this PC; fonts from Google as index.html does.
   const CSP = [
     "default-src 'self'",
@@ -754,11 +900,16 @@ if (existsSync(config.webDist)) {
     await next();
     if (!c.req.path.startsWith("/api/")) c.header("content-security-policy", CSP);
   });
-  app.use("/*", serveStatic({ root: path.relative(process.cwd(), config.webDist) }));
   const index = readFileSync(path.join(config.webDist, "index.html"), "utf8");
-  app.get("*", (c) => c.html(index));
+  // index.html must never be cached: it names the hashed bundle, and a stale copy after a deploy
+  // keeps showing the old UI (the bundles themselves are content-hashed, so they may cache).
+  const page = (c: Context) => c.html(index, 200, { "cache-control": "no-cache, no-store, must-revalidate" });
+  app.get("/", page);
+  app.get("/index.html", page);
+  app.use("/*", serveStatic({ root: path.relative(process.cwd(), config.webDist) }));
+  app.get("*", page);
 } else {
-  app.get("/", (c) => c.text("SayGM Agent API is running. Build the UI with `npm run build` to serve it here."));
+  app.get("/", (c) => c.text("BitBob API is running. Build the UI with `npm run build` to serve it here."));
 }
 
 // ---------- boot ----------
@@ -766,7 +917,7 @@ resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
-  console.log(`[server] SayGM Agent listening on http://${info.address}:${info.port}`);
+  console.log(`[server] BitBob listening on http://${info.address}:${info.port}`);
 });
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

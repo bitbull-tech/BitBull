@@ -1,9 +1,9 @@
 <#
-  Ship the code from this Windows checkout into the gm distro and rebuild.
-  Your chats and files (~/gm-data inside gm) are not touched.
-      powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\deploy.ps1
+  Ship the code from this Windows checkout into the bitbob distro and rebuild.
+  Your chats and files (~/bitbob-data inside bitbob) are not touched.
+      powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\deploy.ps1
 #>
-param([string]$Distro = "gm")
+param([string]$Distro = "bitbob")
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
 $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path
@@ -15,9 +15,9 @@ $items = Get-ChildItem -Force -LiteralPath $Repo |
 
 Write-Host "==> Copying code into $Distro" -ForegroundColor Cyan
 # cmd's pipe keeps the tar stream binary-safe (Windows PowerShell's doesn't)
-$unpack = "rm -rf ~/SayGMAgent.new && mkdir ~/SayGMAgent.new && tar -xf - -C ~/SayGMAgent.new && sed -i 's/\r`$//' ~/SayGMAgent.new/.env ~/SayGMAgent.new/egress/* && rm -rf ~/SayGMAgent && mv ~/SayGMAgent.new ~/SayGMAgent"
+$unpack = "rm -rf ~/BitBob.new && mkdir ~/BitBob.new && tar -xf - -C ~/BitBob.new && sed -i 's/\r`$//' ~/BitBob.new/.env ~/BitBob.new/egress/* && rm -rf ~/BitBob && mv ~/BitBob.new ~/BitBob"
 # A .cmd file sidesteps PowerShell's native-argument quoting differences between 5.1 and 7
-$cmdFile = Join-Path $env:TEMP "gm-deploy.cmd"
+$cmdFile = Join-Path $env:TEMP "bitbob-deploy.cmd"
 Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=node_modules --exclude=dist -C `"$Repo`" $($items -join ' ') | wsl.exe -d $Distro --exec sh -c `"$unpack`""
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
@@ -33,7 +33,7 @@ Write-Host "==> Rebuilding" -ForegroundColor Cyan
 # PowerShell's native-argument quoting (see docs/HANDOFF.md).
 $rebuild = @'
 set -e
-export GM_DATA_DIR=$HOME/gm-data GM_HOST_DATA_DIR=$HOME/gm-data GM_LINKS_DIR=/srv/gm-links
+export BITBOB_DATA_DIR=$HOME/bitbob-data BITBOB_HOST_DATA_DIR=$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links
 docker compose up -d --build --remove-orphans
 if docker compose exec -T egress cat /etc/squid/allowlist.txt 2>/dev/null | diff -q - egress/allowlist.txt >/dev/null 2>&1; then
   docker compose exec -T egress squid -k reconfigure -f /etc/squid/squid.conf 2>/dev/null || docker compose restart egress
@@ -43,10 +43,10 @@ else
 fi
 docker compose ps
 '@ -replace "`r`n", "`n"
-$shFile = Join-Path $env:TEMP "gm-rebuild.sh"
+$shFile = Join-Path $env:TEMP "bitbob-rebuild.sh"
 [System.IO.File]::WriteAllText($shFile, $rebuild)
-$runFile = Join-Path $env:TEMP "gm-rebuild.cmd"
-Set-Content -LiteralPath $runFile -Encoding ASCII -Value "@type `"$shFile`" | wsl.exe -d $Distro --cd ~/SayGMAgent --exec sh"
+$runFile = Join-Path $env:TEMP "bitbob-rebuild.cmd"
+Set-Content -LiteralPath $runFile -Encoding ASCII -Value "@type `"$shFile`" | wsl.exe -d $Distro --cd ~/BitBob --exec sh"
 & cmd.exe /c $runFile
 if ($LASTEXITCODE -ne 0) { throw "docker compose failed ($LASTEXITCODE)" }
 Write-Host "Deployed. http://localhost:8787" -ForegroundColor Green

@@ -1,5 +1,5 @@
 //! Everything the desktop app does that is not window/tray plumbing: find the repo, check the
-//! machine (WSL, the `gm` distro, Docker, the stack), run the existing PowerShell scripts, read
+//! machine (WSL, the `bitbob` distro, Docker, the stack), run the existing PowerShell scripts, read
 //! logs. No Tauri types in here, so it compiles and is tested on any OS; the process-running
 //! parts only do anything useful on Windows.
 //!
@@ -14,24 +14,24 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-/// Saved in the app's config dir as `gm-desktop.json`.
+/// Saved in the app's config dir as `bitbob-desktop.json`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
-    /// The SayGMAgent checkout on this PC (where `scripts/gm-wsl/*.ps1` live).
+    /// The BitBob checkout on this PC (where `scripts/bitbob-wsl/*.ps1` live).
     pub repo: Option<PathBuf>,
     /// WSL distro that runs the stack (`setup.ps1 -Distro`).
     pub distro: String,
     /// Port of the live stack on 127.0.0.1.
     pub port: u16,
-    /// Sign the GM page in with `APP_TOKEN` from `<repo>\.env` instead of pasting it.
+    /// Sign the BitBob page in with `APP_TOKEN` from `<repo>\.env` instead of pasting it.
     pub auto_token: bool,
-    /// Open the GM page as soon as the stack answers, instead of staying on the launcher.
+    /// Open the BitBob page as soon as the stack answers, instead of staying on the launcher.
     pub open_when_ready: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { repo: None, distro: "gm".into(), port: 8787, auto_token: true, open_when_ready: true }
+        Settings { repo: None, distro: "bitbob".into(), port: 8787, auto_token: true, open_when_ready: true }
     }
 }
 
@@ -48,7 +48,7 @@ impl Settings {
         }
         std::fs::write(file, serde_json::to_string_pretty(self).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
     }
-    pub fn gm_url(&self) -> String {
+    pub fn bitbob_url(&self) -> String {
         format!("http://localhost:{}/", self.port)
     }
 }
@@ -58,16 +58,16 @@ pub fn valid_distro(name: &str) -> bool {
     !name.is_empty() && name.len() <= 40 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
-/// Does this folder look like the SayGMAgent repo?
+/// Does this folder look like the BitBob repo?
 pub fn is_repo(dir: &Path) -> bool {
-    dir.join("scripts").join("gm-wsl").join("start.ps1").is_file() && dir.join("docker-compose.yml").is_file()
+    dir.join("scripts").join("bitbob-wsl").join("start.ps1").is_file() && dir.join("docker-compose.yml").is_file()
 }
 
 /// Where the repo probably is: next to the exe (portable layout), then the usual places.
 pub fn guess_repo(exe_dir: Option<&Path>) -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
     if let Some(d) = exe_dir {
-        // desktop/src-tauri/target/release/gm-desktop.exe -> repo root
+        // desktop/src-tauri/target/release/bitbob-desktop.exe -> repo root
         let mut p = d.to_path_buf();
         for _ in 0..5 {
             cands.push(p.clone());
@@ -78,11 +78,11 @@ pub fn guess_repo(exe_dir: Option<&Path>) -> Option<PathBuf> {
         }
     }
     for drive in ["D:", "C:", "E:"] {
-        cands.push(PathBuf::from(format!("{drive}\\github\\SayGMAgent")));
+        cands.push(PathBuf::from(format!("{drive}\\github\\BitBob")));
     }
     if let Some(home) = std::env::var_os("USERPROFILE") {
-        cands.push(Path::new(&home).join("github").join("SayGMAgent"));
-        cands.push(Path::new(&home).join("SayGMAgent"));
+        cands.push(Path::new(&home).join("github").join("BitBob"));
+        cands.push(Path::new(&home).join("BitBob"));
     }
     cands.into_iter().find(|c| is_repo(c))
 }
@@ -126,7 +126,7 @@ pub struct Status {
     pub distro: Check,
     pub docker: Check,
     pub containers: Check,
-    /// GM answered /api/health on the configured port
+    /// BitBob answered /api/health on the configured port
     pub healthy: bool,
     pub url: String,
 }
@@ -134,7 +134,7 @@ pub struct Status {
 /// One pass over everything the launcher shows. Each probe is short (a few seconds at most)
 /// and independent, so one failing never hides the others.
 pub fn status(s: &Settings) -> Status {
-    let mut st = Status { url: s.gm_url(), ..Default::default() };
+    let mut st = Status { url: s.bitbob_url(), ..Default::default() };
     if let Some(repo) = &s.repo {
         st.repo = Some(repo.display().to_string());
         st.repo_ok = is_repo(repo);
@@ -177,7 +177,7 @@ pub fn status(s: &Settings) -> Status {
     if st.docker.ok {
         st.containers = match run_capture(
             "wsl.exe",
-            &["-d", &s.distro, "--cd", "~/SayGMAgent", "--exec", "docker", "compose", "ps", "--format", "{{.Name}} {{.State}}"],
+            &["-d", &s.distro, "--cd", "~/BitBob", "--exec", "docker", "compose", "ps", "-a", "--format", "{{.Name}} {{.State}}"],
             Duration::from_secs(20),
         ) {
             Ok((0, out)) => summarise_compose_ps(&out),
@@ -218,7 +218,7 @@ pub fn summarise_compose_ps(out: &str) -> Check {
         })
         .collect();
     if rows.is_empty() {
-        return Check { ok: false, detail: "no containers (run Deploy)".into() };
+        return Check { ok: false, detail: "no containers yet (run Deploy)".into() };
     }
     let running = rows.iter().filter(|(_, st)| *st == "running").count();
     let detail = rows.iter().map(|(n, st)| format!("{n}: {st}")).collect::<Vec<_>>().join(", ");
@@ -254,12 +254,12 @@ pub enum Action {
 impl Action {
     pub fn label(self) -> &'static str {
         match self {
-            Action::Setup => "Set up the gm distro",
-            Action::Start => "Start GM",
-            Action::Stop => "Stop GM",
+            Action::Setup => "Set up the bitbob distro",
+            Action::Start => "Start BitBob",
+            Action::Stop => "Stop BitBob",
             Action::Deploy => "Deploy (copy code in and rebuild)",
-            Action::Backup => "Back up GM data",
-            Action::InstallAtLogin => "Start GM at login",
+            Action::Backup => "Back up BitBob data",
+            Action::InstallAtLogin => "Start BitBob at login",
             Action::Logs => "Container logs",
         }
     }
@@ -272,9 +272,9 @@ pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&st
         return Err("invalid distro name".into());
     }
     if !is_repo(repo) {
-        return Err(format!("{} is not the SayGMAgent repo", repo.display()));
+        return Err(format!("{} is not the BitBob repo", repo.display()));
     }
-    let script = |name: &str| repo.join("scripts").join("gm-wsl").join(format!("{name}.ps1")).display().to_string();
+    let script = |name: &str| repo.join("scripts").join("bitbob-wsl").join(format!("{name}.ps1")).display().to_string();
     let ps = |file: String, extra: &[&str]| {
         let mut a = vec!["-NoProfile".to_string(), "-NonInteractive".into(), "-ExecutionPolicy".into(), "Bypass".into(), "-File".into(), file, "-Distro".into(), distro.to_string()];
         a.extend(extra.iter().map(|s| s.to_string()));
@@ -295,7 +295,7 @@ pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&st
         Action::InstallAtLogin => ps(script("start"), &["-InstallAtLogin"]),
         Action::Logs => (
             "wsl.exe".to_string(),
-            ["-d", distro, "--cd", "~/SayGMAgent", "--exec", "docker", "compose", "logs", "--tail", "300", "--no-color"].iter().map(|s| s.to_string()).collect(),
+            ["-d", distro, "--cd", "~/BitBob", "--exec", "docker", "compose", "logs", "--tail", "300", "--no-color"].iter().map(|s| s.to_string()).collect(),
         ),
     })
 }
@@ -381,54 +381,54 @@ mod tests {
 
     #[test]
     fn distro_names() {
-        assert!(valid_distro("gm"));
+        assert!(valid_distro("bitbob"));
         assert!(valid_distro("Ubuntu-24.04"));
         assert!(!valid_distro(""));
-        assert!(!valid_distro("gm; rm -rf /"));
+        assert!(!valid_distro("bitbob; rm -rf /"));
         assert!(!valid_distro("a b"));
     }
 
     #[test]
     fn utf16_and_utf8_output() {
-        let utf16: Vec<u8> = "gm\r\nUbuntu\r\n".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
-        assert_eq!(parse_distro_list(&decode(&utf16)), vec!["gm", "Ubuntu"]);
-        assert_eq!(parse_distro_list(&decode(b"gm\nUbuntu\n")), vec!["gm", "Ubuntu"]);
+        let utf16: Vec<u8> = "bitbob\r\nUbuntu\r\n".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+        assert_eq!(parse_distro_list(&decode(&utf16)), vec!["bitbob", "Ubuntu"]);
+        assert_eq!(parse_distro_list(&decode(b"bitbob\nUbuntu\n")), vec!["bitbob", "Ubuntu"]);
     }
 
     #[test]
     fn compose_summary() {
-        let c = summarise_compose_ps("gm-agent running\ngm-egress running\ngm-gateway exited\n");
+        let c = summarise_compose_ps("bitbob-agent running\nbitbob-egress running\nbitbob-gateway exited\n");
         assert!(!c.ok);
-        assert!(c.detail.contains("gm-gateway: exited"));
-        assert!(summarise_compose_ps("gm-agent running\n").ok);
+        assert!(c.detail.contains("bitbob-gateway: exited"));
+        assert!(summarise_compose_ps("bitbob-agent running\n").ok);
         assert!(!summarise_compose_ps("").ok);
     }
 
     #[test]
     fn commands_are_argv_arrays_from_fixed_shapes() {
-        let dir = std::env::temp_dir().join(format!("gm-desktop-test-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("scripts/gm-wsl")).unwrap();
-        std::fs::write(dir.join("scripts/gm-wsl/start.ps1"), "").unwrap();
+        let dir = std::env::temp_dir().join(format!("bitbob-desktop-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("scripts/bitbob-wsl")).unwrap();
+        std::fs::write(dir.join("scripts/bitbob-wsl/start.ps1"), "").unwrap();
         std::fs::write(dir.join("docker-compose.yml"), "").unwrap();
         assert!(is_repo(&dir));
-        let (p, a) = command_for(Action::Stop, &dir, "gm", None).unwrap();
+        let (p, a) = command_for(Action::Stop, &dir, "bitbob", None).unwrap();
         assert_eq!(p, "powershell.exe");
         assert_eq!(&a[..5], &["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"]);
         assert!(a[5].ends_with("start.ps1"));
-        assert_eq!(&a[6..], &["-Distro", "gm", "-Stop"]);
-        assert!(command_for(Action::Setup, &dir, "gm", Some("Ubuntu && calc")).is_err());
-        assert!(command_for(Action::Start, &dir, "gm$(x)", None).is_err());
-        let (p, a) = command_for(Action::Logs, &dir, "gm", None).unwrap();
+        assert_eq!(&a[6..], &["-Distro", "bitbob", "-Stop"]);
+        assert!(command_for(Action::Setup, &dir, "bitbob", Some("Ubuntu && calc")).is_err());
+        assert!(command_for(Action::Start, &dir, "bitbob$(x)", None).is_err());
+        let (p, a) = command_for(Action::Logs, &dir, "bitbob", None).unwrap();
         assert_eq!(p, "wsl.exe");
-        assert_eq!(a[1], "gm");
-        assert!(command_for(Action::Start, &dir.join("nope"), "gm", None).is_err());
+        assert_eq!(a[1], "bitbob");
+        assert!(command_for(Action::Start, &dir.join("nope"), "bitbob", None).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn settings_roundtrip() {
-        let f = std::env::temp_dir().join(format!("gm-desktop-settings-{}.json", std::process::id()));
-        let s = Settings { repo: Some(PathBuf::from("D:\\github\\SayGMAgent")), ..Default::default() };
+        let f = std::env::temp_dir().join(format!("bitbob-desktop-settings-{}.json", std::process::id()));
+        let s = Settings { repo: Some(PathBuf::from("D:\\github\\BitBob")), ..Default::default() };
         s.save(&f).unwrap();
         assert_eq!(Settings::load(&f), s);
         std::fs::remove_file(&f).unwrap();

@@ -98,6 +98,8 @@ export function Chat({
   const taRef = useRef<HTMLTextAreaElement>(null)
   // When the first message of a draft creates a session, keep the local stream going
   const createdHere = useRef<string | null>(null)
+  const sessionRef = useRef(session)
+  sessionRef.current = session
   // The turn we are currently reading, so re-rendering doesn't attach to it twice
   const followingRef = useRef<string | null>(null)
 
@@ -142,8 +144,24 @@ export function Chat({
         ta.scrollTop = ta.scrollHeight
       }, 0)
     }
-    window.addEventListener('gm:compose', onCompose)
-    return () => window.removeEventListener('gm:compose', onCompose)
+    window.addEventListener('bitbob:compose', onCompose)
+    // A turn the server started in this chat on its own (a QA swarm's verdict): join it
+    const onTurn = (e: Event) => {
+      const d = (e as CustomEvent<{ sessionId: string; turnId: string }>).detail
+      const cur = sessionRef.current
+      if (d && cur && d.sessionId === cur.id && followingRef.current !== d.turnId) {
+        void guard(api.session(cur.id)).then((r) => {
+          if (!r) return
+          setMsgs(r.messages.map(toView))
+          void resume(cur.id, d.turnId)
+        })
+      }
+    }
+    window.addEventListener('bitbob:turn-started', onTurn)
+    return () => {
+      window.removeEventListener('bitbob:compose', onCompose)
+      window.removeEventListener('bitbob:turn-started', onTurn)
+    }
   }, [])
 
   const patchLast = (fn: (m: ViewMessage) => ViewMessage) =>
@@ -529,7 +547,7 @@ function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: str
   const running = plainTools(m.tools).filter((t) => !t.done).length
   return (
     <div className="msg assistant">
-      <div className="avatar">GM</div>
+      <div className="avatar">BitBob</div>
       <div className="msg-body">
         <div className="msg-meta">
           <span className="model-chip">{m.model}</span>

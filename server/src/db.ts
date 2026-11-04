@@ -83,6 +83,9 @@ CREATE TABLE IF NOT EXISTS turn_events (
 // Migrations for databases created before projects existed
 const cols = (db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>).map((c) => c.name);
 if (!cols.includes("project_id")) db.exec("ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL");
+const pcols = (db.prepare("PRAGMA table_info(projects)").all() as Array<{ name: string }>).map((c) => c.name);
+if (!pcols.includes("ditto_sync")) db.exec("ALTER TABLE projects ADD COLUMN ditto_sync INTEGER NOT NULL DEFAULT 0");
+if (!pcols.includes("ditto_synced_at")) db.exec("ALTER TABLE projects ADD COLUMN ditto_synced_at INTEGER");
 
 // Engine sessions are tied to absolute workspace paths. If the workspace root moved
 // (e.g. host → Docker), drop them; the next turn replays history instead.
@@ -107,6 +110,10 @@ export interface ProjectRow {
   /** Folder name under DATA_DIR/projects: the project's agent workspace */
   dir: string;
   integrations_json: string;
+  /** 1 = keep Ditto current for this project (seed from uploads, agent told to save durable facts) */
+  ditto_sync: number;
+  /** last time a seed/sync run was started */
+  ditto_synced_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -138,16 +145,18 @@ export const projects = {
       color: input.color ?? "indigo",
       dir: `${slug(input.name)}-${id.slice(0, 6)}`,
       integrations_json: JSON.stringify(input.integrations ?? []),
+      ditto_sync: 0,
+      ditto_synced_at: null,
       created_at: now,
       updated_at: now,
     };
     mkdirSync(workspaceFor(row), { recursive: true });
     db.prepare(
-      "INSERT INTO projects (id,name,description,instructions,color,dir,integrations_json,created_at,updated_at) VALUES (@id,@name,@description,@instructions,@color,@dir,@integrations_json,@created_at,@updated_at)",
+      "INSERT INTO projects (id,name,description,instructions,color,dir,integrations_json,ditto_sync,ditto_synced_at,created_at,updated_at) VALUES (@id,@name,@description,@instructions,@color,@dir,@integrations_json,@ditto_sync,@ditto_synced_at,@created_at,@updated_at)",
     ).run({ ...row });
     return row;
   },
-  update(id: string, patch: { name?: string; description?: string; instructions?: string; color?: string; integrations?: string[] }) {
+  update(id: string, patch: { name?: string; description?: string; instructions?: string; color?: string; integrations?: string[]; dittoSync?: boolean; dittoSyncedAt?: number }) {
     const cur = projects.get(id);
     if (!cur) return;
     const next: ProjectRow = {
@@ -157,11 +166,13 @@ export const projects = {
       ...(patch.instructions !== undefined ? { instructions: patch.instructions } : {}),
       ...(patch.color !== undefined ? { color: patch.color } : {}),
       ...(patch.integrations !== undefined ? { integrations_json: JSON.stringify(patch.integrations) } : {}),
+      ...(patch.dittoSync !== undefined ? { ditto_sync: patch.dittoSync ? 1 : 0 } : {}),
+      ...(patch.dittoSyncedAt !== undefined ? { ditto_synced_at: patch.dittoSyncedAt } : {}),
       updated_at: Date.now(),
     };
     db.prepare(
-      "UPDATE projects SET name=@name, description=@description, instructions=@instructions, color=@color, integrations_json=@integrations_json, updated_at=@updated_at WHERE id=@id",
-    ).run({ id, name: next.name, description: next.description, instructions: next.instructions, color: next.color, integrations_json: next.integrations_json, updated_at: next.updated_at });
+      "UPDATE projects SET name=@name, description=@description, instructions=@instructions, color=@color, integrations_json=@integrations_json, ditto_sync=@ditto_sync, ditto_synced_at=@ditto_synced_at, updated_at=@updated_at WHERE id=@id",
+    ).run({ id, name: next.name, description: next.description, instructions: next.instructions, color: next.color, integrations_json: next.integrations_json, ditto_sync: next.ditto_sync, ditto_synced_at: next.ditto_synced_at, updated_at: next.updated_at });
     return next;
   },
   /** Chats move to "no project"; the workspace folder is kept on disk. */
@@ -235,6 +246,14 @@ export const sessions = {
   },
   delete(id: string) {
     db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  },
+  /** Insert a session with a chosen id and timestamps (imports). Returns false if the id exists. */
+  importRow(row: SessionRow): boolean {
+    if (sessions.get(row.id)) return false;
+    db.prepare(
+      "INSERT INTO sessions (id,title,engine,model,engine_session_id,project_id,created_at,updated_at) VALUES (@id,@title,@engine,@model,@engine_session_id,@project_id,@created_at,@updated_at)",
+    ).run({ ...row });
+    return true;
   },
 };
 
@@ -421,5 +440,11 @@ export const messages = {
       "INSERT INTO messages (id,session_id,role,content,model,tools_json,usage_json,created_at) VALUES (@id,@session_id,@role,@content,@model,@tools_json,@usage_json,@created_at)",
     ).run({ ...row });
     return row;
+  },
+  /** Insert a message with its original timestamp (imports). */
+  importRow(row: MessageRow) {
+    db.prepare(
+      "INSERT INTO messages (id,session_id,role,content,model,tools_json,usage_json,created_at) VALUES (@id,@session_id,@role,@content,@model,@tools_json,@usage_json,@created_at)",
+    ).run({ ...row });
   },
 };

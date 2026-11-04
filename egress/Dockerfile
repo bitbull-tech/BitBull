@@ -5,9 +5,9 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends squid socat curl \
     && rm -rf /var/lib/apt/lists/*
 COPY squid.conf /etc/squid/squid.conf
-# Asks GM about hosts that aren't on the allowlist (approvals made in the UI)
-COPY gm-approved.sh /usr/local/bin/gm-approved
-RUN chmod 755 /usr/local/bin/gm-approved
+# Asks BitBob about hosts that aren't on the allowlist (approvals made in the UI)
+COPY bitbob-approved.sh /usr/local/bin/bitbob-approved
+RUN chmod 755 /usr/local/bin/bitbob-approved
 USER proxy
 EXPOSE 3128
 CMD ["squid", "-N", "-f", "/etc/squid/squid.conf"]

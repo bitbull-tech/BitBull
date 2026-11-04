@@ -2,7 +2,7 @@ import { CLAUDE_READ_ONLY_DISALLOWED, listSubagents } from "../subagents.js";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
-import { gmMcpServer } from "../mcp.js";
+import { bitbobMcpServer } from "../mcp.js";
 import { LINKS_ROOT, linksAvailable } from "../links.js";
 import type { AgentEngine, AgentEvent, RunInput } from "./types.js";
 import { listModels } from "../models.js";
@@ -17,7 +17,7 @@ function cleanEnv(): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue;
     if (/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$|CLAUDECODE$|CLAUDE_AGENT_)/.test(k)) continue;
-    // GM's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
+    // BitBob's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
     if (/^(SAYGM_API_KEY|DITTO_API_KEY|APP_TOKEN|ATLAS_API_KEY|FOUR04_API_KEY|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
     out[k] = v;
   }
@@ -67,7 +67,7 @@ export const claudeEngine: AgentEngine = {
       }),
     );
 
-    const gmMcp = gmMcpServer(input.gmSessionId);
+    const bitbobMcp = bitbobMcpServer(input.bitbobSessionId);
     const options: Options = {
       agents,
       model: input.model,
@@ -88,8 +88,8 @@ export const claudeEngine: AgentEngine = {
       mcpServers: {
         ...(config.ditto.apiKey ? { ditto: { type: "http" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders() } } : {}),
         ...Object.fromEntries(Object.entries(input.mcp).map(([k, v]) => [k, { type: "http" as const, ...v }])),
-        // GM's own tools (network access requests); tagged with this chat
-        ...(gmMcp ? { gm: { type: "http" as const, ...gmMcp } } : {}),
+        // BitBob's own tools (network access requests); tagged with this chat
+        ...(bitbobMcp ? { bitbob: { type: "http" as const, ...bitbobMcp } } : {}),
       },
       env: {
         ...cleanEnv(),
@@ -170,7 +170,8 @@ export const claudeEngine: AgentEngine = {
               type: "done",
               engineSessionId: sessionId,
               usage: {
-                inputTokens: msg.usage?.input_tokens,
+                inputTokens: (msg.usage?.input_tokens ?? 0) + (msg.usage?.cache_read_input_tokens ?? 0) + (msg.usage?.cache_creation_input_tokens ?? 0),
+                cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0,
                 outputTokens: msg.usage?.output_tokens,
                 // total_cost_usd is an Anthropic list-price estimate, not SayGM billing — omitted.
               },

@@ -9,7 +9,7 @@ Decisions taken:
 | Question | Decision |
 |---|---|
 | Desktop shell | **Tauri 2** (Rust + the existing React bundle; same codebase can build iOS later) |
-| What the desktop app does | **Manages the local Docker stack and connects to remote GMs** |
+| What the desktop app does | **Manages the local Docker stack and connects to remote BitBobs** |
 | iOS | **PWA first** (no Mac, no Apple account); native revisited after real use |
 | Auth | **Per-device tokens before anything leaves localhost** |
 
@@ -17,7 +17,7 @@ Decisions taken:
 
 The server API is the only contract (`README.md` → API table). Clients stay thin: no
 business logic, no model routing, no engine knowledge. Everything the agent does keeps
-happening inside the sandbox; clients only ever talk to `gm-gateway`, so **no sandbox wall
+happening inside the sandbox; clients only ever talk to `bitbob-gateway`, so **no sandbox wall
 moves for any of this** and `egress/allowlist.txt` gains nothing.
 
 ## Phase 0 — make the server client-ready
@@ -99,13 +99,13 @@ re-keying everything.
 `desktop/` in this repo (see its README). It loads the UI from the local server rather than
 bundling `web/dist`, so the UI is identical to the browser and never out of step with the
 server. Done: machine checks with a "next step" line, the five scripts as buttons with live
-output, GM in its own IPC-less window signed in from `.env`, tray. Not yet: remote profiles,
+output, BitBob in its own IPC-less window signed in from `.env`, tray. Not yet: remote profiles,
 notifications, native drag-and-drop, keychain, Linux/macOS packaging. Original table:
 
 | Capability | Notes |
 |---|---|
 | Connection profiles | "Local (managed)" or "Remote URL + token"; several saved, switchable |
-| Local stack control | start / stop / status / logs / update. Windows: drives the existing `scripts/gm-wsl/*.ps1`. Linux/macOS: `docker compose` directly |
+| Local stack control | start / stop / status / logs / update. Windows: drives the existing `scripts/bitbob-wsl/*.ps1`. Linux/macOS: `docker compose` directly |
 | First-run setup | Checks for WSL/Docker, offers to run `setup.ps1`, collects `.env` values |
 | Tray + notifications | Turn finished, turn failed, server unreachable (needs 0.1) |
 | Native drag-and-drop | Real OS file and folder drops into the existing upload API |
@@ -124,7 +124,7 @@ and never talks to SayGM.
   enable-linger` so it survives logout.
 - `scripts/linux/update.sh` mirroring `deploy.ps1`'s semantics: rebuild, `squid -k
   reconfigure` (never a proxy restart mid-flight), and never touch the data directory.
-- Data stays outside the repo (`~/gm-data` by default, `GM_DATA_DIR` to move it).
+- Data stays outside the repo (`~/bitbob-data` by default, `BITBOB_DATA_DIR` to move it).
 
 ## Phase 4 — iOS
 
@@ -142,7 +142,7 @@ and never talks to SayGM.
 ### B. Native (weeks, only if the PWA proves the use)
 
 Tauri 2 iOS reuses the whole web codebase and `client-core`; SwiftUI would be a rewrite of
-the UI for the same features. Adds share-sheet ingest ("send this photo to GM"), background
+the UI for the same features. Adds share-sheet ingest ("send this photo to BitBob"), background
 and resumable uploads for large media, and real APNs.
 
 **Requires a Mac** (or macOS CI) with Xcode plus an Apple Developer account (~$99/yr) for
@@ -172,7 +172,7 @@ for free because they load the same bundle. See [BRANDING.md](BRANDING.md).
   with tests, and keep the streaming route working until clients have moved.
 - **Tauri's webview differs per OS** (WKWebView on macOS, WebKitGTK on Linux). The UI is
   standard React, so the risk is low, but the Linux webview needs a real test pass.
-- **A tunnel makes GM reachable from the internet.** Phase 1 is not optional; add Cloudflare
+- **A tunnel makes BitBob reachable from the internet.** Phase 1 is not optional; add Cloudflare
   Access if the phone is used outside the house.
 - **Supervising WSL from Tauri** inherits the PowerShell quoting traps already recorded in
   `docs/HANDOFF.md` — call the existing scripts rather than reimplementing them in Rust.

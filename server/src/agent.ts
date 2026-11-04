@@ -31,7 +31,7 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) 
   const parts = [existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : ""];
   parts.push(
     shellAllowed()
-      ? `\n## Environment\n\nYou run inside an isolated ${config.sandbox.kind} sandbox. Your shell and files are confined to it; the user's computer is not reachable.${config.sandbox.egressProxy ? " Internet access goes through an allowlist proxy. If a site or package host is refused (HTTP 403 from the proxy, 'CONNECT tunnel failed', 'Forbidden'), call the request_network_access tool (GM's own tool, named gm_request_network_access or mcp__gm__request_network_access) with the host and a one-sentence reason; it waits for the user's answer, then retry. Ask only for domains the task needs, and never try to get round the proxy." : ""}`
+      ? `\n## Environment\n\nYou run inside an isolated ${config.sandbox.kind} sandbox. Your shell and files are confined to it; the user's computer is not reachable.${config.sandbox.egressProxy ? " Internet access goes through an allowlist proxy. If a site or package host is refused (HTTP 403 from the proxy, 'CONNECT tunnel failed', 'Forbidden'), call the request_network_access tool (BitBob's own tool, named bitbob_request_network_access or mcp__bitbob__request_network_access) with the host and a one-sentence reason; it waits for the user's answer, then retry. Ask only for domains the task needs, and never try to get round the proxy." : ""}`
       : `\n## Environment\n\nShell commands are disabled in this environment (not sandboxed). Use file tools only, and tell the user if a task needs a shell.`,
   );
   const links = listLinks().filter((l) => l.readOnly);
@@ -49,7 +49,10 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) 
       `\n## Project: ${project.name}\n\nYour working directory is this project's workspace; keep all files for it there.` +
         (project.description ? `\n\nAbout this project: ${project.description}` : "") +
         (project.instructions ? `\n\nProject instructions (follow these):\n${project.instructions}` : "") +
-        `\n\nWhen saving memories about this project, include "Project: ${project.name}" in the memory text.`,
+        `\n\nWhen saving memories about this project, include "Project: ${project.name}" in the memory text.` +
+        (project.ditto_sync
+          ? `\n\nDitto sync is ON for this project: Ditto is the project's record. Before answering questions about it, search Ditto. At the end of any turn that produced a durable fact, decision, preference, lesson or change of status, save it to Ditto with save_memory (one concise memory each, source "bitbob", "Project: ${project.name}"), merging with related memories rather than duplicating. Material in uploads/claude-import/ (docs/, memory/) is the project's history from Claude.ai: treat it as already part of the record once a sync has run.`
+          : ""),
     );
   }
   return parts.join("\n");
@@ -131,7 +134,7 @@ export async function* runTurn(
     tools_json: attached.length ? JSON.stringify({ attachments: attached }) : null,
     usage_json: null,
   });
-  if (isFirst) sessions.update(session.id, { title: titleFrom(prompt) });
+  if (isFirst && (session.title === "New chat" || !session.title)) sessions.update(session.id, { title: titleFrom(prompt) });
   if (model !== session.model) sessions.update(session.id, { model });
 
   const title = sessions.get(session.id)?.title ?? session.title;
@@ -162,7 +165,7 @@ export async function* runTurn(
       signal: ctrl.signal,
       cwd,
       mcp,
-      gmSessionId: session.id,
+      bitbobSessionId: session.id,
       plan: opts.plan,
     })) {
       // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
@@ -208,7 +211,7 @@ export async function* runTurn(
 
   // Engines don't know SayGM's prices; estimate from the live price list.
   if (usage && !usage.costUsd && (usage.inputTokens || usage.outputTokens)) {
-    usage = { ...usage, costUsd: await estimateCost(model, usage.inputTokens, usage.outputTokens) };
+    usage = { ...usage, costUsd: await estimateCost(model, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens) };
   }
 
   if (engineSessionId && engineSessionId !== session.engine_session_id) {

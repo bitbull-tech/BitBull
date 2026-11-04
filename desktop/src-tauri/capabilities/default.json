@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The launcher window (local HTML) may call the app's commands. The GM window is deliberately not listed: a page served by GM gets no IPC.",
+  "description": "The launcher window (local HTML) may call the app's commands. The BitBob window is deliberately not listed: a page served by BitBob gets no IPC.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

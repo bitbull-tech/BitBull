@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type EngineId, type Model, type Project, type Session, type Status } from './api'
+import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type EngineId, type Model, type Project, type Session, type Status, type Swarm } from './api'
 import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
+import { SwarmDialog, SwarmPill } from './SwarmDialog'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
-import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, SelectionAsk, useActivity } from './activity'
+import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
 import { NetworkPrompt } from './network'
 
-const MODEL_KEY = 'gm-agent-model'
-const EXPANDED_KEY = 'gm-agent-expanded'
-const DEFAULT_SEEN_KEY = 'gm-agent-default-model-seen'
+const MODEL_KEY = 'bitbob-model'
+const EXPANDED_KEY = 'bitbob-expanded'
+const DEFAULT_SEEN_KEY = 'bitbob-default-model-seen'
 const lsGet = (k: string) => {
   try {
     return localStorage.getItem(k)
@@ -46,7 +47,7 @@ export default function App() {
       if (e instanceof Unauthorized) setAuthed(false)
       else {
         setAuthed(false)
-        setError('Cannot reach the GM server. Is `npm run dev` running?')
+        setError('Cannot reach the BitBob server. Is `npm run dev` running?')
       }
     }
   }, [])
@@ -105,8 +106,59 @@ function groupLabel(ts: number) {
 // Date groups in the Chats list: open unless the user collapsed them; "Older" starts collapsed
 const GROUP_DEFAULT_OPEN: Record<string, boolean> = { Today: true, 'Previous 7 days': true, Older: false }
 
+/** Inside a project: Today, Previous 7 days, then one group per month ("Sep 2026"). */
+function monthLabel(ts: number) {
+  const g = groupLabel(ts)
+  if (g !== 'Older') return g
+  return new Date(ts).toLocaleDateString([], { month: 'short', year: 'numeric' })
+}
+function groupBy(list: Session[], label: (ts: number) => string): Array<[string, Session[]]> {
+  const out: Array<[string, Session[]]> = []
+  for (const s of list) {
+    const g = label(s.updated_at)
+    const last = out[out.length - 1]
+    if (last && last[0] === g) last[1].push(s)
+    else out.push([g, [s]])
+  }
+  return out
+}
+
+const SIDE_W_KEY = 'bitbob-side-width'
+/** Drag handle on the sidebar's right edge; the width is a CSS variable on .shell, remembered per browser. */
+function useSidebarWidth() {
+  const [w, setW] = useState(() => {
+    try {
+      return Math.min(520, Math.max(220, Number(localStorage.getItem(SIDE_W_KEY)) || 276))
+    } catch {
+      return 276
+    }
+  })
+  const start = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const x0 = e.clientX
+    const w0 = w
+    const move = (ev: MouseEvent) => setW(Math.min(520, Math.max(220, w0 + ev.clientX - x0)))
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      setW((cur) => {
+        try {
+          localStorage.setItem(SIDE_W_KEY, String(cur))
+        } catch {
+          /* ignore */
+        }
+        return cur
+      })
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+  return { width: w, start }
+}
+
 function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthorized: () => void; onLogout: () => void }) {
   const [theme, setTheme] = useTheme()
+  const side = useSidebarWidth()
   const [sessions, setSessions] = useState<Session[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [models, setModels] = useState<Model[]>([])
@@ -135,11 +187,14 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
   const [filesDir, setFilesDir] = useState('')
   const [reposFor, setReposFor] = useState<Project | 'general' | null>(null)
+  const [swarmOpen, setSwarmOpen] = useState(false)
+  const [swarm, setSwarm] = useState<Swarm | null>(null)
   // right-click menu on a project row
   const [ctx, setCtx] = useState<{ p: Project; x: number; y: number } | null>(null)
+  const [errCtx, setErrCtx] = useState<{ x: number; y: number } | null>(null)
   useEffect(() => {
     if (!ctx) return
-    const close = () => setCtx(null)
+    const close = () => (setCtx(null), setErrCtx(null))
     window.addEventListener('mousedown', close)
     window.addEventListener('keydown', close)
     window.addEventListener('scroll', close, true)
@@ -156,8 +211,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const { unseen } = useActivity()
   useEffect(() => {
     const close = () => setActivityOpen(false)
-    window.addEventListener('gm:compose', close)
-    return () => window.removeEventListener('gm:compose', close)
+    window.addEventListener('bitbob:compose', close)
+    return () => window.removeEventListener('bitbob:compose', close)
   }, [])
 
   const setModel = (id: string) => {
@@ -235,6 +290,26 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     return r.session
   }
 
+  /** Ditto sync: flag the project (the agent then keeps Ditto current) and run a seed in its own chat. */
+  const setDittoSync = async (p: Project, on: boolean) => {
+    const r = await guard(api.updateProject(p.id, { dittoSync: on }))
+    if (!r) return
+    await refreshProjects()
+    if (on) await dittoSyncNow(r.project)
+  }
+  const dittoSyncNow = async (p: Project) => {
+    if (!status?.ditto.ok) {
+      reportLocal('Ditto is not connected: add DITTO_API_KEY in Settings first.')
+      return
+    }
+    const r = await guard(api.dittoSyncNow(p.id))
+    if (!r) return
+    await refreshSessions()
+    await refreshProjects()
+    const s = (await guard(api.session(r.sessionId)))?.session
+    if (s) openSession(s)
+  }
+
   const openSession = (s: Session) => {
     setActiveId(s.id)
     setViewKey(s.id)
@@ -271,16 +346,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     return m
   }, [sessions])
   const unfiled = useMemo(() => {
-    const out: Array<[string, Session[]]> = []
-    for (const s of sessions) {
-      if (s.project_id && projects.some((p) => p.id === s.project_id)) continue
-      if (!matches(s)) continue
-      const g = groupLabel(s.updated_at)
-      const last = out[out.length - 1]
-      if (last && last[0] === g) last[1].push(s)
-      else out.push([g, [s]])
-    }
-    return out
+    return groupBy(
+      sessions.filter((s) => !(s.project_id && projects.some((p) => p.id === s.project_id)) && matches(s)),
+      groupLabel,
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, projects, filter])
 
@@ -305,7 +374,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   )
 
   return (
-    <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
+    <div className={`shell ${navOpen ? 'nav-open' : ''}`} style={{ ['--side-w' as string]: `${side.width}px` }}>
       <aside className="sidebar">
         <div className="brand">
           <BrandMark onDark />
@@ -345,6 +414,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                   <IconChevronRight size={13} className={`chev ${open ? 'open' : ''}`} />
                   <span className={`pdot pc-${p.color}`} />
                   <span className="title">{p.name}</span>
+                  {p.dittoSync && (
+                    <span className="ditto-sync" title={`Ditto sync enabled${p.dittoSyncedAt ? ` · last sync ${new Date(p.dittoSyncedAt).toLocaleString()}` : ''}`}>
+                      ◆
+                    </span>
+                  )}
                   <span className="count">{byProject.get(p.id)?.length ?? 0}</span>
                   <span className="session-actions">
                     <button
@@ -392,7 +466,20 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                 </div>
                 {open && (
                   <div className="project-chats">
-                    {list.map(row)}
+                    {groupBy(list, monthLabel).map(([label, group], gi) => {
+                      const key = `group:${p.id}:${label}`
+                      const isOpen = !!f || (expanded[key] ?? (gi === 0 || label === 'Today' || label === 'Previous 7 days'))
+                      return (
+                        <div key={label} className="chat-group">
+                          <button className="group-label" aria-expanded={isOpen} onClick={() => setExpand(key, !isOpen)} title={isOpen ? 'Collapse' : 'Expand'}>
+                            <IconChevronRight size={12} className={`chev ${isOpen ? 'open' : ''}`} />
+                            <span>{label}</span>
+                            <span className="count">{group.length}</span>
+                          </button>
+                          {isOpen && <div className="group-chats">{group.map(row)}</div>}
+                        </div>
+                      )
+                    })}
                     {!list.length && (
                       <button className="empty-project" onClick={() => newChat(p.id)}>
                         <IconPlus size={12} /> Start a chat in {p.name}
@@ -439,7 +526,15 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <span className={`dot ${status ? (status.ditto.ok ? 'ok' : 'bad') : 'run'}`} /> Ditto
           </button>
           {unseen > 0 && (
-            <button className="act-badge" onClick={() => (clearToasts(), setActivityOpen(true))} title="Errors since you last looked">
+            <button
+              className="act-badge"
+              onClick={() => (clearToasts(), setActivityOpen(true))}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setErrCtx({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180) })
+              }}
+              title="Errors since you last looked · right-click for options"
+            >
               {unseen} error{unseen > 1 ? 's' : ''}
             </button>
           )}
@@ -463,6 +558,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <IconSettings />
           </button>
         </footer>
+        <div className="side-resizer" onMouseDown={side.start} title="Drag to resize" />
       </aside>
       <div className="scrim" onClick={() => setNavOpen(false)} />
 
@@ -499,6 +595,25 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <button className="btn files-btn" title="Git repositories in this workspace: branches, status, actions via the agent" onClick={() => setReposFor(currentProject ?? 'general')}>
             <IconBranch size={14} /> Repos
           </button>
+          {swarm && swarm.sessionId === active?.id ? (
+            <SwarmPill
+              swarm={swarm}
+              onUpdate={setSwarm}
+              onFinalTurn={(sessionId, turnId) => window.dispatchEvent(new CustomEvent('bitbob:turn-started', { detail: { sessionId, turnId } }))}
+            />
+          ) : (
+            <button
+              className="btn files-btn"
+              title="QA swarm: other models review a repo, folder or file, challenge each other, and this chat's model gives the verdict"
+              onClick={() => {
+                // a swarm reports into a chat: start one if this is still a draft
+                if (active) setSwarmOpen(true)
+                else void createSession(cfg.defaultEngine).then((s) => s && setSwarmOpen(true))
+              }}
+            >
+              <IconSearch size={14} /> QA swarm
+            </button>
+          )}
           <ModelPicker models={models} value={model} onChange={setModel} />
         </header>
         <Chat
@@ -538,6 +653,20 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         />
       )}
       {filesFor && <FilesDialog project={filesFor === 'general' ? null : filesFor} startDir={filesDir} onClose={() => setFilesFor(null)} />}
+      {swarmOpen && active && (
+        <SwarmDialog
+          session={active}
+          project={currentProject}
+          models={models}
+          primaryModel={model}
+          onClose={() => setSwarmOpen(false)}
+          onStarted={(s) => {
+            setSwarm(s)
+            setSwarmOpen(false)
+            void refreshSessions()
+          }}
+        />
+      )}
       {reposFor && (
         <ReposDialog
           project={reposFor === 'general' ? null : reposFor}
@@ -561,8 +690,52 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <IconFolder size={14} /> Files
           </button>
           <div className="sep" />
+          {ctx.p.dittoSync ? (
+            <>
+              <button onClick={() => (setCtx(null), void dittoSyncNow(ctx.p))}>
+                <IconMore size={14} /> Sync to Ditto now
+              </button>
+              <button onClick={() => (setCtx(null), void setDittoSync(ctx.p, false))}>
+                <IconX size={14} /> Disable Ditto sync
+              </button>
+            </>
+          ) : (
+            <button onClick={() => (setCtx(null), void setDittoSync(ctx.p, true))} title="Seed Ditto from this project's imported material and keep it current">
+              <IconMore size={14} /> Enable Ditto sync
+            </button>
+          )}
+          <div className="sep" />
           <button onClick={() => (setCtx(null), setProjectDialog(ctx.p))}>
             <IconSettings size={14} /> Project settings
+          </button>
+        </div>
+      )}
+      {errCtx && (
+        <div className="ctx-menu" style={{ left: errCtx.x, top: errCtx.y }} role="menu" onMouseDown={(e) => e.stopPropagation()}>
+          <button onClick={() => (setErrCtx(null), clearToasts(), setActivityOpen(true))}>
+            <IconSearch size={14} /> Inspect errors
+          </button>
+          <button
+            onClick={() => {
+              setErrCtx(null)
+              const last = latestError()
+              if (last) composeInChat(`This error just appeared in the activity log. Explain what it means and what to do about it:\n\n${last.source} · ${last.ts}\n${last.message}${last.detail ? `\n\n${last.detail}` : ''}`)
+            }}
+          >
+            <IconPencil size={14} /> Ask the agent about the latest
+          </button>
+          <button
+            onClick={() => {
+              setErrCtx(null)
+              const last = latestError()
+              if (last) void navigator.clipboard?.writeText(`${last.ts} ${last.source}: ${last.message}${last.detail ? `\n${last.detail}` : ''}`)
+            }}
+          >
+            <IconMore size={14} /> Copy the latest
+          </button>
+          <div className="sep" />
+          <button onClick={() => (setErrCtx(null), markErrorsSeen())}>
+            <IconTrash size={14} /> Clear (mark all seen)
           </button>
         </div>
       )}

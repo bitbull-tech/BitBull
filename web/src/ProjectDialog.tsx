@@ -21,6 +21,7 @@ export function ProjectDialog({
     instructions: project?.instructions ?? '',
     color: project?.color ?? 'indigo',
     integrations: project?.integrations ?? [],
+    dittoSync: project?.dittoSync ?? false,
   })
   const [available, setAvailable] = useState<IntegrationInfo[]>([])
   const [saving, setSaving] = useState(false)
@@ -99,7 +100,7 @@ export function ProjectDialog({
               rows={6}
               value={form.instructions}
               onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              placeholder={'Applied to every chat in this project, e.g.\n- Subjects: Thomas Quintus Horner (RAF, svc 26182) and Diana Mary Charlton (WAAF)\n- Output: 90-second cinematic per chapter, British English\n- Sources live in uploads/; never state a fact that isn\'t in them'}
+              placeholder={'Applied to every chat in this project: what it is for, style and language, rules, where the sources live…'}
             />
           </label>
           <div className="field">
@@ -114,7 +115,31 @@ export function ProjectDialog({
                   </div>
                 </label>
               ))}
+              {available
+                .filter((i) => i.global)
+                .map((i) => (
+                  <label key={i.id} className={`int-row ${i.configured ? '' : 'off'}`} title="Global: configured once in .env, available in every project">
+                    <input type="checkbox" checked={i.configured} disabled />
+                    <div>
+                      <b>{i.name}</b>
+                      <small>{i.configured ? 'On for every project (keys in .env)' : 'Not configured: add keys in .env (see Settings → Integrations)'}</small>
+                    </div>
+                  </label>
+                ))}
             </div>
+          </div>
+          <div className="field">
+            <span>Memory</span>
+            <label className="int-row">
+              <input type="checkbox" checked={!!form.dittoSync} onChange={(e) => setForm({ ...form, dittoSync: e.target.checked })} />
+              <div>
+                <b>Ditto sync</b>
+                <small>
+                  Ditto is this project's record: seeded from its imported docs and memory (right-click the project → Sync to Ditto now), and the agent saves
+                  durable facts and decisions after every turn.{project?.dittoSyncedAt ? ` Last sync ${new Date(project.dittoSyncedAt).toLocaleString()}.` : ''}
+                </small>
+              </div>
+            </label>
           </div>
           {project && <p className="muted small">Workspace: <code>{project.workspace}</code></p>}
           {error && <p className="error">{error}</p>}

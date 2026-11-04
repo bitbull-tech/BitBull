@@ -147,15 +147,15 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
           </div>
           {where && (
             <div className="files-where">
-              <span className="muted small">Inside GM:</span>
-              <code title="Path inside the gm-agent container (what the agent sees)">{where.container}</code>
+              <span className="muted small">Inside BitBob:</span>
+              <code title="Path inside the bitbob-agent container (what the agent sees)">{where.container}</code>
               <button className="icon-btn sm" title="Copy container path" onClick={() => copy(where.container)}>
                 {copied === where.container ? <IconCheck size={13} /> : <IconCopy size={13} />}
               </button>
               {where.host && (
                 <>
                   <span className="muted small">On the host:</span>
-                  <code title="The same folder inside the gm WSL distro (wsl -d gm)">{where.host}</code>
+                  <code title="The same folder inside the bitbob WSL distro (wsl -d bitbob)">{where.host}</code>
                   <button className="icon-btn sm" title="Copy host path" onClick={() => copy(where.host!)}>
                     {copied === where.host ? <IconCheck size={13} /> : <IconCopy size={13} />}
                   </button>

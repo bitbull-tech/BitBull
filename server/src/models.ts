@@ -130,10 +130,12 @@ export async function listModels(force = false): Promise<ModelInfo[]> {
 }
 
 /** Estimated USD cost of a turn from SayGM's live per-model prices. */
-export async function estimateCost(modelId: string, inputTokens = 0, outputTokens = 0): Promise<number | undefined> {
+export async function estimateCost(modelId: string, inputTokens = 0, outputTokens = 0, cacheReadTokens = 0): Promise<number | undefined> {
   const m = (await listModels()).find((x) => x.id === modelId);
   if (!m?.price) return undefined;
-  return (inputTokens * m.price.input + outputTokens * m.price.output) / 1e6;
+  // cache reads are billed at their own (lower) rate when the gateway publishes one
+  const cacheRate = m.price.cacheRead ?? m.price.input;
+  return (Math.max(0, inputTokens - cacheReadTokens) * m.price.input + cacheReadTokens * cacheRate + outputTokens * m.price.output) / 1e6;
 }
 
 /** Model list for clients, without the raw gateway payload. */

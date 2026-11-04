@@ -24,7 +24,7 @@ const MAX = 1500
 let events: ActivityEvent[] = []
 let lastSeenErrorId = (() => {
   try {
-    return Number(localStorage.getItem('gm-activity-seen') ?? 0) || 0
+    return Number(localStorage.getItem('bitbob-activity-seen') ?? 0) || 0
   } catch {
     return 0
   }
@@ -78,12 +78,17 @@ export function clearToasts() {
   emit()
 }
 
+/** The newest error in the feed (for the badge's right-click menu). */
+export function latestError(): ActivityEvent | undefined {
+  return events.filter((e) => e.level === 'error').at(-1)
+}
+
 export function markErrorsSeen() {
   const maxId = events.reduce((m, e) => (e.local ? m : Math.max(m, e.id)), lastSeenErrorId)
   lastSeenErrorId = maxId
   localUnseen = 0
   try {
-    localStorage.setItem('gm-activity-seen', String(maxId))
+    localStorage.setItem('bitbob-activity-seen', String(maxId))
   } catch {
     /* ignore */
   }
@@ -121,7 +126,7 @@ export function useSelected() {
 
 /** Put text into the chat composer (Chat listens), so the user can add notes before sending. */
 export function composeInChat(text: string) {
-  window.dispatchEvent(new CustomEvent('gm:compose', { detail: text }))
+  window.dispatchEvent(new CustomEvent('bitbob:compose', { detail: text }))
 }
 
 export type ReviewMode = 'explain' | 'debug' | 'review'
@@ -199,7 +204,14 @@ export function useActivity() {
 
 /* ---------------- presentation helpers ---------------- */
 
-const time = (ts: string) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+/** "11:03:07" for today, "4 Nov 11:03:07" otherwise: an error list spans days. */
+const time = (ts: string) => {
+  const d = new Date(ts)
+  const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const now = new Date()
+  const today = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return today ? t : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${t}`
+}
 
 function Row({ e, open, onToggle, picked }: { e: ActivityEvent; open: boolean; onToggle: () => void; picked: boolean }) {
   return (
@@ -246,7 +258,7 @@ function ReviewBar({ events }: { events: ActivityEvent[] }) {
 /* ---------------- dock: collapsed bar at the bottom of the chat ---------------- */
 
 type DockFilter = 'all' | 'problems' | 'chat'
-const DOCK_KEY = 'gm-activity-dock'
+const DOCK_KEY = 'bitbob-activity-dock'
 
 export function ActivityDock({ sessionId, onOpenFull }: { sessionId?: string; onOpenFull: () => void }) {
   const { events, unseen, connected } = useActivity()
@@ -385,7 +397,7 @@ export function ActivityView({ onClose, initialLevel }: { onClose: () => void; i
     const text = shown.map((e) => `${e.ts} ${e.level.toUpperCase()} [${e.source}]${e.sessionTitle ? ` (${e.sessionTitle})` : ''} ${e.message}${e.detail ? `\n${e.detail}` : ''}`).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
-    a.download = `gm-activity-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.log`
+    a.download = `bitbob-activity-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.log`
     a.click()
     URL.revokeObjectURL(a.href)
   }

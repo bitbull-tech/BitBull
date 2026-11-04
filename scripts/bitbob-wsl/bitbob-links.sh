@@ -1,42 +1,42 @@
 #!/bin/sh
-# Read-only links from Windows folders into the GM sandbox. Runs as root in the gm distro;
-# installed as /usr/local/sbin/gm-links by link.ps1 (and provision.sh).
+# Read-only links from Windows folders into the BitBob sandbox. Runs as root in the bitbob distro;
+# installed as /usr/local/sbin/bitbob-links by link.ps1 (and provision.sh).
 #
-#   gm-links add <name> '<Windows path>'          live: the folder itself, read-only
-#   gm-links add-filtered <name> '<Windows path>' filtered: a read-only copy WITHOUT the paths
+#   bitbob-links add <name> '<Windows path>'          live: the folder itself, read-only
+#   bitbob-links add-filtered <name> '<Windows path>' filtered: a read-only copy WITHOUT the paths
 #                                                 listed on stdin (keys, .env, wallets ...)
-#   gm-links refresh <name>                       filtered only: re-copy (new hide list on stdin)
-#   gm-links remove <name>
-#   gm-links list
-#   gm-links mount-all                            bring everything back (at boot)
+#   bitbob-links refresh <name>                       filtered only: re-copy (new hide list on stdin)
+#   bitbob-links remove <name>
+#   bitbob-links list
+#   bitbob-links mount-all                            bring everything back (at boot)
 #
-# The gm distro has Windows drive automount switched off, so nothing on Windows is visible
-# here except what is listed in /etc/gm-links. The gm-agent container sees /srv/gm-links at
+# The bitbob distro has Windows drive automount switched off, so nothing on Windows is visible
+# here except what is listed in /etc/bitbob-links. The bitbob-agent container sees /srv/bitbob-links at
 # /links (read-only again, in compose); nothing else under /srv is visible to it.
 #
-# live      drvfs mount at /srv/gm-links/<name>: ro, noexec, nosuid, nodev. The kernel refuses
+# live      drvfs mount at /srv/bitbob-links/<name>: ro, noexec, nosuid, nodev. The kernel refuses
 #           every write, so files can't be changed, deleted or encrypted.
 # filtered  for folders that hold secrets. Hiding files inside a live Windows mount isn't
 #           reliable (Windows names are case-insensitive and have 8.3 short aliases, so a
 #           hidden ".env" could still be opened as ".ENV" or "ENV~1"). So instead the folder is
-#           mounted read-only in a root-only place (/srv/gm-src, never visible to GM), copied
-#           with rsync to /srv/gm-mirrors/<name> leaving the hidden paths out, unmounted again,
-#           and the copy is bound read-only into /srv/gm-links/<name>. A hidden file is
+#           mounted read-only in a root-only place (/srv/bitbob-src, never visible to BitBob), copied
+#           with rsync to /srv/bitbob-mirrors/<name> leaving the hidden paths out, unmounted again,
+#           and the copy is bound read-only into /srv/bitbob-links/<name>. A hidden file is
 #           simply not there. The copy changes only when you press Refresh (link.ps1 -Refresh),
 #           which re-scans the folder on Windows first; boot never re-copies.
 #
-# Changing links never happens from GM itself: only root in this distro can mount, and the
+# Changing links never happens from BitBob itself: only root in this distro can mount, and the
 # container's uids are remapped to nobodies here.
 set -eu
-LINKS=/srv/gm-links
-SRC=/srv/gm-src
-MIRRORS=/srv/gm-mirrors
-REG=/etc/gm-links
-HIDE=/etc/gm-links.d
+LINKS=/srv/bitbob-links
+SRC=/srv/bitbob-src
+MIRRORS=/srv/bitbob-mirrors
+REG=/etc/bitbob-links
+HIDE=/etc/bitbob-links.d
 
 uid() {
   start=$(awk -F: '$1=="dockremap"{print $2}' /etc/subuid)
-  [ -n "$start" ] || { echo "dockremap subuid range not found: is this the gm distro?" >&2; exit 1; }
+  [ -n "$start" ] || { echo "dockremap subuid range not found: is this the bitbob distro?" >&2; exit 1; }
   echo $((start + 1000))
 }
 
@@ -108,8 +108,8 @@ bind_filtered() { # name
 }
 
 verify_ro() { # name
-  if touch "$LINKS/$1/.gm-write-test" 2>/dev/null; then
-    rm -f "$LINKS/$1/.gm-write-test"
+  if touch "$LINKS/$1/.bitbob-write-test" 2>/dev/null; then
+    rm -f "$LINKS/$1/.bitbob-write-test"
     umount -R "$LINKS/$1" 2>/dev/null || true
     echo "REFUSED: the link was writable, so it has been removed" >&2
     return 1
@@ -177,12 +177,12 @@ case "${1:-list}" in
       [ -n "$name" ] || continue
       if [ "${mode:-live}" = filtered ]; then
         # the existing copy only: re-copying needs a fresh scan for secrets on Windows
-        [ -d "$MIRRORS/$name" ] && bind_filtered "$name" || echo "gm-links: no copy for $name" >&2
+        [ -d "$MIRRORS/$name" ] && bind_filtered "$name" || echo "bitbob-links: no copy for $name" >&2
       else
-        mount_live "$name" "$win" || echo "gm-links: could not mount $name ($win)" >&2
+        mount_live "$name" "$win" || echo "bitbob-links: could not mount $name ($win)" >&2
       fi
     done < "$REG"
     ;;
   *)
-    echo "usage: gm-links add|add-filtered <name> <windows-path> | refresh <name> | remove <name> | list | mount-all" >&2; exit 2 ;;
+    echo "usage: bitbob-links add|add-filtered <name> <windows-path> | refresh <name> | remove <name> | list | mount-all" >&2; exit 2 ;;
 esac

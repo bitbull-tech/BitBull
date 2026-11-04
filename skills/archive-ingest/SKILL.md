@@ -10,7 +10,7 @@ Turns a pile of uploads into a structured, source-bound catalogue that the
 item say", never "what happened to this person".
 
 ## 1. Inventory
-- Run the ingest tool first: `node /app/tools/ingest.mjs <inbox> --out archive` (inbox = `uploads/`, `uploads/inbox/`, or a linked folder such as `/links/gm-capture`; the tool path is `tools/ingest.mjs` relative to GM's root, use `ls /app/tools` if unsure). It copies each new file into `archive/items/<id>/`, de-duplicates by content, reads EXIF dates, OCRs images and PDFs, and writes `archive/manifest.md` with a "needs a look" list. Re-run it whenever the inbox grows; it only processes new files.
+- Run the ingest tool first: `node /app/tools/ingest.mjs <inbox> --out archive` (inbox = `uploads/`, `uploads/inbox/`, or a linked folder such as `/links/bitbob-capture`; the tool path is `tools/ingest.mjs` relative to BitBob's root, use `ls /app/tools` if unsure). It copies each new file into `archive/items/<id>/`, de-duplicates by content, reads EXIF dates, OCRs images and PDFs, and writes `archive/manifest.md` with a "needs a look" list. Re-run it whenever the inbox grows; it only processes new files.
 - Read `archive/manifest.md`. Work from `archive/items/<id>/original.*` and `text.txt`; never change files in the inbox (linked folders are read-only anyway).
 - For anything the tool couldn't read (HEIC, video, audio, flagged items), record path, type, size, and for media the dimensions/duration yourself.
 - Tools if installed (check with `which`/`where`): `exiftool` (dates, camera, GPS), `ffprobe` (video duration, fps), `pdftotext`/`pdfinfo`, `tesseract` (OCR). If one is missing, say so and continue with what you can read directly (you can read images and PDFs yourself).

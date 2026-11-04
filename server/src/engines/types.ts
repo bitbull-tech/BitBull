@@ -14,6 +14,8 @@ export type AgentEvent =
 
 export interface Usage {
   inputTokens?: number;
+  /** part of inputTokens that was served from the prompt cache (cheaper) */
+  cacheReadTokens?: number;
   outputTokens?: number;
   costUsd?: number;
 }
@@ -29,8 +31,8 @@ export interface RunInput {
   cwd: string;
   /** Integration MCP servers enabled for this chat's project */
   mcp: Record<string, { url: string; headers: Record<string, string> }>;
-  /** GM's chat id (lets GM's own MCP tools say which chat asked) */
-  gmSessionId?: string;
+  /** BitBob's chat id (lets BitBob's own MCP tools say which chat asked) */
+  bitbobSessionId?: string;
   /** Read-only planning turn: investigate and propose, change nothing */
   plan?: boolean;
 }

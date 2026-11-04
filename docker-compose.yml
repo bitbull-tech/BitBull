@@ -1,19 +1,19 @@
-# GM Agent in a sandbox.
+# BitBob in a sandbox.
 #   docker compose up -d --build     → UI + API on http://localhost:8787
-#   docker compose logs -f gm-agent  → server output (also in data/logs/server.log)
+#   docker compose logs -f bitbob-agent  → server output (also in data/logs/server.log)
 #   docker compose logs -f egress    → every outbound request, allowed or refused
 #
-# The agent's shell, files and tools run inside gm-agent as an unprivileged user.
+# The agent's shell, files and tools run inside bitbob-agent as an unprivileged user.
 # It can read and write only the data folder (mounted at /data). Its network is
 # internal: no internet and no route to your home network or Windows. The only way
 # out is the egress proxy, which allows just the domains in egress/allowlist.txt.
 #
-#   browser ──127.0.0.1:8787──▶ gateway ──▶ gm-agent ──▶ egress ──allowlist──▶ internet
+#   browser ──127.0.0.1:8787──▶ gateway ──▶ bitbob-agent ──▶ egress ──allowlist──▶ internet
 #                                           (sandbox network, internal)
 
-# A second, isolated copy can run alongside the live one: GM_SUFFIX renames the containers,
-# GM_TAG its images, GM_PORT its port and GM_DATA_DIR its data. All default to the live
-# stack's values, so nothing changes unless you set them. See scripts/gm-wsl/test-stack.ps1.
+# A second, isolated copy can run alongside the live one: BITBOB_SUFFIX renames the containers,
+# BITBOB_TAG its images, BITBOB_PORT its port and BITBOB_DATA_DIR its data. All default to the live
+# stack's values, so nothing changes unless you set them. See scripts/bitbob-wsl/test-stack.ps1.
 
 x-hardening: &hardening
   read_only: true
@@ -24,17 +24,17 @@ x-hardening: &hardening
   restart: unless-stopped
 
 services:
-  gm-agent:
+  bitbob-agent:
     <<: *hardening
     build: .
-    image: saygmagent:${GM_TAG:-local}
-    container_name: gm-agent${GM_SUFFIX:-}
+    image: bitbob:${BITBOB_TAG:-local}
+    container_name: bitbob-agent${BITBOB_SUFFIX:-}
     env_file: .env
     environment:
       DATA_DIR: /data
-      # Shown in the Files view so you can find the same folder on the host (inside the gm distro
+      # Shown in the Files view so you can find the same folder on the host (inside the bitbob distro
       # on Windows). Set by deploy.ps1 / test-stack.ps1; empty in plain docker compose.
-      GM_HOST_DATA_DIR: ${GM_HOST_DATA_DIR:-}
+      BITBOB_HOST_DATA_DIR: ${BITBOB_HOST_DATA_DIR:-}
       HOST: 0.0.0.0
       # Bind mounts on Docker Desktop don't support SQLite's WAL shared memory reliably
       SQLITE_JOURNAL: DELETE
@@ -47,23 +47,23 @@ services:
       no_proxy: localhost,127.0.0.1,::1
       NODE_USE_ENV_PROXY: "1"
     volumes:
-      - ${GM_DATA_DIR:-./data}:/data
-      # Folders you linked read-only (scripts/gm-wsl/link.ps1). Each one is already mounted
-      # ro,noexec in the gm distro; :ro here again. Only you can add one, from Windows.
-      - ${GM_LINKS_DIR:-./links}:/links:ro
+      - ${BITBOB_DATA_DIR:-./data}:/data
+      # Folders you linked read-only (scripts/bitbob-wsl/link.ps1). Each one is already mounted
+      # ro,noexec in the bitbob distro; :ro here again. Only you can add one, from Windows.
+      - ${BITBOB_LINKS_DIR:-./links}:/links:ro
     networks: [sandbox]
     depends_on: [egress]
     tmpfs:
       - /tmp:size=1g
     pids_limit: 512
-    mem_limit: ${GM_MEMORY:-6g}
-    cpus: ${GM_CPUS:-4}
+    mem_limit: ${BITBOB_MEMORY:-6g}
+    cpus: ${BITBOB_CPUS:-4}
 
   egress:
     <<: *hardening
     build: ./egress
-    image: saygmagent-egress:${GM_TAG:-local}
-    container_name: gm-egress${GM_SUFFIX:-}
+    image: bitbob-egress:${BITBOB_TAG:-local}
+    container_name: bitbob-egress${BITBOB_SUFFIX:-}
     volumes:
       - ./egress/allowlist.txt:/etc/squid/allowlist.txt:ro
     tmpfs:
@@ -78,14 +78,14 @@ services:
   gateway:
     <<: *hardening
     build: ./egress
-    image: saygmagent-egress:${GM_TAG:-local}
-    container_name: gm-gateway${GM_SUFFIX:-}
-    command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:gm-agent:8787"]
+    image: bitbob-egress:${BITBOB_TAG:-local}
+    container_name: bitbob-gateway${BITBOB_SUFFIX:-}
+    command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:bitbob-agent:8787"]
     # Only reachable from this computer. Put a reverse proxy with HTTPS in front to expose it.
     ports:
-      - "127.0.0.1:${GM_PORT:-8787}:8787"
+      - "127.0.0.1:${BITBOB_PORT:-8787}:8787"
     networks: [sandbox, outside]
-    depends_on: [egress, gm-agent]
+    depends_on: [egress, bitbob-agent]
     pids_limit: 128
     mem_limit: 128m
 

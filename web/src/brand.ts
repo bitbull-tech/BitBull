@@ -35,12 +35,12 @@ export interface Brand {
 }
 
 export const defaultBrand: Brand = {
-  name: 'GM Agent',
-  tagline: 'SayGM · Ditto · Atlas',
+  name: 'BitBob',
+  tagline: 'The Bittensor Builder',
   logo: null,
   logoDark: null,
   icon: null,
-  mark: 'GM',
+  mark: '',
   tokens: { light: {}, dark: {} },
 }
 

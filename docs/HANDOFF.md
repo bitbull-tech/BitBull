@@ -1,35 +1,68 @@
-# GM Agent — handoff (updated 4 Nov 2026)
+# BitBob — handoff (updated 4 Nov 2026)
 
-Everything a new session (Claude Code, GM itself, or any agent) needs to carry on from the build
-conversation of 7 Oct – 4 Nov 2026. Short version in `CLAUDE.md`; for agents *using* GM,
-`agent-readme.md`. The same handoff is in Ditto (search "GM Agent handoff 4 Nov 2026"), so in a
-GM chat "catch me up on GM Agent" gets it through the project-recall skill.
+Everything a new session (Claude Code, BitBob itself, or any agent) needs to carry on from the build
+conversation of 7 Oct – 4 Nov 2026. Short version in `CLAUDE.md`; for agents *using* BitBob,
+`agent-readme.md`. The same handoff is in Ditto (search "BitBob handoff 4 Nov 2026"), so in a
+BitBob chat "catch me up on BitBob" gets it through the project-recall skill.
+
+## Renamed to BitBob (4 Nov 2026)
+
+The product was **GM Agent** in repo **SayGMAgent** until 4 Nov 2026; Tom renamed it **BitBob —
+The Bittensor Builder**. Everything was renamed in one commit, runtime identifiers included:
+repo `tommyhgunz14/BitBob` (`D:\github\BitBob`), WSL distro `bitbob` (disk in
+`%LOCALAPPDATA%\BitBob-WSL`), data `~/bitbob-data`, code copy `~/BitBob`, containers
+`bitbob-agent` / `bitbob-egress` / `bitbob-gateway`, images `bitbob:local` / `bitbob-egress:local`,
+links `/srv/bitbob-links` (+ `bitbob-src`, `bitbob-mirrors`, `/usr/local/sbin/bitbob-links`),
+scripts `scripts/bitbob-wsl/`, env vars `BITBOB_*` (test-stack/deploy), MCP server `bitbob`
+(tool `request_network_access`, header `x-bitbob-internal`), OpenCode plugin `bitbob-guard.js`,
+browser keys `bitbob-*`, Ditto source `bitbob` (older memories keep `saygm-agent`), desktop app
+identifier `io.bitbob.desktop`. SayGM (the model gateway) keeps its name everywhere: `SAYGM_*`
+env vars, `config.saygm`, provider ids. Older Ditto memories, chats and this file's history still
+say "GM"; read them as BitBob. The live stack was reinstalled fresh under the new names
+(old `gm` distro unregistered after `backup.ps1`).
+
+## Added later on 4 Nov 2026
+
+- **Claude.ai account import** (`tools/import-claude-export.mjs` + `POST /api/import/conversations`):
+  the Settings → Privacy → Export data zip → projects (with docs) and chats with original dates.
+- **QA swarm** (`server/src/swarm.ts`, `web/src/SwarmDialog.tsx`, top-bar button): reviewer
+  models in their own sessions (review round, then challenge round), then the originating chat's
+  model gives the verdict as a server-started turn the UI joins (`bitbob:turn-started`).
+  Reviewer prompts are read-only by instruction; they run in the normal sandbox.
+- **Ditto sync per project** (`projects.ditto_sync`, `POST /api/projects/:id/ditto-sync`,
+  right-click menu + Project settings, ◆ in the sidebar): seed run in a "Ditto sync · <project>"
+  chat; when on, the system prompt tells the agent Ditto is the project's record. Needed because
+  a chat can only read its own workspace (OpenCode `external_directory` deny), so imported
+  material must be seeded from inside each project.
+- Activity: dates on events not from today; right-click the error badge for inspect / ask the
+  agent / copy / clear. Hard-hat mark replaces "BB" in the UI; desktop `build.rs` re-runs on icon
+  changes; session auto-title only when the title is still "New chat".
 
 ## State on 4 Nov 2026
 
-`main` at f6e17ac, all merged and deployed to the live GM (http://localhost:8787). Built since
+`main` at f6e17ac, all merged and deployed to the live BitBob (http://localhost:8787). Built since
 14 Oct, in order: detached resumable turns (`turns.ts`), white-labelling (`brand.json`), Hippius
-encrypted mirror of uploads (`storage.ts`, `tools/hippius-setup.mjs`), a second GM on another
+encrypted mirror of uploads (`storage.ts`, `tools/hippius-setup.mjs`), a second BitBob on another
 port for trying branches (`test-stack.ps1`), collapsible chat groups, network access on request
 (`egress.ts` + `mcp.ts`: the agent asks, the user allows/denies, approvals memory-only), folders
-as upload-a-copy or read-only link (`link.ps1`, `gm-links.sh`, `link-helper.ps1` for the folder
+as upload-a-copy or read-only link (`link.ps1`, `bitbob-links.sh`, `link-helper.ps1` for the folder
 picker, filtered copies for folders with secrets, ↻ refresh), `copy-in.ps1`, `backup.ps1`, two
 security hardening rounds (below), the capture/ingest pipeline (`docs/CAPTURE.md`,
 `tools/ingest.mjs`), the Repositories view (`repos.ts`, `ReposDialog`), Files view with real paths
 and sorting, `agent-readme.md`, then (4 Nov) the **Windows desktop app** (`desktop/`, Tauri 2:
-checks WSL/distro/Docker/stack, runs the gm-wsl scripts with buttons, opens GM's UI in an
+checks WSL/distro/Docker/stack, runs the bitbob-wsl scripts with buttons, opens BitBob's UI in an
 IPC-less window signed in from `.env`, tray) and **Claude project import**
 (`tools/import-project.mjs` + the `claude-export/<project>/` layout; the Game Development
 project was exported first).
 
 ## Owner and setup
 
-- Owner: Tom (tommyhgunz14 on GitHub). Repo: https://github.com/tommyhgunz14/SayGMAgent (branch `main`).
+- Owner: Tom (tommyhgunz14 on GitHub). Repo: https://github.com/tommyhgunz14/BitBob (branch `main`).
 - Machine: Windows PC "TRIGGER", user `thetb`, Intel CPU, Node 24 on Windows. Working copy
-  `D:\github\SayGMAgent` (WSL path `/mnt/d/github/SayGMAgent`).
-- Runtime: WSL2 distro **`gm`** (locked down) runs Docker Engine; containers `gm-agent`,
-  `gm-egress`, `gm-gateway`; UI at http://localhost:8787. The everyday `Ubuntu` distro was only
-  used to bootstrap `gm`.
+  `D:\github\BitBob` (WSL path `/mnt/d/github/BitBob`).
+- Runtime: WSL2 distro **`bitbob`** (locked down) runs Docker Engine; containers `bitbob-agent`,
+  `bitbob-egress`, `bitbob-gateway`; UI at http://localhost:8787. The everyday `Ubuntu` distro was only
+  used to bootstrap `bitbob`.
 - Default model: **kimi-k3** (SayGM). Small model claude-haiku-4-5. Heritage policy set to
   `private-likeness`.
 - Accounts/keys in use (values never stored here): SayGM, Ditto (MCP), GitHub (token +
@@ -52,14 +85,14 @@ project was exported first).
 - **Engines** behind one interface (`engines/types.ts`):
   - **OpenCode** (default): `opencode serve` spawned via `@opencode-ai/sdk` on a free localhost
     port; config passed in-process. Per-model provider by SayGM `api_shapes`. Custom primary agent
-    `gm-plan` for read-only Plan mode; `question` tool disabled (UI can't answer it); retries
+    `bitbob-plan` for read-only Plan mode; `question` tool disabled (UI can't answer it); retries
     surfaced as errors and aborted after 2; 401/402/403/404 explained via `gatewayHint()` and not
     retried. Subagents registered as `mode: subagent`; child sessions followed so their tool calls
     stream under the parent `task` card. Reloads when models, subagents or settings change
-    (`configVersion`). Plugin `agent/opencode-plugin/gm-guard.js` blanks GM credentials in the
+    (`configVersion`). Plugin `agent/opencode-plugin/bitbob-guard.js` blanks BitBob credentials in the
     agent's shell (`shell.env`) and redacts secret values in tool output (`tool.execute.after`).
   - **Claude Agent SDK**: `query()` with `ANTHROPIC_BASE_URL` = SayGM; `cleanEnv()` strips host
-    Claude creds and GM keys; `agents` option for subagents; plan/acceptEdits/bypass modes; refuses
+    Claude creds and BitBob keys; `agents` option for subagents; plan/acceptEdits/bypass modes; refuses
     non-Anthropic-shape models.
 - **Projects**: own workspace dir `data/projects/<slug>-<id>`, instructions, colour, per-project
   integrations (Atlas/404 MCP). Chats can move between projects (engine session reset + recap).
@@ -91,44 +124,44 @@ project was exported first).
 
 ## Sandbox and security model
 
-- `gm-agent` container: non-root uid 1000, `read_only`, `cap_drop: ALL`, `no-new-privileges`,
+- `bitbob-agent` container: non-root uid 1000, `read_only`, `cap_drop: ALL`, `no-new-privileges`,
   pids/mem/cpu limits, only `/data` writable (+ 1 GB `/tmp`). Internal network only; outbound via
-  `gm-egress` (squid, `egress/allowlist.txt`, private ranges denied); inbound via `gm-gateway`
+  `bitbob-egress` (squid, `egress/allowlist.txt`, private ranges denied); inbound via `bitbob-gateway`
   (socat, 127.0.0.1:8787). Node uses `NODE_USE_ENV_PROXY=1`.
-- `gm` WSL distro: no Windows drive automount, no interop, Docker `userns-remap` (container
-  escape lands as an unprivileged uid). `~/gm-data` owned by the remapped uid, mode 700.
-  Keep-alive: `start.ps1` runs a hidden `wsl -d gm -u root --exec sleep infinity` (Startup
+- `bitbob` WSL distro: no Windows drive automount, no interop, Docker `userns-remap` (container
+  escape lands as an unprivileged uid). `~/bitbob-data` owned by the remapped uid, mode 700.
+  Keep-alive: `start.ps1` runs a hidden `wsl -d bitbob -u root --exec sleep infinity` (Startup
   shortcut via `-InstallAtLogin`); WSL stops idle distros otherwise.
 - Known residual risks (GAPS.md #11): the agent's shell runs as the same user as the server, so
-  keys are protected against accidents (gm-guard + redaction) but not a determined agent.
+  keys are protected against accidents (bitbob-guard + redaction) but not a determined agent.
   Planned fix: separate per-project tool container with no secrets.
 
 ## Incidents and lessons (don't repeat these)
 
-- 14 Oct: GM ran `env` while debugging and printed the SayGM and Ditto keys into the chat →
-  gm-guard plugin + server redaction added. **Tom must rotate SayGM + Ditto keys** (open).
+- 14 Oct: BitBob ran `env` while debugging and printed the SayGM and Ditto keys into the chat →
+  bitbob-guard plugin + server redaction added. **Tom must rotate SayGM + Ditto keys** (open).
 - 14 Oct: SayGM returned **402 Payment Required** for kimi-k3 (balance/plan) — open for Tom.
 - Proxy restart during deploy caused `ECONNREFUSED egress:3128` for Ditto → deploy now uses
   `squid -k reconfigure` (pid at /tmp/squid.pid), Ditto retries.
 - 14 Oct: **a changed `egress/allowlist.txt` did not reach the running proxy.** The file is
   bind-mounted singly, so the container holds its inode, and the deploy replaces the whole
-  directory (`rm -rf ~/SayGMAgent && mv …`), giving it a new one — squid kept reading the old,
+  directory (`rm -rf ~/BitBob && mv …`), giving it a new one — squid kept reading the old,
   deleted inode and `-k reconfigure` changed nothing. Found when `s3.hippius.com` was absent
   inside the container after a deploy that added it. `deploy.ps1` now diffs what the container
   actually sees against the file on disk and recreates the proxy only when they differ.
   Check after any allowlist change:
   `docker compose exec -T egress grep <domain> /etc/squid/allowlist.txt`.
-- 28 Oct: GM's own full-repo review (kimi-k3) found the read-only subagent shell allowlist
+- 28 Oct: BitBob's own full-repo review (kimi-k3) found the read-only subagent shell allowlist
   bypassable (`cat a>b`, `cat x | sh`, `find . | xargs rm`) and that read agents could start
   write agents. Fixed by removing the shell and delegation from read agents altogether
   (`opencodeAgentAccess`, `CLAUDE_READ_ONLY_DISALLOWED`), not by patching patterns. Same review:
   activity SSE replay/subscribe race (now subscribe-first, bounded queue), stored-file restore
   trusting `rel_path` from agent-writable `agent.db` (now `insideWorkspace()`), approved
   egress domains persisted in agent-writable `/data` (now memory-only), CI not running tests
-  (now does), no backup of `gm-data` (`backup.ps1`). Lesson: anything the server reads back
+  (now does), no backup of `bitbob-data` (`backup.ps1`). Lesson: anything the server reads back
   from `/data` is agent-controlled input.
 - 28 Oct (second review, Claude Fable 5.1): **settings.local.json applied every key**, so an
-  agent writing `APP_TOKEN` there took over GM at the next reload (confirmed, fixed: only
+  agent writing `APP_TOKEN` there took over BitBob at the next reload (confirmed, fixed: only
   `EDITABLE` keys are read, URLs removed from `EDITABLE`); the browser was an egress bypass via
   markdown images / brand CSS (fixed: CSP + images shown as links); Hippius keys weren't
   redacted (fixed); a failed upload read crashed the server (fixed). Still structural: the
@@ -144,12 +177,26 @@ project was exported first).
 - `useEffect` must not return a Promise (blank-screen bug, ErrorBoundary added).
 - Blocking startup on network calls is bad (skills backup now background; status probes time out).
 
-## Data layout (inside container `/data` = `~/gm-data` in `gm`)
+## Data layout (inside container `/data` = `~/bitbob-data` in `bitbob`)
 
 `agent.db` (sessions, messages, projects, meta) · `workspace/` · `projects/<slug>-<id>/` (uploads/,
 cloned repos, outputs, .claude/skills) · `integrations/atlas/workflows/` · `logs/server.log`,
 `logs/activity.jsonl` · `settings.local.json` · `home/ cache/ config/ opencode-sandbox/
 claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
+
+## QA swarm on the old clone (4 Nov 2026, fable-5 vs gpt-5.4, kimi-k3 as handler)
+
+Reviewed the 3-week-old clone (a4f8d88). Everything it found had already been fixed upstream
+except: symlink escape in the workspace file APIs (now closed: uploads and listing go through
+`insideWorkspace()`, which realpaths the parent and refuses planted links), `?dir=.claude`
+listing the root (now 400), empty listener-set keys in opencode.ts (now deleted), unknown
+`level` on /api/activity widening the filter (now falls back to error), cache-read tokens
+priced at full input rate (now `cacheReadTokens` at the cache rate), and the 20k Ditto archive
+cap (documented in ditto.ts). Still structural: OpenCode's process inherits the secrets (the
+guard plugin blanks them in shells; /proc remains, GAPS #11). Blind spots it named, not yet
+reviewed by anyone: the new surface since (links.ts, storage.ts, repos.ts, swarm.ts, import,
+desktop/), supply chain (no `npm audit` in CI, tag-pinned actions), db.ts, MCP/Ditto trust,
+React XSS surface, serveStatic path. → run a swarm on the current tree with those as the target.
 
 ## Open items / next
 
@@ -164,17 +211,17 @@ claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
    with scopes (`capture:<project>` for scanning phones) → remote profiles in the desktop app →
    Phase 3 Linux install → Phase 4A iOS PWA + Cloudflare tunnel.
 4b. **Import the other Claude projects**: export each with Claude ("export this project for
-   GM", same layout as `claude-export/game-development/`), run `tools/import-project.mjs`, send
+   BitBob", same layout as `claude-export/game-development/`), run `tools/import-project.mjs`, send
    the printed prompt so the agent seeds Ditto.
 5. **Capture** (`docs/CAPTURE.md`): route 1 (phones → OneDrive → linked folder → ingest) works
-   now; route 2 (phone capture page → GM inbox) follows Phase 1.
+   now; route 2 (phone capture page → BitBob inbox) follows Phase 1.
 6. GAPS.md: checkpoints + diff + undo; parallel builds in git worktrees; approvals for
    push/delete/install; hooks; browser testing; spend caps; CI version tags + vuln scanning.
 
 ## How Tom works
 
 - Prefers concise, plain-English answers; step-by-step PowerShell for anything he runs.
-- Edits and commits on Windows; GM's own clone inside its workspace is separate (don't merge
-  GM-made branches blindly — GM built a parallel `feat/copy-exchange`; the server-side export on
+- Edits and commits on Windows; BitBob's own clone inside its workspace is separate (don't merge
+  BitBob-made branches blindly — BitBob built a parallel `feat/copy-exchange`; the server-side export on
   main supersedes it).
 - Wants errors surfaced, reviews done by subagents, and things verified before "done".
