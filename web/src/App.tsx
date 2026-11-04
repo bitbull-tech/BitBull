@@ -14,9 +14,9 @@ import { Settings } from './Settings'
 import { useTheme } from './theme'
 import { NetworkPrompt } from './network'
 
-const MODEL_KEY = 'gm-agent-model'
-const EXPANDED_KEY = 'gm-agent-expanded'
-const DEFAULT_SEEN_KEY = 'gm-agent-default-model-seen'
+const MODEL_KEY = 'bitbob-model'
+const EXPANDED_KEY = 'bitbob-expanded'
+const DEFAULT_SEEN_KEY = 'bitbob-default-model-seen'
 const lsGet = (k: string) => {
   try {
     return localStorage.getItem(k)
@@ -46,7 +46,7 @@ export default function App() {
       if (e instanceof Unauthorized) setAuthed(false)
       else {
         setAuthed(false)
-        setError('Cannot reach the GM server. Is `npm run dev` running?')
+        setError('Cannot reach the BitBob server. Is `npm run dev` running?')
       }
     }
   }, [])
@@ -156,8 +156,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const { unseen } = useActivity()
   useEffect(() => {
     const close = () => setActivityOpen(false)
-    window.addEventListener('gm:compose', close)
-    return () => window.removeEventListener('gm:compose', close)
+    window.addEventListener('bitbob:compose', close)
+    return () => window.removeEventListener('bitbob:compose', close)
   }, [])
 
   const setModel = (id: string) => {

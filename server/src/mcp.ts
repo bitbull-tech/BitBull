@@ -7,18 +7,18 @@ import { sessions } from "./db.js";
 import { proxied, requestAccess } from "./egress.js";
 
 /**
- * GM's own MCP server, attached to both engines as "gm": tools that need the user or the
+ * BitBob's own MCP server, attached to both engines as "bitbob": tools that need the user or the
  * server rather than the sandbox. Today: request_network_access.
  *
  * Served by the main listener (the engines reach it at 127.0.0.1) and guarded by a token
  * minted at startup, never written anywhere. The token is not a boundary against the agent
- * itself (it is in its engine's config); it stops anything else from calling in. x-gm-session
+ * itself (it is in its engine's config); it stops anything else from calling in. x-bitbob-session
  * is a hint for attribution, not an identity. The tools only ever *ask* the user.
  */
 
-export const MCP_PATH = "/mcp/gm";
+export const MCP_PATH = "/mcp/bitbob";
 const TOKEN = randomBytes(24).toString("hex");
-export const GM_MCP_HEADER = "x-gm-internal";
+export const BITBOB_MCP_HEADER = "x-bitbob-internal";
 
 /** Chats with a turn running right now (to say which chat a request came from). */
 let runningSessions: () => string[] = () => [];
@@ -26,14 +26,14 @@ export function setRunningSessions(fn: () => string[]) {
   runningSessions = fn;
 }
 
-export const gmMcpEnabled = () => proxied();
+export const bitbobMcpEnabled = () => proxied();
 
 /** Connection details for the engines; sessionId is added when the engine runs per chat. */
-export function gmMcpServer(sessionId?: string): { url: string; headers: Record<string, string> } | null {
-  if (!gmMcpEnabled()) return null;
+export function bitbobMcpServer(sessionId?: string): { url: string; headers: Record<string, string> } | null {
+  if (!bitbobMcpEnabled()) return null;
   return {
     url: `http://127.0.0.1:${config.port}${MCP_PATH}`,
-    headers: { [GM_MCP_HEADER]: TOKEN, ...(sessionId ? { "x-gm-session": sessionId } : {}) },
+    headers: { [BITBOB_MCP_HEADER]: TOKEN, ...(sessionId ? { "x-bitbob-session": sessionId } : {}) },
   };
 }
 
@@ -45,7 +45,7 @@ export function mcpTokenOk(given: string | undefined) {
 }
 
 function build(sessionHint: string | undefined) {
-  const server = new McpServer({ name: "gm", version: "1.0.0" });
+  const server = new McpServer({ name: "bitbob", version: "1.0.0" });
   server.registerTool(
     "request_network_access",
     {
@@ -74,7 +74,7 @@ function build(sessionHint: string | undefined) {
 /** Stateless Streamable HTTP: a fresh server per request (tools keep their state in egress.ts). */
 export async function handleMcp(req: Request): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  const server = build(req.headers.get("x-gm-session") ?? undefined);
+  const server = build(req.headers.get("x-bitbob-session") ?? undefined);
   await server.connect(transport);
   try {
     return await transport.handleRequest(req);

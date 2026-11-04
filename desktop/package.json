@@ -1,8 +1,8 @@
 {
-  "name": "gm-desktop",
+  "name": "bitbob-desktop",
   "private": true,
   "version": "0.1.0",
-  "description": "GM Agent desktop wrapper (Tauri 2)",
+  "description": "BitBob desktop wrapper (Tauri 2)",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GM Agent",
+  "productName": "BitBob",
   "version": "0.1.0",
-  "identifier": "ai.saygm.gm-desktop",
+  "identifier": "io.bitbob.desktop",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GM Agent — launcher",
+        "title": "BitBob — launcher",
         "width": 820,
         "height": 760,
         "minWidth": 560,

@@ -161,7 +161,7 @@ export type AgentEvent =
   /** The stream ended because the turn did — not because the connection dropped. */
   | { type: 'end'; status: TurnStatus; seq: number }
 
-const TOKEN_KEY = 'gm-agent-token'
+const TOKEN_KEY = 'bitbob-token'
 export interface NetworkRequest {
   id: string
   host: string

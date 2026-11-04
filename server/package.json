@@ -1,5 +1,5 @@
 {
-  "name": "@saygm-agent/server",
+  "name": "@bitbob/server",
   "version": "0.1.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",

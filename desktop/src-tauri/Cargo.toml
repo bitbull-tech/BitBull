@@ -1,12 +1,12 @@
 [package]
-name = "gm-desktop"
+name = "bitbob-desktop"
 version = "0.1.0"
-description = "GM Agent desktop: manages the local sandboxed stack and shows the GM UI"
+description = "BitBob desktop: manages the local sandboxed stack and shows the BitBob UI"
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "gm_desktop_lib"
+name = "bitbob_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

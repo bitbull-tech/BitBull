@@ -33,7 +33,7 @@ import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
-import { handleMcp, MCP_PATH, GM_MCP_HEADER, mcpTokenOk } from "./mcp.js";
+import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { listRepos, repoDiffStat } from "./repos.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
@@ -136,9 +136,9 @@ app.get("/internal/egress/check", async (c) => {
   return c.text(proxyCheck(c.req.query("host") ?? "") ? "OK" : "ERR");
 });
 
-// GM's own MCP server for the engines (loopback + startup token; see mcp.ts)
+// BitBob's own MCP server for the engines (loopback + startup token; see mcp.ts)
 app.all(MCP_PATH, async (c) => {
-  if (!mcpTokenOk(c.req.header(GM_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
+  if (!mcpTokenOk(c.req.header(BITBOB_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
   return handleMcp(c.req.raw);
 });
 
@@ -533,10 +533,10 @@ app.get("/api/projects/:id/files", (c) => {
   const rel = safeRel(c.req.query("dir") ?? "") ?? "";
   const abs = path.join(ws, rel);
   if (abs !== ws && !abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
-  // Where this folder really is, for anyone who wants to open it outside GM: inside the
-  // container, and (when GM's data is a mounted host folder) the host's path to the same place.
+  // Where this folder really is, for anyone who wants to open it outside BitBob: inside the
+  // container, and (when BitBob's data is a mounted host folder) the host's path to the same place.
   const container = abs;
-  const hostData = process.env.GM_HOST_DATA_DIR || "";
+  const hostData = process.env.BITBOB_HOST_DATA_DIR || "";
   const host = hostData && abs.startsWith(config.dataDir) ? hostData.replace(/[\\/]+$/, "") + abs.slice(config.dataDir.length) : null;
   if (!existsSync(abs)) return c.json({ dir: rel, entries: [], container, host });
   const entries = readdirSync(abs, { withFileTypes: true })
@@ -735,7 +735,7 @@ app.post("/api/v1/chat", async (c) => {
 if (existsSync(config.webDist)) {
   // The browser must not become a way round the egress proxy: a reply or brand.json the agent
   // controls could otherwise make the browser fetch https://evil/?<data>. Images and media may
-  // only come from GM itself (or data: URIs); scripts only from GM; connections to GM and the
+  // only come from BitBob itself (or data: URIs); scripts only from BitBob; connections to BitBob and the
   // link helper on this PC; fonts from Google as index.html does.
   const CSP = [
     "default-src 'self'",
@@ -758,7 +758,7 @@ if (existsSync(config.webDist)) {
   const index = readFileSync(path.join(config.webDist, "index.html"), "utf8");
   app.get("*", (c) => c.html(index));
 } else {
-  app.get("/", (c) => c.text("SayGM Agent API is running. Build the UI with `npm run build` to serve it here."));
+  app.get("/", (c) => c.text("BitBob API is running. Build the UI with `npm run build` to serve it here."));
 }
 
 // ---------- boot ----------
@@ -766,7 +766,7 @@ resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
-  console.log(`[server] SayGM Agent listening on http://${info.address}:${info.port}`);
+  console.log(`[server] BitBob listening on http://${info.address}:${info.port}`);
 });
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

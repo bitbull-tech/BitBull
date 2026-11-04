@@ -127,7 +127,7 @@ export function NetworkPanel() {
   if (!net.proxied)
     return (
       <p className="muted">
-        This GM isn't running behind the egress proxy (host mode), so the agent's internet access isn't filtered and there is nothing to approve.
+        This BitBob isn't running behind the egress proxy (host mode), so the agent's internet access isn't filtered and there is nothing to approve.
       </p>
     )
   const add = (h: string, s: 'host' | 'domain') => {
@@ -146,7 +146,7 @@ export function NetworkPanel() {
     <div className="net-panel">
       <p className="muted small">
         The agent reaches the internet only through the egress proxy. The list in <code>egress/allowlist.txt</code> is always allowed; anything
-        else needs your approval here. Approvals apply within seconds and last until GM restarts (a deploy, a folder link change or a reboot). They are deliberately not saved, because anything saved where GM keeps its data could be edited by the agent. Add domains you always need to egress/allowlist.txt and deploy.
+        else needs your approval here. Approvals apply within seconds and last until BitBob restarts (a deploy, a folder link change or a reboot). They are deliberately not saved, because anything saved where BitBob keeps its data could be edited by the agent. Add domains you always need to egress/allowlist.txt and deploy.
       </p>
 
       <h3>Approved by you</h3>
@@ -200,7 +200,7 @@ export function NetworkPanel() {
           ))}
         </ul>
       ) : (
-        <p className="muted small">Nothing has been refused since GM started.</p>
+        <p className="muted small">Nothing has been refused since BitBob started.</p>
       )}
 
       {decided.length > 0 && (

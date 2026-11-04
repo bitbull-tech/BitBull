@@ -1,11 +1,11 @@
-# GM Agent vs leading coding agents: gaps
+# BitBob vs leading coding agents: gaps
 
 Compared against Claude Code, OpenAI Codex (CLI + cloud), Cursor (agent + background agents),
 Gemini CLI and stock OpenCode, as of October 2026. "Have" means working in this repo today.
 
-## What GM Agent already has
+## What BitBob already has
 
-| Capability | GM Agent |
+| Capability | BitBob |
 |---|---|
 | Any model, switch mid-chat | Yes: every SayGM model, routed to its native API |
 | Agent loop with file edit, shell, search, web fetch/search | Yes (OpenCode or Claude Agent SDK engine) |
@@ -23,19 +23,19 @@ Gemini CLI and stock OpenCode, as of October 2026. "Have" means working in this 
 
 ## Gaps, highest value first
 
-1. **Checkpoints, diff view and undo.** Claude Code (rewind) and Cursor (checkpoints) snapshot files every turn and show reviewable diffs. GM shows tool calls but not a diff, and can't roll a turn back. OpenCode already snapshots and has a revert API, so this is mostly UI work.
-2. **Isolated workspaces for parallel builds.** Codex cloud tasks, Cursor background agents and Claude Code with git worktrees run several attempts in separate checkouts and let you compare and merge. GM's subagents share one workspace (the `worker` brief tells them to keep to their own files). Next step: a "parallel build" that gives each run its own git worktree, optionally a different model each (best-of-N), with a compare-and-merge view.
-3. **Approvals.** Other agents can ask before risky actions (install, delete, push, network). **Network is done** (Oct 2026): the agent asks for any domain the proxy refuses and waits for Allow/Deny in the UI (README → Network access); the same card and wait mechanism (`egress.ts` + GM's own MCP server in `mcp.ts`) is the base for the rest. Otherwise GM runs fully autonomous inside the sandbox and has the `question` tool off. Needed before giving it real credentials: an approve/deny card in the UI for configurable actions (git push, rm -rf, package installs).
-4. **Hooks.** Claude Code runs your scripts before/after tool calls and at the end of a turn (format, lint, block dangerous commands, notify). GM has none.
+1. **Checkpoints, diff view and undo.** Claude Code (rewind) and Cursor (checkpoints) snapshot files every turn and show reviewable diffs. BitBob shows tool calls but not a diff, and can't roll a turn back. OpenCode already snapshots and has a revert API, so this is mostly UI work.
+2. **Isolated workspaces for parallel builds.** Codex cloud tasks, Cursor background agents and Claude Code with git worktrees run several attempts in separate checkouts and let you compare and merge. BitBob's subagents share one workspace (the `worker` brief tells them to keep to their own files). Next step: a "parallel build" that gives each run its own git worktree, optionally a different model each (best-of-N), with a compare-and-merge view.
+3. **Approvals.** Other agents can ask before risky actions (install, delete, push, network). **Network is done** (Oct 2026): the agent asks for any domain the proxy refuses and waits for Allow/Deny in the UI (README → Network access); the same card and wait mechanism (`egress.ts` + BitBob's own MCP server in `mcp.ts`) is the base for the rest. Otherwise BitBob runs fully autonomous inside the sandbox and has the `question` tool off. Needed before giving it real credentials: an approve/deny card in the UI for configurable actions (git push, rm -rf, package installs).
+4. **Hooks.** Claude Code runs your scripts before/after tool calls and at the end of a turn (format, lint, block dangerous commands, notify). BitBob has none.
 5. **Browser for testing what it builds.** Claude Code and Cursor can drive a browser to check a web UI. Adding the Playwright MCP plus Chromium to the image would let the agent test the games and pages it builds and screenshot them.
-6. **Background and scheduled runs with notifications.** Codex, Cursor and Claude Code run tasks while you're away and notify you. GM turns now outlive the browser (detached turns, `turns.ts`) but there's no queue, schedule or notification.
+6. **Background and scheduled runs with notifications.** Codex, Cursor and Claude Code run tasks while you're away and notify you. BitBob turns now outlive the browser (detached turns, `turns.ts`) but there's no queue, schedule or notification.
 7. **Pull-request workflow.** The Repositories view (Nov 2026) shows clones, branches and status and hands git actions to the agent. With the token and `gh` the agent can open PRs, but there's no PR-review bot on GitHub (Claude Code GitHub Actions, Codex review) and no CI-status awareness in the UI.
 8. **Composer conveniences.** @-mention files, slash commands for saved prompts, paste screenshots straight to vision models, a context-usage meter and a manual /compact.
 9. **Code intelligence after edits.** OpenCode supports LSP diagnostics (`ENABLE_LSP`, off by default). Turning it on per project gives the "edit, see type errors, fix" loop Cursor and Claude Code have.
 10. **Spend controls.** A per-chat and per-day budget, and a cheap default model for subagents. SayGM makes per-model routing easy; the cap is missing.
-11. **Secrets isolation.** The agent's shell runs in the same container, as the same user, as the server's keys. GM now blanks its credentials in the agent's shell and redacts any key found in tool output (gm-guard plugin + server redaction), which stops accidental leaks, but a determined agent can read them from the server's environment (`/proc`), `APP_TOKEN` included, and with that token call GM's own API: approve egress domains, change UI settings, read chats. The Claude engine's shell even inherits the SayGM key directly. Leading cloud agents run tools in a separate sandbox with no secrets. Planned: per-project tool container.
+11. **Secrets isolation.** The agent's shell runs in the same container, as the same user, as the server's keys. BitBob now blanks its credentials in the agent's shell and redacts any key found in tool output (bitbob-guard plugin + server redaction), which stops accidental leaks, but a determined agent can read them from the server's environment (`/proc`), `APP_TOKEN` included, and with that token call BitBob's own API: approve egress domains, change UI settings, read chats. The Claude engine's shell even inherits the SayGM key directly. Leading cloud agents run tools in a separate sandbox with no secrets. Planned: per-project tool container.
 12. **Multi-user.** One shared token today. Needed before opening it to others: accounts, per-user projects, audit log.
-13. **IDE integration.** Claude Code, Codex and Gemini CLI plug into VS Code and JetBrains. GM is web-only. Lowest priority for the heritage platform; useful for the games.
+13. **IDE integration.** Claude Code, Codex and Gemini CLI plug into VS Code and JetBrains. BitBob is web-only. Lowest priority for the heritage platform; useful for the games.
 
 ## Suggested next three
 

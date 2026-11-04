@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 // egress.ts reads DATA_DIR and the proxy setting at import time
-const dir = mkdtempSync(path.join(tmpdir(), "gm-egress-"));
+const dir = mkdtempSync(path.join(tmpdir(), "bitbob-egress-"));
 process.env.DATA_DIR = dir;
 process.env.HTTPS_PROXY = "http://egress:3128";
 process.env.NETWORK_REQUEST_TIMEOUT_S = "30";

@@ -1,30 +1,30 @@
 <#
-  Link helper: lets GM's web page link and unlink read-only folders with mouse clicks, while
+  Link helper: lets BitBob's web page link and unlink read-only folders with mouse clicks, while
   the choice of folder stays with you, on this PC.
 
   Runs on Windows (start.ps1 starts it, hidden), listening on http://localhost:8790 only.
-  When you press "Link a folder..." in GM:
-    1. GM's page (in your browser, on this PC) asks this helper.
+  When you press "Link a folder..." in BitBob:
+    1. BitBob's page (in your browser, on this PC) asks this helper.
     2. The helper opens a Windows folder picker on this PC. Nothing is linked unless you pick
-       a folder there. GM never sends a path; it can't, and it isn't asked.
+       a folder there. BitBob never sends a path; it can't, and it isn't asked.
     3. If the folder holds keys, .env files or wallets, a Windows box asks you: link a read-only
-       COPY without them (the agent never sees them), link it as it is, or cancel. GM's own repo
+       COPY without them (the agent never sees them), link it as it is, or cancel. BitBob's own repo
        is only ever linked as such a copy.
-    4. It runs link.ps1 (all the usual checks: read-only mount, verified, GM restarted).
+    4. It runs link.ps1 (all the usual checks: read-only mount, verified, BitBob restarted).
 
   Who can reach it: only programs on this PC. The agent can't: its container has no route
   here (the egress proxy refuses private and local addresses). Other web pages can't either:
-  requests must come from GM's own page (Origin http://localhost:8787 / 8788). Another program
+  requests must come from BitBob's own page (Origin http://localhost:8787 / 8788). Another program
   on this PC could fake that header, but every action still needs you in a Windows dialog:
   linking needs you to pick the folder, removing needs you to press OK. Refresh only re-copies
   a filtered link after a fresh scan for secrets.
 
-      powershell -ExecutionPolicy Bypass -STA -File scripts\gm-wsl\link-helper.ps1
+      powershell -ExecutionPolicy Bypass -STA -File scripts\bitbob-wsl\link-helper.ps1
 #>
 param(
   [int]$Port = 8790,
-  [int[]]$GmPorts = @(8787, 8788),
-  [string]$Distro = "gm"
+  [int[]]$BitBobPorts = @(8787, 8788),
+  [string]$Distro = "bitbob"
 )
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
@@ -32,7 +32,7 @@ $linkScript = Join-Path $PSScriptRoot "link.ps1"
 Add-Type -AssemblyName System.Windows.Forms
 
 $origins = @()
-foreach ($p in $GmPorts) { $origins += "http://localhost:$p"; $origins += "http://127.0.0.1:$p" }
+foreach ($p in $BitBobPorts) { $origins += "http://localhost:$p"; $origins += "http://127.0.0.1:$p" }
 
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$Port/")
@@ -79,7 +79,7 @@ function Invoke-Link([string[]]$argv) {
 }
 
 function Get-Links {
-  $rows = @(& wsl.exe -d $Distro -u root --exec /usr/local/sbin/gm-links list 2>$null)
+  $rows = @(& wsl.exe -d $Distro -u root --exec /usr/local/sbin/bitbob-links list 2>$null)
   $list = @()
   foreach ($r in $rows) {
     if ($r -match '^(\S+)\s+(mounted|missing)\s+(live|filtered)\s+(.+)$') { $list += @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim() } }
@@ -91,7 +91,7 @@ function Do-Link {
   $owner = New-Owner
   try {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = "GM: choose a folder for the agent to READ (it can't change anything in it). Cancel to link nothing."
+    $dlg.Description = "BitBob: choose a folder for the agent to READ (it can't change anything in it). Cancel to link nothing."
     $dlg.ShowNewFolderButton = $false
     if ($dlg.ShowDialog($owner) -ne [System.Windows.Forms.DialogResult]::OK -or -not $dlg.SelectedPath) {
       return @{ ok = $false; cancelled = $true; message = "No folder chosen." }
@@ -100,27 +100,27 @@ function Do-Link {
     $r = Invoke-Link @("-Add", $path)
     $found = ($r.out -split "`n" | Where-Object { $_ -match '^\s{2}\S' } | Select-Object -First 12 | Out-String)
     if ($r.code -eq 4) {
-      # GM's own repo: only ever as a copy without its secrets
+      # BitBob's own repo: only ever as a copy without its secrets
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
-        "This is GM's own repo. It can be linked as a read-only COPY that leaves out its .env, data folder and anything else that looks secret:`n`n" +
-        $found + "`nThe agent never sees those files. The copy is refreshed when you press Refresh in GM (Settings > Folders).`n`nLink it this way?",
-        "GM: link this folder?", "OKCancel", "Information", "Button1")
+        "This is BitBob's own repo. It can be linked as a read-only COPY that leaves out its .env, data folder and anything else that looks secret:`n`n" +
+        $found + "`nThe agent never sees those files. The copy is refreshed when you press Refresh in BitBob (Settings > Folders).`n`nLink it this way?",
+        "BitBob: link this folder?", "OKCancel", "Information", "Button1")
       if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not linked." } }
       $r = Invoke-Link @("-Add", $path, "-Hide")
     } elseif ($r.code -eq 3) {
       # keys, wallets or unreadable parts found: you decide, here, in Windows
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
         "This folder holds files that look like keys, passwords or wallets (or couldn't be checked):`n`n" + $found +
-        "`nYes (recommended): link a read-only COPY without these files. The agent never sees them; press Refresh in GM to update the copy.`n" +
+        "`nYes (recommended): link a read-only COPY without these files. The agent never sees them; press Refresh in BitBob to update the copy.`n" +
         "No: link the folder as it is, including them. The agent could read them and send them to its model.`n" +
         "Cancel: link nothing.",
-        "GM: link this folder?", "YesNoCancel", "Warning", "Button1")
+        "BitBob: link this folder?", "YesNoCancel", "Warning", "Button1")
       if ($q -eq [System.Windows.Forms.DialogResult]::Yes) { $r = Invoke-Link @("-Add", $path, "-Hide") }
       elseif ($q -eq [System.Windows.Forms.DialogResult]::No) { $r = Invoke-Link @("-Add", $path, "-AllowSecrets") }
       else { return @{ ok = $false; cancelled = $true; message = "Not linked." } }
     }
     if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 3) -join " " } }
-    $name = if ($r.out -match 'GM-LINK-NAME: ([a-z0-9-]+)') { $Matches[1] } else { $null }
+    $name = if ($r.out -match 'BITBOB-LINK-NAME: ([a-z0-9-]+)') { $Matches[1] } else { $null }
     return @{ ok = $true; name = $name; path = $path; message = "Linked $path" }
   } finally {
     $owner.Close()
@@ -139,8 +139,8 @@ function Do-Unlink([string]$name) {
   # Asked here, in Windows: the Origin check stops web pages, not other programs on this PC
   $owner = New-Owner
   try {
-    $q = [System.Windows.Forms.MessageBox]::Show($owner, "Remove the GM link '$name'? GM restarts and can no longer read it. Your folder isn't touched.",
-      "GM: remove link?", "OKCancel", "Question", "Button2")
+    $q = [System.Windows.Forms.MessageBox]::Show($owner, "Remove the BitBob link '$name'? BitBob restarts and can no longer read it. Your folder isn't touched.",
+      "BitBob: remove link?", "OKCancel", "Question", "Button2")
   } finally { $owner.Close() }
   if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not removed." } }
   $r = Invoke-Link @("-Remove", $name)
@@ -153,12 +153,12 @@ while ($listener.IsListening) {
   try {
     $req = $ctx.Request
     $origin = $req.Headers["Origin"]
-    # Only GM's own page (or a plain local tool with no Origin, for GET) is answered
+    # Only BitBob's own page (or a plain local tool with no Origin, for GET) is answered
     if ($origin -and -not ($origins -contains $origin)) { Send $ctx 403 @{ ok = $false; message = "origin not allowed" }; continue }
     if ($req.HttpMethod -eq "OPTIONS") { Send $ctx 204 @{}; continue }
     $path = $req.Url.AbsolutePath
     if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links) }; continue }
-    if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from GM's page only" }; continue }
+    if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from BitBob's page only" }; continue }
     if ($path -eq "/link") { Send $ctx 200 (Do-Link); continue }
     if ($path -eq "/refresh") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json

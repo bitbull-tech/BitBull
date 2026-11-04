@@ -13,7 +13,7 @@ deployed, and no code changes.
     favicon.png
 ```
 
-In the sandbox `DATA_DIR` is `/data` in the container, which is `~/gm-data` in the `gm`
+In the sandbox `DATA_DIR` is `/data` in the container, which is `~/bitbob-data` in the `bitbob`
 WSL distro. Running locally it is `./data`. Settings → Appearance shows what is in force.
 
 ## The file

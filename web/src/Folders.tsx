@@ -44,13 +44,13 @@ export function FoldersPanel() {
   return (
     <div className="net-panel">
       <p className="muted small">
-        Linked folders are folders on this PC that the agent can <b>read but never change</b>: they are mounted read-only, and GM restarts
-        (about 10 seconds) whenever one is added or removed. Every chat in this GM can read them. A folder holding .env files, keys or
-        wallets (GM's own repo, for one) is linked as a read-only copy without them: the agent never sees those files, and Refresh
+        Linked folders are folders on this PC that the agent can <b>read but never change</b>: they are mounted read-only, and BitBob restarts
+        (about 10 seconds) whenever one is added or removed. Every chat in this BitBob can read them. A folder holding .env files, keys or
+        wallets (BitBob's own repo, for one) is linked as a read-only copy without them: the agent never sees those files, and Refresh
         updates the copy. To give the agent a copy it may change, use the folder button in the chat → Upload a copy.
       </p>
       {links && !links.available ? (
-        <p className="muted">Links work in the sandboxed GM (Docker) only.</p>
+        <p className="muted">Links work in the sandboxed BitBob (Docker) only.</p>
       ) : (
         <>
           <h3>Linked folders</h3>
@@ -64,7 +64,7 @@ export function FoldersPanel() {
                   {r.inGm ? (
                     <span className={`pill ${r.inGm.readOnly ? 'ok' : 'bad'}`}>{r.inGm.readOnly ? 'read-only' : 'NOT read-only'}</span>
                   ) : (
-                    <span className="pill bad">{r.state === 'missing' ? 'folder missing' : 'not visible to GM yet'}</span>
+                    <span className="pill bad">{r.state === 'missing' ? 'folder missing' : 'not visible to BitBob yet'}</span>
                   )}
                   {r.mode === 'filtered' && (
                     <span className="pill" title="A read-only copy without .env, keys and wallets. Changes to the folder show up after Refresh.">
@@ -118,7 +118,7 @@ export function FoldersPanel() {
             ) : helper === 'checking' ? (
               <p className="muted small">Checking for the link helper…</p>
             ) : !onThisPc() ? (
-              <p className="muted small">Open GM on the PC it runs on (http://localhost:8787) to link or remove folders.</p>
+              <p className="muted small">Open BitBob on the PC it runs on (http://localhost:8787) to link or remove folders.</p>
             ) : (
               <p className="muted small">{HELPER_HINT}</p>
             )}

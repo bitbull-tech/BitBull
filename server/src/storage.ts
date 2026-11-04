@@ -6,10 +6,10 @@
  * recorded in `stored_files`, and described in a Ditto memory so "find the photo of
  * Grandad's squadron" can search for it and get back a key.
  *
- * Why GM holds the only key: Hippius sub-tokens scope to a *bucket*, read-only or
+ * Why BitBob holds the only key: Hippius sub-tokens scope to a *bucket*, read-only or
  * read-write — there is no IAM, no STS and no per-prefix policy. Prefix isolation can
  * therefore only be enforced by whoever holds the credential, so no user ever gets one.
- * When multi-user arrives, access is a row in GM's own database and nothing here changes.
+ * When multi-user arrives, access is a row in BitBob's own database and nothing here changes.
  *
  * Everything is encrypted before it leaves the machine (AES-256-GCM), because Hippius's
  * own at-rest encryption doesn't say who can read a chunk on a storage miner.
@@ -122,7 +122,7 @@ async function decryptFile(src: string, dest: string, key: Buffer) {
   try {
     const header = Buffer.alloc(HEADER_LEN);
     await fh.read(header, 0, HEADER_LEN, 0);
-    if (!header.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("not a GM-encrypted file");
+    if (!header.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("not a BitBob-encrypted file");
     const tag = Buffer.alloc(TAG_LEN);
     await fh.read(tag, 0, TAG_LEN, size - TAG_LEN);
 
@@ -231,7 +231,7 @@ async function upload(job: Job) {
       // Hippius needs the length up front; GCM adds only the header and tag
       ContentLength: encryptedSize(size),
       ContentType: "application/octet-stream",
-      Metadata: { "gm-name": path.basename(job.row.rel_path).slice(0, 200), "gm-size": String(size) },
+      Metadata: { "bitbob-name": path.basename(job.row.rel_path).slice(0, 200), "bitbob-size": String(size) },
     }),
   );
   const digest = await sha256;

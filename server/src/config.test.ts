@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 // settings.local.json lives in DATA_DIR, which the agent's shell can write. Only the keys the
 // UI may set are ever read from it; a planted APP_TOKEN or URL must do nothing.
-const dir = mkdtempSync(path.join(tmpdir(), "gm-cfg-"));
+const dir = mkdtempSync(path.join(tmpdir(), "bitbob-cfg-"));
 process.env.DATA_DIR = dir;
 process.env.APP_TOKEN = "real-token";
 process.env.SAYGM_API_KEY = "real-key";
@@ -26,7 +26,7 @@ test("only UI-editable keys are applied from settings.local.json", () => {
 });
 
 test("the UI can never set tokens, paths, sandbox settings or service URLs", () => {
-  for (const k of ["APP_TOKEN", "ALLOW_HOST_SHELL", "GM_SANDBOX", "DATA_DIR", "GM_LINKS_PATH", "SKILLS_DIR", "SUBAGENTS_DIR", "SYSTEM_PROMPT_FILE", "PORT", "HOST",
+  for (const k of ["APP_TOKEN", "ALLOW_HOST_SHELL", "BITBOB_SANDBOX", "DATA_DIR", "BITBOB_LINKS_PATH", "SKILLS_DIR", "SUBAGENTS_DIR", "SYSTEM_PROMPT_FILE", "PORT", "HOST",
     "SAYGM_OPENAI_BASE_URL", "SAYGM_ANTHROPIC_BASE_URL", "DITTO_MCP_URL", "ATLAS_MCP_URL", "FOUR04_MCP_URL", "FOUR04_API_BASE", "HIPPIUS_S3_ENDPOINT", "HTTPS_PROXY"]) {
     assert.ok(!(k in EDITABLE), k);
   }

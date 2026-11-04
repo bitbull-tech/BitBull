@@ -5,7 +5,7 @@ import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
 import { config, configVersion, paths, ROOT, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
-import { gmMcpServer } from "../mcp.js";
+import { bitbobMcpServer } from "../mcp.js";
 import { LINKS_ROOT, linksAvailable } from "../links.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
 import { listModels, type ModelApi, type ModelInfo } from "../models.js";
@@ -36,7 +36,7 @@ if (config.agent.webSearch) process.env.OPENCODE_ENABLE_EXA = "1";
 if (config.agent.lsp) process.env.OPENCODE_EXPERIMENTAL_LSP_TOOL = "true";
 
 /** Read-only planning agent (OpenCode's built-in "plan" agent asks for approvals, which this UI can't answer). */
-const PLAN_AGENT = "gm-plan";
+const PLAN_AGENT = "bitbob-plan";
 const PLAN_PROMPT = [
   "You are in PLAN MODE. Investigate with read-only tools (read, grep, glob, webfetch, memory search) and produce a plan.",
   "Do not edit files, write files or run commands that change anything.",
@@ -85,8 +85,8 @@ export function buildConfig(models: ModelInfo[]) {
   return {
     $schema: "https://opencode.ai/config.json",
     autoupdate: false,
-    // Keeps GM's credentials out of the agent's shell and out of tool output (agent/opencode-plugin)
-    plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "gm-guard.js")).href],
+    // Keeps BitBob's credentials out of the agent's shell and out of tool output (agent/opencode-plugin)
+    plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "bitbob-guard.js")).href],
     share: "disabled" as const,
     model: def ? `${providerFor(def)}/${def.id}` : undefined,
     small_model: small ? `${providerFor(small)}/${small.id}` : undefined,
@@ -96,9 +96,9 @@ export function buildConfig(models: ModelInfo[]) {
       ...(config.ditto.apiKey
         ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
         : {}),
-      // GM's own tools (network access requests); waits for the user, hence the long timeout
-      ...(gmMcpServer()
-        ? { gm: { type: "remote" as const, url: gmMcpServer()!.url, headers: gmMcpServer()!.headers, oauth: false as const, timeout: 660000 } }
+      // BitBob's own tools (network access requests); waits for the user, hence the long timeout
+      ...(bitbobMcpServer()
+        ? { bitbob: { type: "remote" as const, url: bitbobMcpServer()!.url, headers: bitbobMcpServer()!.headers, oauth: false as const, timeout: 660000 } }
         : {}),
       // Integration MCPs are registered once here and switched on/off per prompt by project
       ...Object.fromEntries(

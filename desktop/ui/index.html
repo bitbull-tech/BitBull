@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GM Agent — launcher</title>
+<title>BitBob — launcher</title>
 <style>
   :root { color-scheme: light dark; --bg:#f6f6f8; --fg:#1b1d22; --mut:#6b7280; --card:#fff; --line:#e3e5ea; --ok:#1f9d55; --bad:#d04b3a; --warn:#c7811a; --acc:#e0a63a; --btn:#1b1d22; --btnfg:#fff; --mono: ui-monospace, Consolas, "Cascadia Mono", monospace; }
   @media (prefers-color-scheme: dark) { :root { --bg:#15171b; --fg:#e8e9ec; --mut:#9aa0ab; --card:#1e2127; --line:#2c3038; --btn:#e8e9ec; --btnfg:#15171b; } }
@@ -39,21 +39,21 @@
 </head>
 <body>
 <main>
-  <h1><span class="dot" id="dot"></span> GM Agent <span id="headline" class="sub" style="margin:0;font-weight:400"></span></h1>
-  <p class="sub">This window manages the local stack. GM itself runs in its sandbox and opens in its own window.</p>
+  <h1><span class="dot" id="dot"></span> BitBob <span id="headline" class="sub" style="margin:0;font-weight:400"></span></h1>
+  <p class="sub">This window manages the local stack. BitBob itself runs in its sandbox and opens in its own window.</p>
 
   <div class="card">
     <h2>Repository and stack</h2>
     <div class="row">
-      <input type="text" id="repo" placeholder="D:\github\SayGMAgent" style="flex:1; min-width: 240px" readonly>
+      <input type="text" id="repo" placeholder="D:\github\BitBob" style="flex:1; min-width: 240px" readonly>
       <button id="pick">Choose folder…</button>
       <label>distro <input type="text" id="distro" size="6"></label>
       <label>port <input type="number" id="port" min="1024" max="65535" style="width:84px"></label>
       <button id="save">Save</button>
     </div>
     <div class="row" style="margin-top:8px">
-      <label class="chk"><input type="checkbox" id="auto_token"> sign the GM window in with APP_TOKEN from the repo's .env</label>
-      <label class="chk"><input type="checkbox" id="open_when_ready"> open GM as soon as it answers</label>
+      <label class="chk"><input type="checkbox" id="auto_token"> sign the BitBob window in with APP_TOKEN from the repo's .env</label>
+      <label class="chk"><input type="checkbox" id="open_when_ready"> open BitBob as soon as it answers</label>
     </div>
     <p class="err" id="settingsErr"></p>
   </div>
@@ -64,10 +64,10 @@
       <tr><td class="k">Repo</td><td class="v" id="c_repo">…</td></tr>
       <tr><td class="k">.env</td><td class="v" id="c_env">…</td></tr>
       <tr><td class="k">WSL</td><td class="v" id="c_wsl">…</td></tr>
-      <tr><td class="k">gm distro</td><td class="v" id="c_distro">…</td></tr>
+      <tr><td class="k">bitbob distro</td><td class="v" id="c_distro">…</td></tr>
       <tr><td class="k">Docker in distro</td><td class="v" id="c_docker">…</td></tr>
       <tr><td class="k">Containers</td><td class="v" id="c_containers">…</td></tr>
-      <tr><td class="k">GM</td><td class="v" id="c_health">…</td></tr>
+      <tr><td class="k">BitBob</td><td class="v" id="c_health">…</td></tr>
     </table>
     <p class="hint" id="next"></p>
   </div>
@@ -75,7 +75,7 @@
   <div class="card">
     <h2>Actions</h2>
     <div class="row">
-      <button class="accent" id="open" disabled>Open GM</button>
+      <button class="accent" id="open" disabled>Open BitBob</button>
       <button class="primary" data-action="start">Start</button>
       <button data-action="stop">Stop</button>
       <button data-action="deploy" title="Copy the code from the repo into the distro and rebuild the containers">Deploy</button>
@@ -85,7 +85,7 @@
       <button id="cancel" disabled>Cancel</button>
     </div>
     <details style="margin-top:10px">
-      <summary>First-time setup (creates the locked-down <code>gm</code> distro)</summary>
+      <summary>First-time setup (creates the locked-down <code>bitbob</code> distro)</summary>
       <div class="row" style="margin-top:8px">
         <label>export a clean image from your existing distro: <input type="text" id="source" value="Ubuntu" size="10"></label>
         <button data-action="setup">Run setup.ps1</button>
@@ -121,19 +121,19 @@ $('save').onclick = () => save({});
 for (const id of ['auto_token', 'open_when_ready']) $(id).onchange = () => save({});
 
 function nextStep(s) {
-  if (!s.repo_ok) return 'Choose the SayGMAgent folder (the checkout that has scripts\\gm-wsl).';
+  if (!s.repo_ok) return 'Choose the BitBob folder (the checkout that has scripts\\bitbob-wsl).';
   if (!s.env_ok) return 'Create .env in the repo from .env.example (SayGM key, APP_TOKEN, Ditto key), then come back.';
   if (!s.wsl.ok) return 'Install WSL 2 first: in an admin PowerShell run  wsl --install  and reboot.';
-  if (!s.distro.ok) return 'Run the first-time setup below to create the gm distro.';
+  if (!s.distro.ok) return 'Run the first-time setup below to create the bitbob distro.';
   if (!s.docker.ok) return 'The distro is there but Docker is not answering: press Start.';
   if (!s.containers.ok && /no containers/.test(s.containers.detail)) return 'Press Deploy to build and start the containers for the first time.';
   if (!s.healthy) return 'Press Start (or wait: containers can take a minute after a reboot).';
-  return 'GM is running. Open it, or close this window — it stays in the tray.';
+  return 'BitBob is running. Open it, or close this window — it stays in the tray.';
 }
 async function refresh() {
   try { status = await invoke('get_status'); } catch (e) { log('status failed: ' + e, true); return; }
   const s = status;
-  check($('c_repo'), s.repo_ok, s.repo ? s.repo + (s.repo_ok ? '' : '  (not the SayGMAgent repo)') : 'not chosen');
+  check($('c_repo'), s.repo_ok, s.repo ? s.repo + (s.repo_ok ? '' : '  (not the BitBob repo)') : 'not chosen');
   check($('c_env'), s.env_ok, s.env_ok ? '.env present' : 'no .env in the repo');
   for (const k of ['wsl', 'distro', 'docker', 'containers']) check($('c_' + k), s[k].ok, s[k].detail, /only checked on Windows/.test(s[k].detail));
   check($('c_health'), s.healthy, s.healthy ? 'answering at ' + s.url : 'not answering at ' + s.url);
@@ -149,8 +149,8 @@ $('open').onclick = () => invoke('open_gm').catch((e) => log(String(e), true));
 document.querySelectorAll('button[data-action]').forEach((b) => {
   b.onclick = async () => {
     const action = b.dataset.action;
-    if (action === 'setup' && !confirm('Create the gm distro now? This exports a clean image from your existing distro and can take several minutes.')) return;
-    if (action === 'stop' && !confirm('Stop GM and shut the distro down?')) return;
+    if (action === 'setup' && !confirm('Create the bitbob distro now? This exports a clean image from your existing distro and can take several minutes.')) return;
+    if (action === 'stop' && !confirm('Stop BitBob and shut the distro down?')) return;
     try {
       running = true; setButtons();
       await invoke('run_action', { action, source: action === 'setup' ? $('source').value.trim() : null });
@@ -160,8 +160,8 @@ document.querySelectorAll('button[data-action]').forEach((b) => {
 $('cancel').onclick = () => invoke('cancel_action');
 function setButtons() { document.querySelectorAll('button[data-action]').forEach((b) => (b.disabled = running)); $('cancel').disabled = !running; }
 
-listen('gm-log', (e) => log(e.payload.line, e.payload.line.startsWith('! ')));
-listen('gm-done', (e) => { log(`(finished, exit code ${e.payload.code})`, e.payload.code !== 0); running = false; setButtons(); refresh(); });
+listen('bitbob-log', (e) => log(e.payload.line, e.payload.line.startsWith('! ')));
+listen('bitbob-done', (e) => { log(`(finished, exit code ${e.payload.code})`, e.payload.code !== 0); running = false; setButtons(); refresh(); });
 
 (async () => {
   await loadSettings();

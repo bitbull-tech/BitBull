@@ -24,7 +24,7 @@ const MAX = 1500
 let events: ActivityEvent[] = []
 let lastSeenErrorId = (() => {
   try {
-    return Number(localStorage.getItem('gm-activity-seen') ?? 0) || 0
+    return Number(localStorage.getItem('bitbob-activity-seen') ?? 0) || 0
   } catch {
     return 0
   }
@@ -83,7 +83,7 @@ export function markErrorsSeen() {
   lastSeenErrorId = maxId
   localUnseen = 0
   try {
-    localStorage.setItem('gm-activity-seen', String(maxId))
+    localStorage.setItem('bitbob-activity-seen', String(maxId))
   } catch {
     /* ignore */
   }
@@ -121,7 +121,7 @@ export function useSelected() {
 
 /** Put text into the chat composer (Chat listens), so the user can add notes before sending. */
 export function composeInChat(text: string) {
-  window.dispatchEvent(new CustomEvent('gm:compose', { detail: text }))
+  window.dispatchEvent(new CustomEvent('bitbob:compose', { detail: text }))
 }
 
 export type ReviewMode = 'explain' | 'debug' | 'review'
@@ -246,7 +246,7 @@ function ReviewBar({ events }: { events: ActivityEvent[] }) {
 /* ---------------- dock: collapsed bar at the bottom of the chat ---------------- */
 
 type DockFilter = 'all' | 'problems' | 'chat'
-const DOCK_KEY = 'gm-activity-dock'
+const DOCK_KEY = 'bitbob-activity-dock'
 
 export function ActivityDock({ sessionId, onOpenFull }: { sessionId?: string; onOpenFull: () => void }) {
   const { events, unseen, connected } = useActivity()
@@ -385,7 +385,7 @@ export function ActivityView({ onClose, initialLevel }: { onClose: () => void; i
     const text = shown.map((e) => `${e.ts} ${e.level.toUpperCase()} [${e.source}]${e.sessionTitle ? ` (${e.sessionTitle})` : ''} ${e.message}${e.detail ? `\n${e.detail}` : ''}`).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
-    a.download = `gm-activity-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.log`
+    a.download = `bitbob-activity-${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.log`
     a.click()
     URL.revokeObjectURL(a.href)
   }

@@ -9,7 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 // Must be set before config/db are imported: they read the environment at module load.
-process.env.DATA_DIR = mkdtempSync(path.join(tmpdir(), "gm-turns-"));
+process.env.DATA_DIR = mkdtempSync(path.join(tmpdir(), "bitbob-turns-"));
 process.env.APP_TOKEN = "test-token";
 process.env.DITTO_ARCHIVE = "off";
 process.env.DITTO_API_KEY = "";

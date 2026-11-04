@@ -22,7 +22,7 @@ async function getClient(): Promise<Client> {
   if (client) return client;
   if (connecting) return connecting;
   connecting = (async () => {
-    const c = new Client({ name: "saygm-agent", version: "0.1.0" });
+    const c = new Client({ name: "bitbob", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), {
       requestInit: { headers: dittoMcpHeaders() },
     });
@@ -89,7 +89,7 @@ export async function archiveTurn(t: {
 }) {
   if (config.ditto.archive === "off") return;
   const content = [
-    `Conversation "${t.sessionTitle}"${t.project ? ` in project "${t.project}"` : ""} (SayGM Agent, ${t.engine} / ${t.model})`,
+    `Conversation "${t.sessionTitle}"${t.project ? ` in project "${t.project}"` : ""} (BitBob, ${t.engine} / ${t.model})`,
     "",
     `${config.ownerName}: ${t.user}`,
     "",
@@ -120,9 +120,9 @@ export async function indexFile(f: {
   if (!dittoEnabled()) return;
   const mb = f.size / 1024 / 1024;
   const content = [
-    `File "${f.name}"${f.project ? ` in project "${f.project}"` : ""} (SayGM Agent)`,
+    `File "${f.name}"${f.project ? ` in project "${f.project}"` : ""} (BitBob)`,
     "",
-    `Stored on Hippius at hippius:${f.bucket}/${f.key} (encrypted; restore it through GM).`,
+    `Stored on Hippius at hippius:${f.bucket}/${f.key} (encrypted; restore it through BitBob).`,
     `In the workspace at ${f.relPath}. ${mb < 0.1 ? `${f.size} bytes` : `${mb.toFixed(1)} MB`}, sha256 ${f.sha256}.`,
   ].join("\n");
   await dittoCall("save_memory", {
@@ -138,7 +138,7 @@ export async function indexFile(f: {
 /** Back up a skill file to Ditto (idempotent by skill name + content hash). */
 export async function backupSkill(name: string, markdown: string, hash: string) {
   await dittoCall("save_memory", {
-    content: `SayGM Agent skill "${name}":\n\n${markdown}`.slice(0, 20000),
+    content: `BitBob skill "${name}":\n\n${markdown}`.slice(0, 20000),
     source: config.ditto.source,
     sourceContext: `skill:${name}`,
     vendorId: `skill:${name}:${hash}`,
@@ -162,7 +162,7 @@ export async function listDittoTools(): Promise<string[]> {
 export async function probeDitto() {
   if (!dittoEnabled()) return { enabled: false };
   try {
-    const c = new Client({ name: "saygm-agent-probe", version: "0.1.0" });
+    const c = new Client({ name: "bitbob-probe", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), {
       requestInit: { headers: dittoMcpHeaders() },
     });

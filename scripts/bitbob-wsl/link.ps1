@@ -1,28 +1,28 @@
 <#
-  Give GM read-only access to a folder on this PC, without copying it.
+  Give BitBob read-only access to a folder on this PC, without copying it.
 
-      powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1                  pick a folder in a dialog
+      powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1                  pick a folder in a dialog
       ... -Add "D:\Photos\Horner"
-      ... -Add "D:\code\thing" -Name thing     choose the name GM shows (default: the folder name)
+      ... -Add "D:\code\thing" -Name thing     choose the name BitBob shows (default: the folder name)
       ... -List
       ... -Remove horner
-      ... -Hide              link a filtered read-only COPY without .env, keys, wallets (and, for GM's
+      ... -Hide              link a filtered read-only COPY without .env, keys, wallets (and, for BitBob's
                              own repo, data\); refresh it with -Refresh <name>
-      ... -InstallMenu       add "Link to GM (read-only)" to the right-click menu of folders in Explorer
+      ... -InstallMenu       add "Link to BitBob (read-only)" to the right-click menu of folders in Explorer
       ... -UninstallMenu
 
   The agent sees the folder at /links/<name>. It can read and analyse it but cannot change,
   delete, encrypt or run anything in it: the kernel mounts it read-only, no-exec. Only this
-  script (run by you, on this PC) can add or remove links; GM and the agent cannot.
+  script (run by you, on this PC) can add or remove links; BitBob and the agent cannot.
 
-  Adding or removing a link restarts the GM container (about 10 seconds); a turn that is
+  Adding or removing a link restarts the BitBob container (about 10 seconds); a turn that is
   running at that moment is marked interrupted.
 
-  A linked folder is readable from EVERY chat in this GM (attaching it to a chat only points
+  A linked folder is readable from EVERY chat in this BitBob (attaching it to a chat only points
   that chat at it), and anything in it may be sent to the model the agent uses. So folders
   that hold keys, passwords or wallets are not linked as they are: link them with -Hide
   (a read-only copy without those files: the agent never sees them) or, if you are sure,
-  -AllowSecrets. GM's own repo can only be linked with -Hide.
+  -AllowSecrets. BitBob's own repo can only be linked with -Hide.
 #>
 param(
   [string]$Add,
@@ -35,16 +35,16 @@ param(
   # keep the window open at the end (used by the Explorer menu)
   [switch]$Pause,
   [switch]$AllowSecrets,
-  # link a filtered, read-only COPY that leaves out .env, keys, wallets (and GM's data\)
+  # link a filtered, read-only COPY that leaves out .env, keys, wallets (and BitBob's data\)
   [switch]$Hide,
   # filtered links only: copy again (after a fresh scan for secrets)
   [string]$Refresh,
-  [string]$Distro = "gm"
+  [string]$Distro = "bitbob"
 )
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
 $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path
-$helper = "/usr/local/sbin/gm-links"
+$helper = "/usr/local/sbin/bitbob-links"
 
 function Invoke-Root([string[]]$cmd) {
   & wsl.exe -d $Distro -u root --exec @cmd
@@ -65,13 +65,13 @@ function Test-Linkable([string]$full) {
     if ($lower -eq $d -or $lower.StartsWith("$d\")) { throw "Refusing to link a system or app-data folder ($full)." }
   }
   $repoData = (Join-Path $Repo "data").ToLower()
-  if ($lower -eq $repoData -or $lower.StartsWith("$repoData\")) { throw "Refusing to link GM's own data folder." }
+  if ($lower -eq $repoData -or $lower.StartsWith("$repoData\")) { throw "Refusing to link BitBob's own data folder." }
 }
 
 # Everything in a folder that looks like a key, password store or wallet, as paths relative to
-# the folder (folders like .ssh count as a whole). For GM's own repo, its .env, data\ and
+# the folder (folders like .ssh count as a whole). For BitBob's own repo, its .env, data\ and
 # .gmtmp\ are added. Windows names are matched case-insensitively here; the copy then leaves out
-# exactly these paths (plus the same patterns, in gm-links.sh).
+# exactly these paths (plus the same patterns, in bitbob-links.sh).
 function Get-HideList([string]$full) {
   $secretNames = @(".env", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker", ".hippius", ".bittensor", ".npmrc", ".pypirc", ".netrc", ".git-credentials",
     "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "credentials.json", "secrets.json", "wallet.dat", "login data", "cookies", "key4.db", "logins.json",
@@ -86,7 +86,7 @@ function Get-HideList([string]$full) {
       (($secretNames -contains $n.ToLower()) -or ($secretPatterns | Where-Object { $n -like $_ })) -and -not ($templates | Where-Object { $n -like $_ })
     })
   $rel = @($found | ForEach-Object { $_.FullName.Substring($full.Length).TrimStart('\').Replace('\', '/') })
-  # GM's own repo (this folder, inside it, or containing it)
+  # BitBob's own repo (this folder, inside it, or containing it)
   $lower = $full.ToLower(); $repoLower = $Repo.TrimEnd('\').ToLower()
   $isRepo = $false
   if ($lower -eq $repoLower -or $repoLower.StartsWith("$lower\")) {
@@ -110,7 +110,7 @@ function Show-Found($scan) {
   if ($scan.Paths.Count -gt 15) { Write-Host "  ... and $($scan.Paths.Count - 15) more" }
 }
 
-# The hide list goes to gm-links on stdin, UTF-8, one path per line (never on a command line)
+# The hide list goes to bitbob-links on stdin, UTF-8, one path per line (never on a command line)
 function Send-HideList([string[]]$paths, [string[]]$argv) {
   # local to this function: PowerShell encodes what it pipes to a native program with this
   $OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -120,33 +120,33 @@ function Send-HideList([string[]]$paths, [string[]]$argv) {
 
 # Install (or refresh) the helper inside the distro and make links come back after a reboot
 function Install-Helper {
-  $runner = Join-Path $env:TEMP "gm-links-install.cmd"
-  $src = Join-Path $PSScriptRoot "gm-links.sh"
-  $tmp = Join-Path $env:TEMP "gm-links.sh"
+  $runner = Join-Path $env:TEMP "bitbob-links-install.cmd"
+  $src = Join-Path $PSScriptRoot "bitbob-links.sh"
+  $tmp = Join-Path $env:TEMP "bitbob-links.sh"
   [System.IO.File]::WriteAllText($tmp, ((Get-Content -Raw -LiteralPath $src) -replace "`r`n", "`n"))
   Set-Content -LiteralPath $runner -Encoding ASCII -Value "@type `"$tmp`" | wsl.exe -d $Distro -u root --exec sh -c `"cat > $helper && chmod 755 $helper`""
   & cmd.exe /c $runner
   if ($LASTEXITCODE -ne 0) { throw "could not install $helper in the $Distro distro" }
-  $boot = "grep -q gm-links /etc/wsl.conf || sed -i 's|^command = service docker start|command = $helper mount-all; service docker start|' /etc/wsl.conf"
+  $boot = "grep -q bitbob-links /etc/wsl.conf || sed -i 's|^command = service docker start|command = $helper mount-all; service docker start|' /etc/wsl.conf"
   Invoke-Root @("sh", "-c", $boot)
-  & wsl.exe -d $Distro -u root --exec grep -q "gm-links mount-all" /etc/wsl.conf
+  & wsl.exe -d $Distro -u root --exec grep -q "bitbob-links mount-all" /etc/wsl.conf
   if ($LASTEXITCODE -ne 0) {
     Write-Host "Warning: couldn't add the links to the distro's boot command (/etc/wsl.conf [boot])." -ForegroundColor Yellow
     Write-Host "Links will be missing after a restart until you run: link.ps1 -List" -ForegroundColor Yellow
   }
 }
 
-# Every GM container that mounts the links (the live one and any test stack) holds its own
+# Every BitBob container that mounts the links (the live one and any test stack) holds its own
 # copy of the mounts, so all of them restart: a removed link must really be gone.
-function Restart-Gm {
-  $names = @(& wsl.exe -d $Distro --exec docker ps --filter "name=gm-agent" --format "{{.Names}}" 2>$null) | Where-Object { $_ -match '^gm-agent[A-Za-z0-9_-]*$' }
+function Restart-BitBob {
+  $names = @(& wsl.exe -d $Distro --exec docker ps --filter "name=bitbob-agent" --format "{{.Names}}" 2>$null) | Where-Object { $_ -match '^bitbob-agent[A-Za-z0-9_-]*$' }
   $withLinks = @()
   foreach ($n in $names) {
     $m = & wsl.exe -d $Distro --exec docker inspect $n --format "{{range .Mounts}}{{.Destination}} {{end}}" 2>$null
     if ("$m" -match "/links") { $withLinks += $n }
   }
   if (-not $withLinks.Count) {
-    Write-Host "No running GM sees links yet: run deploy.ps1 once, then they show up." -ForegroundColor Yellow
+    Write-Host "No running BitBob sees links yet: run deploy.ps1 once, then they show up." -ForegroundColor Yellow
     return
   }
   Write-Host "==> Restarting $($withLinks -join ', ') so the change takes effect" -ForegroundColor Cyan
@@ -159,16 +159,16 @@ function Restart-Gm {
 function Main {
   $menuKeys = @("HKCU:\Software\Classes\Directory\shell\GMAgentLink", "HKCU:\Software\Classes\Directory\Background\shell\GMAgentLink")
   if ($InstallMenu) {
-    # Right-click a folder (or inside one) -> "Link to GM (read-only)". Only for you (HKCU), and
-    # it just runs this script, which shows what it is doing and asks nothing of GM.
+    # Right-click a folder (or inside one) -> "Link to BitBob (read-only)". Only for you (HKCU), and
+    # it just runs this script, which shows what it is doing and asks nothing of BitBob.
     $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Add `"%V`" -Pause"
     foreach ($k in $menuKeys) {
       New-Item -Path "$k\command" -Force | Out-Null
-      Set-ItemProperty -Path $k -Name "MUIVerb" -Value "Link to GM (read-only)"
+      Set-ItemProperty -Path $k -Name "MUIVerb" -Value "Link to BitBob (read-only)"
       Set-ItemProperty -Path $k -Name "Icon" -Value "imageres.dll,-1028"
       Set-ItemProperty -Path "$k\command" -Name "(default)" -Value $cmd
     }
-    Write-Host "Added 'Link to GM (read-only)' to the right-click menu of folders." -ForegroundColor Green
+    Write-Host "Added 'Link to BitBob (read-only)' to the right-click menu of folders." -ForegroundColor Green
     Write-Host "On Windows 11 it is under 'Show more options' (or Shift+right-click)." -ForegroundColor DarkGray
     return
   }
@@ -181,7 +181,7 @@ function Main {
   if ($Pick -or (-not $Add -and -not $Remove -and -not $List -and -not $Refresh)) {
     Add-Type -AssemblyName System.Windows.Forms
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = "Choose a folder for GM to read (read-only: GM can't change it)"
+    $dlg.Description = "Choose a folder for BitBob to read (read-only: BitBob can't change it)"
     $dlg.ShowNewFolderButton = $false
     if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK -or -not $dlg.SelectedPath) {
       Write-Host "No folder chosen." -ForegroundColor Yellow
@@ -209,15 +209,15 @@ function Main {
     $scan = Get-HideList $full
     Write-Host "==> Refreshing $Refresh from $full ($($scan.Paths.Count) path(s) hidden)" -ForegroundColor Cyan
     Send-HideList $scan.Paths @($helper, "refresh", $Refresh)
-    Write-Host "Refreshed. GM sees the new copy now (no restart needed)." -ForegroundColor Green
+    Write-Host "Refreshed. BitBob sees the new copy now (no restart needed)." -ForegroundColor Green
     return
   }
 
   if ($Remove) {
     Install-Helper
     Invoke-Root @($helper, "remove", $Remove.ToLower())
-    Restart-Gm
-    Write-Host "Removed. GM can no longer see it." -ForegroundColor Green
+    Restart-BitBob
+    Write-Host "Removed. BitBob can no longer see it." -ForegroundColor Green
     return
   }
 
@@ -230,12 +230,12 @@ function Main {
 
   $mode = "live"
   if ($scan.Repo) {
-    # GM's own repo: only ever as a filtered copy, without .env, data\ and other secrets
-    if ($AllowSecrets -and -not $Hide) { throw "GM's own repo can only be linked with its secrets hidden (-Hide)." }
+    # BitBob's own repo: only ever as a filtered copy, without .env, data\ and other secrets
+    if ($AllowSecrets -and -not $Hide) { throw "BitBob's own repo can only be linked with its secrets hidden (-Hide)." }
     if (-not $Hide) {
       $script:exitCode = 4   # link-helper.ps1: asks to confirm hiding, then retries with -Hide
       Show-Found $scan
-      throw "This is GM's own repo (or contains it). It can be linked as a filtered copy without .env, data\ and the files above: re-run with -Hide."
+      throw "This is BitBob's own repo (or contains it). It can be linked as a filtered copy without .env, data\ and the files above: re-run with -Hide."
     }
     $mode = "filtered"
   } elseif ($scan.Paths.Count -or $scan.Unreadable) {
@@ -271,14 +271,14 @@ function Main {
     Write-Host "==> Linking $full as /links/$Name (read-only)" -ForegroundColor Cyan
     Invoke-Root @($helper, "add", $Name, $full)
   }
-  Restart-Gm
+  Restart-BitBob
   Write-Host ""
-  Write-Host "GM-LINK-NAME: $Name"
-  Write-Host "Linked. In GM: the folder button in the chat box -> Linked folders -> $Name." -ForegroundColor Green
+  Write-Host "BITBOB-LINK-NAME: $Name"
+  Write-Host "Linked. In BitBob: the folder button in the chat box -> Linked folders -> $Name." -ForegroundColor Green
   if ($mode -eq "filtered") {
     Write-Host "It is a copy: after changing files, press Refresh in Settings -> Folders (or link.ps1 -Refresh $Name)." -ForegroundColor DarkGray
   }
-  Write-Host "Remove it with: powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\link.ps1 -Remove $Name" -ForegroundColor DarkGray
+  Write-Host "Remove it with: powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -Remove $Name" -ForegroundColor DarkGray
 }
 
 $failed = $false

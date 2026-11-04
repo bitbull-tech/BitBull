@@ -142,8 +142,8 @@ export function Chat({
         ta.scrollTop = ta.scrollHeight
       }, 0)
     }
-    window.addEventListener('gm:compose', onCompose)
-    return () => window.removeEventListener('gm:compose', onCompose)
+    window.addEventListener('bitbob:compose', onCompose)
+    return () => window.removeEventListener('bitbob:compose', onCompose)
   }, [])
 
   const patchLast = (fn: (m: ViewMessage) => ViewMessage) =>
@@ -513,7 +513,7 @@ function MessageView({ m, sessionId }: { m: ViewMessage; sessionId?: string }) {
   const running = plainTools(m.tools).filter((t) => !t.done).length
   return (
     <div className="msg assistant">
-      <div className="avatar">GM</div>
+      <div className="avatar">BitBob</div>
       <div className="msg-body">
         <div className="msg-meta">
           <span className="model-chip">{m.model}</span>

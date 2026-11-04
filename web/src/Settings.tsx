@@ -185,8 +185,8 @@ export function Settings({
           {tab === 'config' && (
             <>
               <p className="muted small">
-                Keys and settings marked <b>Edit</b> can be changed here: they're saved on the GM server (in its data folder, readable only by
-                GM) and take effect straight away, overriding <code>.env</code>. <b>Use .env</b> removes the override. Everything else, including
+                Keys and settings marked <b>Edit</b> can be changed here: they're saved on the BitBob server (in its data folder, readable only by
+                BitBob) and take effect straight away, overriding <code>.env</code>. <b>Use .env</b> removes the override. Everything else, including
                 access and sandbox settings, can only be changed in <code>.env</code> followed by a deploy. Secrets are never shown in full.
               </p>
               {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}

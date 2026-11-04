@@ -31,7 +31,7 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) 
   const parts = [existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : ""];
   parts.push(
     shellAllowed()
-      ? `\n## Environment\n\nYou run inside an isolated ${config.sandbox.kind} sandbox. Your shell and files are confined to it; the user's computer is not reachable.${config.sandbox.egressProxy ? " Internet access goes through an allowlist proxy. If a site or package host is refused (HTTP 403 from the proxy, 'CONNECT tunnel failed', 'Forbidden'), call the request_network_access tool (GM's own tool, named gm_request_network_access or mcp__gm__request_network_access) with the host and a one-sentence reason; it waits for the user's answer, then retry. Ask only for domains the task needs, and never try to get round the proxy." : ""}`
+      ? `\n## Environment\n\nYou run inside an isolated ${config.sandbox.kind} sandbox. Your shell and files are confined to it; the user's computer is not reachable.${config.sandbox.egressProxy ? " Internet access goes through an allowlist proxy. If a site or package host is refused (HTTP 403 from the proxy, 'CONNECT tunnel failed', 'Forbidden'), call the request_network_access tool (BitBob's own tool, named bitbob_request_network_access or mcp__bitbob__request_network_access) with the host and a one-sentence reason; it waits for the user's answer, then retry. Ask only for domains the task needs, and never try to get round the proxy." : ""}`
       : `\n## Environment\n\nShell commands are disabled in this environment (not sandboxed). Use file tools only, and tell the user if a task needs a shell.`,
   );
   const links = listLinks().filter((l) => l.readOnly);
@@ -162,7 +162,7 @@ export async function* runTurn(
       signal: ctrl.signal,
       cwd,
       mcp,
-      gmSessionId: session.id,
+      bitbobSessionId: session.id,
       plan: opts.plan,
     })) {
       // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
