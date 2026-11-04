@@ -4,7 +4,7 @@ import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { ReposDialog } from './ReposDialog'
@@ -239,6 +239,26 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     return r.session
   }
 
+  /** Ditto sync: flag the project (the agent then keeps Ditto current) and run a seed in its own chat. */
+  const setDittoSync = async (p: Project, on: boolean) => {
+    const r = await guard(api.updateProject(p.id, { dittoSync: on }))
+    if (!r) return
+    await refreshProjects()
+    if (on) await dittoSyncNow(r.project)
+  }
+  const dittoSyncNow = async (p: Project) => {
+    if (!status?.ditto.ok) {
+      reportLocal('Ditto is not connected: add DITTO_API_KEY in Settings first.')
+      return
+    }
+    const r = await guard(api.dittoSyncNow(p.id))
+    if (!r) return
+    await refreshSessions()
+    await refreshProjects()
+    const s = (await guard(api.session(r.sessionId)))?.session
+    if (s) openSession(s)
+  }
+
   const openSession = (s: Session) => {
     setActiveId(s.id)
     setViewKey(s.id)
@@ -349,6 +369,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                   <IconChevronRight size={13} className={`chev ${open ? 'open' : ''}`} />
                   <span className={`pdot pc-${p.color}`} />
                   <span className="title">{p.name}</span>
+                  {p.dittoSync && (
+                    <span className="ditto-sync" title={`Ditto sync enabled${p.dittoSyncedAt ? ` · last sync ${new Date(p.dittoSyncedAt).toLocaleString()}` : ''}`}>
+                      ◆
+                    </span>
+                  )}
                   <span className="count">{byProject.get(p.id)?.length ?? 0}</span>
                   <span className="session-actions">
                     <button
@@ -605,6 +630,21 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <button onClick={() => (setCtx(null), setFilesDir(''), setFilesFor(ctx.p))}>
             <IconFolder size={14} /> Files
           </button>
+          <div className="sep" />
+          {ctx.p.dittoSync ? (
+            <>
+              <button onClick={() => (setCtx(null), void dittoSyncNow(ctx.p))}>
+                <IconMore size={14} /> Sync to Ditto now
+              </button>
+              <button onClick={() => (setCtx(null), void setDittoSync(ctx.p, false))}>
+                <IconX size={14} /> Disable Ditto sync
+              </button>
+            </>
+          ) : (
+            <button onClick={() => (setCtx(null), void setDittoSync(ctx.p, true))} title="Seed Ditto from this project's imported material and keep it current">
+              <IconMore size={14} /> Enable Ditto sync
+            </button>
+          )}
           <div className="sep" />
           <button onClick={() => (setCtx(null), setProjectDialog(ctx.p))}>
             <IconSettings size={14} /> Project settings

@@ -29,6 +29,11 @@ say "GM"; read them as BitBob. The live stack was reinstalled fresh under the ne
   models in their own sessions (review round, then challenge round), then the originating chat's
   model gives the verdict as a server-started turn the UI joins (`bitbob:turn-started`).
   Reviewer prompts are read-only by instruction; they run in the normal sandbox.
+- **Ditto sync per project** (`projects.ditto_sync`, `POST /api/projects/:id/ditto-sync`,
+  right-click menu + Project settings, ◆ in the sidebar): seed run in a "Ditto sync · <project>"
+  chat; when on, the system prompt tells the agent Ditto is the project's record. Needed because
+  a chat can only read its own workspace (OpenCode `external_directory` deny), so imported
+  material must be seeded from inside each project.
 - Activity: dates on events not from today; right-click the error badge for inspect / ask the
   agent / copy / clear. Hard-hat mark replaces "BB" in the UI; desktop `build.rs` re-runs on icon
   changes; session auto-title only when the title is still "New chat".

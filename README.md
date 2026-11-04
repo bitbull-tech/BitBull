@@ -453,6 +453,18 @@ It creates the BitBob project (or reuses one with that name), uploads everything
 to seed Ditto from the memory files. Exports hold personal notes: keep them out of git
 (`claude-export/` is ignored).
 
+## Ditto sync per project
+
+Right-click a project → **Enable Ditto sync** (also a checkbox in Project settings). A ◆ next to
+the project shows it is on. Enabling it starts a seed run in its own chat ("Ditto sync ·
+<project>"): the agent reads the project's imported Claude material (`uploads/claude-import/`:
+docs and memory files, keeping "Tom said" apart from "Claude found") and the workspace docs, and
+saves every durable fact, decision and preference to Ditto, merging with what is already there.
+From then on, every chat in that project is told that Ditto is the project's record: search it
+before answering about the project, and save durable facts at the end of a turn. **Sync to Ditto
+now** re-runs the seed (safe: it merges). This is the right way to bring imported projects into
+memory, since a chat can only read its own project's workspace.
+
 ## QA swarm
 
 **QA swarm** (top bar, in any chat) points up to two *other* models at a repo, folder or file in
@@ -516,6 +528,7 @@ container, and `/mcp/bitbob` only the engines (a token minted at startup).
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
 | `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA swarm (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
+| `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
 | `GET` | `/api/projects/:id/repos` | Git clones in the workspace: branch, status, ahead/behind, branches, last commit (read-only) |
 | `GET` | `/api/projects/:id/repos/diff` | `?repo=<path>` uncommitted-changes stat; `&base=<ref>` compares base...HEAD |
 | `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |

@@ -49,7 +49,10 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) 
       `\n## Project: ${project.name}\n\nYour working directory is this project's workspace; keep all files for it there.` +
         (project.description ? `\n\nAbout this project: ${project.description}` : "") +
         (project.instructions ? `\n\nProject instructions (follow these):\n${project.instructions}` : "") +
-        `\n\nWhen saving memories about this project, include "Project: ${project.name}" in the memory text.`,
+        `\n\nWhen saving memories about this project, include "Project: ${project.name}" in the memory text.` +
+        (project.ditto_sync
+          ? `\n\nDitto sync is ON for this project: Ditto is the project's record. Before answering questions about it, search Ditto. At the end of any turn that produced a durable fact, decision, preference, lesson or change of status, save it to Ditto with save_memory (one concise memory each, source "bitbob", "Project: ${project.name}"), merging with related memories rather than duplicating. Material in uploads/claude-import/ (docs/, memory/) is the project's history from Claude.ai: treat it as already part of the record once a sync has run.`
+          : ""),
     );
   }
   return parts.join("\n");

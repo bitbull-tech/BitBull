@@ -937,3 +937,4 @@ button.file-row:hover { background: var(--hover); }
 .swarm-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; }
 .swarm-pill.run { border-color: var(--accent); }
 .swarm-pill .link { padding: 0 2px; }
+.project-row .ditto-sync { color: var(--accent); font-size: 9px; margin-right: 4px; }

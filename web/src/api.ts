@@ -21,6 +21,9 @@ export interface Project {
   color: string
   integrations: IntegrationId[]
   workspace: string
+  /** Ditto is kept current for this project: seeded from its uploads, agent saves durable facts */
+  dittoSync: boolean
+  dittoSyncedAt: number | null
   created_at: number
   updated_at: number
 }
@@ -31,6 +34,7 @@ export interface ProjectInput {
   instructions?: string
   color?: string
   integrations?: IntegrationId[]
+  dittoSync?: boolean
 }
 
 export interface IntegrationInfo {
@@ -265,6 +269,7 @@ export const api = {
     req<{ session: Session }>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ projectId }) }),
   projects: () => req<{ projects: Project[] }>('/api/projects'),
   createProject: (p: ProjectInput) => req<{ project: Project }>('/api/projects', { method: 'POST', body: JSON.stringify(p) }),
+  dittoSyncNow: (id: string) => req<{ sessionId: string; turnId: string }>(`/api/projects/${id}/ditto-sync`, { method: 'POST' }),
   updateProject: (id: string, p: Partial<ProjectInput>) =>
     req<{ project: Project }>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(p) }),
   deleteProject: (id: string) => req(`/api/projects/${id}`, { method: 'DELETE' }),

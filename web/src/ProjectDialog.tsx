@@ -21,6 +21,7 @@ export function ProjectDialog({
     instructions: project?.instructions ?? '',
     color: project?.color ?? 'indigo',
     integrations: project?.integrations ?? [],
+    dittoSync: project?.dittoSync ?? false,
   })
   const [available, setAvailable] = useState<IntegrationInfo[]>([])
   const [saving, setSaving] = useState(false)
@@ -115,6 +116,19 @@ export function ProjectDialog({
                 </label>
               ))}
             </div>
+          </div>
+          <div className="field">
+            <span>Memory</span>
+            <label className="int-row">
+              <input type="checkbox" checked={!!form.dittoSync} onChange={(e) => setForm({ ...form, dittoSync: e.target.checked })} />
+              <div>
+                <b>Ditto sync</b>
+                <small>
+                  Ditto is this project's record: seeded from its imported docs and memory (right-click the project → Sync to Ditto now), and the agent saves
+                  durable facts and decisions after every turn.{project?.dittoSyncedAt ? ` Last sync ${new Date(project.dittoSyncedAt).toLocaleString()}.` : ''}
+                </small>
+              </div>
+            </label>
           </div>
           {project && <p className="muted small">Workspace: <code>{project.workspace}</code></p>}
           {error && <p className="error">{error}</p>}

@@ -30,7 +30,7 @@ import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
-import { recent, subscribe, type Level } from "./activity.js";
+import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
 import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
@@ -293,9 +293,10 @@ const ProjectSchema = z.object({
   instructions: z.string().max(20000).optional(),
   color: z.string().max(20).optional(),
   integrations: z.array(z.enum(["atlas", "four04"])).optional(),
+  dittoSync: z.boolean().optional(),
 });
 const projectOut = (p: ReturnType<typeof projects.get>) =>
-  p && { ...p, integrations: projects.integrations(p), workspace: workspaceFor(p) };
+  p && { ...p, integrations: projects.integrations(p), workspace: workspaceFor(p), dittoSync: !!p.ditto_sync, dittoSyncedAt: p.ditto_synced_at ?? null };
 
 app.get("/api/projects", (c) => c.json({ projects: projects.list().map(projectOut) }));
 
@@ -311,6 +312,31 @@ app.patch("/api/projects/:id", async (c) => {
   const body = ProjectSchema.partial().parse(await c.req.json());
   const p = projects.update(c.req.param("id"), body);
   return p ? c.json({ project: projectOut(p) }) : c.json({ error: "not found" }, 404);
+});
+
+/**
+ * Ditto sync for a project: a seed/refresh run in its own chat ("Ditto sync · <project>") that
+ * reads the project's imported material and workspace and saves the durable facts to Ditto.
+ * Turning sync on (PATCH dittoSync) also tells the agent to keep Ditto current on every turn.
+ */
+function dittoSyncPrompt(name: string) {
+  return [
+    `Ditto sync for project "${name}". Bring Ditto up to date with this project's record.`,
+    `1. Search Ditto for what it already holds about "${name}" (search_memories, and search_subjects for the project) so you merge rather than duplicate.`,
+    `2. Read, if present: uploads/claude-import/memory/ (Claude's memory files: lines tagged [stated] are things the owner said, untagged lines are what Claude found or did; keep that distinction as "Tom said" vs "Claude found"), uploads/claude-import/docs/, uploads/claude-import/INDEX.md, and any README or docs in the workspace.`,
+    `3. For every durable fact, decision, preference, lesson, person, open question or current status, save one concise, self-contained memory with save_memory (source "bitbob", include "Project: ${name}"), using update_memory when a related memory already covers it. Skip chatter, secrets, keys and anything that looks like one.`,
+    `4. Finish with a table of what you saved (memory, source file) and what you skipped as duplicates, and one line on what in this project Ditto still knows nothing about.`,
+  ].join("\n");
+}
+app.post("/api/projects/:id/ditto-sync", async (c) => {
+  const p = projects.get(c.req.param("id"));
+  if (!p) return c.json({ error: "not found" }, 404);
+  if (!dittoEnabled()) return c.json({ error: "Ditto is not configured (DITTO_API_KEY)" }, 400);
+  const s = sessions.create({ title: `Ditto sync · ${p.name}`, engine: config.agent.defaultEngine as EngineId, model: config.agent.defaultModel, projectId: p.id });
+  const { turnId } = startTurn(s, { prompt: dittoSyncPrompt(p.name), model: s.model });
+  projects.update(p.id, { dittoSyncedAt: Date.now() });
+  record({ level: "info", source: "ditto", sessionId: s.id, sessionTitle: s.title, message: `Ditto sync started for project "${p.name}"` });
+  return c.json({ sessionId: s.id, turnId }, 201);
 });
 
 /** Deletes the project record only: its chats become unfiled and its workspace folder stays on disk. */
