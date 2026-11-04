@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
-import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconLock, IconPlan, IconSend, IconStop, IconTool, IconX } from './icons'
+import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconLock, IconPlan, IconSend, IconShare, IconStop, IconTool, IconX } from './icons'
 import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadItem } from './uploads'
 import { reportLocal } from './activity'
 import { FolderMenu } from './FolderMenu'
@@ -318,8 +318,8 @@ export function Chat({
           </div>
         ) : (
           <div className="thread">
-            {msgs.map((m) => (
-              <MessageView key={m.id} m={m} sessionId={session?.id} />
+            {msgs.map((m, i) => (
+              <MessageView key={m.id} m={m} sessionId={session?.id} prompt={m.role === 'assistant' ? prevUserMsg(msgs, i) : undefined} />
             ))}
           </div>
         )}
@@ -488,9 +488,25 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   )
 }
 
-function MessageView({ m, sessionId }: { m: ViewMessage; sessionId?: string }) {
+/** Nearest user message before index i — the prompt this reply answers. */
+function prevUserMsg(msgs: ViewMessage[], i: number): ViewMessage | undefined {
+  for (let j = i - 1; j >= 0; j--) if (msgs[j].role === 'user') return msgs[j]
+  return undefined
+}
+
+/** Paste-ready markdown of one request/response pair, for handing to an external agent. */
+function exchangeMarkdown(prompt: ViewMessage, m: ViewMessage): string {
+  return [
+    `**Prompt:**\n${prompt.content}`,
+    ...(prompt.attachments?.length ? [`_Attachments: ${prompt.attachments.map((a) => a.split('/').pop()).join(', ')}_`] : []),
+    `**Response${m.model ? ` (${m.model})` : ''}:**\n${m.content || ''}${m.error ? `${m.content ? '\n\n' : ''}_Error: ${m.error}_` : ''}`,
+  ].join('\n\n')
+}
+
+function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: string; prompt?: ViewMessage }) {
   const [copied, copy] = useCopy()
   const [exported, setExported] = useState<'' | 'full' | 'short'>('')
+  const [copiedX, copyExchange] = useCopy()
   if (m.role === 'user')
     return (
       <div className="msg user">
@@ -592,6 +608,11 @@ function MessageView({ m, sessionId }: { m: ViewMessage; sessionId?: string }) {
                   </button>
                 ))}
               </span>
+            )}
+            {prompt && (m.content || m.error) && (
+              <button className="icon-btn sm" onClick={() => copyExchange(exchangeMarkdown(prompt, m))} title="Copy prompt + reply to paste into another agent">
+                {copiedX ? <IconCheck size={13} /> : <IconShare size={13} />}
+              </button>
             )}
             {m.usage && (m.usage.outputTokens || m.usage.costUsd) ? (
               <span>
