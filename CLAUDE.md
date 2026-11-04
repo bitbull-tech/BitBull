@@ -13,8 +13,8 @@ experiences (old photos, film, documents → grounded cinematic/interactive piec
 SayGM models, Atlas AI Studio / 404.xyz media generation and agentic coding.
 
 Next phase (why you're here): **desktop, Linux and iOS implementations**. Plan and decisions
-in `docs/CLIENTS.md` (start at Phase 0: detached turns); background in "Next" in
-docs/HANDOFF.md.
+in `docs/CLIENTS.md` (Phase 0.1 and the Windows desktop app are done; next are client-core,
+per-device tokens, Linux, iOS PWA); background in "Next" in docs/HANDOFF.md.
 
 ## Layout
 
@@ -50,7 +50,11 @@ scripts/gm-wsl/      Windows: setup.ps1 (create gm distro), deploy.ps1, start.ps
                      a folder picker on the PC, localhost:8790), copy-in.ps1 (fast copy), backup.ps1
 docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md,
                      CAPTURE.md (phone scanning → cloud folder → ingest; later a capture page)
-tools/               atlas-run.mjs, hippius-setup.mjs, ingest.mjs (scans → archive/ with manifest, OCR, dedupe)
+tools/               atlas-run.mjs, hippius-setup.mjs, ingest.mjs (scans → archive/ with manifest, OCR, dedupe),
+                     import-project.mjs (a Claude.ai project export → GM project + uploads + Ditto seed prompt)
+desktop/             Windows desktop app (Tauri 2): launcher checks WSL/distro/Docker/stack, runs scripts/gm-wsl
+                     with buttons, opens GM's UI in an IPC-less window; Rust in src-tauri/src/{stack,lib}.rs
+claude-export/       (git-ignored) exported Claude.ai projects waiting to be imported; personal content
 ```
 
 ## Commands

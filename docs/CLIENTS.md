@@ -94,9 +94,13 @@ re-keying everything.
 - `APP_TOKEN` stays the bootstrap/admin key and stays `.env`-only. Auth middleware accepts
   either, and every activity event records which device acted.
 
-## Phase 2 — desktop app (Tauri 2)
+## Phase 2 — desktop app (Tauri 2) — **Windows version built (4 Nov 2026)**
 
-`desktop/` in this repo. Loads the built `web/dist`, so the UI is identical to the browser.
+`desktop/` in this repo (see its README). It loads the UI from the local server rather than
+bundling `web/dist`, so the UI is identical to the browser and never out of step with the
+server. Done: machine checks with a "next step" line, the five scripts as buttons with live
+output, GM in its own IPC-less window signed in from `.env`, tray. Not yet: remote profiles,
+notifications, native drag-and-drop, keychain, Linux/macOS packaging. Original table:
 
 | Capability | Notes |
 |---|---|

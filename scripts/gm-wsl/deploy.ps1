@@ -8,9 +8,9 @@ $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
 $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 
-# Top-level entries to ship (never data/, node_modules/, dist/, .git/)
+# Top-level entries to ship (never data/, node_modules/, dist/, .git/, the desktop app or Claude exports)
 $items = Get-ChildItem -Force -LiteralPath $Repo |
-  Where-Object { $_.Name -notin @("data", "node_modules", "dist", ".git") } |
+  Where-Object { $_.Name -notin @("data", "node_modules", "dist", ".git", "desktop", "claude-export") } |
   ForEach-Object { $_.Name }
 
 Write-Host "==> Copying code into $Distro" -ForegroundColor Cyan

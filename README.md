@@ -169,6 +169,15 @@ powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -InstallAtLogi
 powershell -ExecutionPolicy Bypass -File scripts\gm-wsl\start.ps1 -Stop
 ```
 
+### The desktop app (no PowerShell, no browser tab)
+
+`desktop/` is a small Windows app (Tauri 2) that does the same with buttons: it checks WSL,
+the `gm` distro, Docker and the containers, runs these scripts with a click and shows their
+output, then opens GM's UI in its own window once the stack answers, signed in with
+`APP_TOKEN` from `.env`. It lives in the tray; closing it leaves GM running. Build it once
+on the PC (`cd desktop && npm install && npm run tauri build`, needs rustup + VS Build
+Tools); see [desktop/README.md](desktop/README.md).
+
 ### Backups
 
 Hippius mirrors uploads only. To keep everything else (chats in `agent.db`, projects,
@@ -404,6 +413,21 @@ runs `tools/ingest.mjs`, which copies new scans into `archive/items/`, de-duplic
 dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The phone-to-GM
 route (per-device upload-only tokens, tunnel, capture page) is planned in
 [docs/CAPTURE.md](docs/CAPTURE.md).
+
+## Moving a Claude.ai project in
+
+Ask Claude, in that project, to "export this project for GM": it writes a folder with
+`project.json` (name, instructions, integrations), `docs/` and `memory/` (Claude's memory
+files for the project, verbatim). Then on the PC:
+
+```powershell
+node tools\import-project.mjs claude-export\game-development      # token read from .env
+```
+
+It creates the GM project (or reuses one with that name), uploads everything to
+`uploads/claude-import/` with an `INDEX.md`, and prints the chat message that asks the agent
+to seed Ditto from the memory files. Safe to re-run (`--overwrite` to replace files, `--dry-run`
+to only look). Exports hold personal notes: keep them out of git (`claude-export/` is ignored).
 
 ## Repositories
 

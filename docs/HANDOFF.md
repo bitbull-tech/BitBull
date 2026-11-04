@@ -1,7 +1,26 @@
-# GM Agent — handoff (14 Oct 2026)
+# GM Agent — handoff (updated 4 Nov 2026)
 
-Everything a new session (Claude Code, or any agent) needs to carry on from the build
-conversation of 7–14 Oct 2026. Short version in `CLAUDE.md`.
+Everything a new session (Claude Code, GM itself, or any agent) needs to carry on from the build
+conversation of 7 Oct – 4 Nov 2026. Short version in `CLAUDE.md`; for agents *using* GM,
+`agent-readme.md`. The same handoff is in Ditto (search "GM Agent handoff 4 Nov 2026"), so in a
+GM chat "catch me up on GM Agent" gets it through the project-recall skill.
+
+## State on 4 Nov 2026
+
+`main` at f6e17ac, all merged and deployed to the live GM (http://localhost:8787). Built since
+14 Oct, in order: detached resumable turns (`turns.ts`), white-labelling (`brand.json`), Hippius
+encrypted mirror of uploads (`storage.ts`, `tools/hippius-setup.mjs`), a second GM on another
+port for trying branches (`test-stack.ps1`), collapsible chat groups, network access on request
+(`egress.ts` + `mcp.ts`: the agent asks, the user allows/denies, approvals memory-only), folders
+as upload-a-copy or read-only link (`link.ps1`, `gm-links.sh`, `link-helper.ps1` for the folder
+picker, filtered copies for folders with secrets, ↻ refresh), `copy-in.ps1`, `backup.ps1`, two
+security hardening rounds (below), the capture/ingest pipeline (`docs/CAPTURE.md`,
+`tools/ingest.mjs`), the Repositories view (`repos.ts`, `ReposDialog`), Files view with real paths
+and sorting, `agent-readme.md`, then (4 Nov) the **Windows desktop app** (`desktop/`, Tauri 2:
+checks WSL/distro/Docker/stack, runs the gm-wsl scripts with buttons, opens GM's UI in an
+IPC-less window signed in from `.env`, tray) and **Claude project import**
+(`tools/import-project.mjs` + the `claude-export/<project>/` layout; the Game Development
+project was exported first).
 
 ## Owner and setup
 
@@ -134,31 +153,23 @@ claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
 
 ## Open items / next
 
-1. **Rotate SayGM + Ditto keys**; delete the chat that printed them; resolve the SayGM 402.
-2. **Hippius storage** (docs/STORAGE.md): server-side S3 client to `https://s3.hippius.com`
-   (region `decentralized`, path-style), scoped sub-token for bucket `gm-agent`, client-side
-   AES-256-GCM, Ditto memory as the index (filename, project, description, key, sha256),
-   `s3.hippius.com` on the allowlist. Tom is recovering a missing Hippius seed first.
-3. Verify Atlas MCP with the new `atk_` key (MCP must be enabled per workspace by Atlas).
-4. GAPS.md priorities: checkpoints + diff + undo; parallel builds in git worktrees (best-of-N
-   across models, compare view); approvals for push/delete/install; hooks; browser testing
-   (Playwright MCP); background/scheduled runs; spend caps; separate tool container; multi-user.
-5. **Desktop / Linux / iOS** — now planned and decided in **`docs/CLIENTS.md`** (Tauri 2 desktop
-   that also manages the local Docker stack; iOS as a PWA first; per-device tokens before
-   anything leaves localhost; Phase 0 = detached resumable turns). Original sketch below:
-   - The server API is the contract (`README.md` → API table; SSE for turns and activity). Clients
-     should stay thin.
-   - **Linux**: run `docker compose up -d --build` directly (no WSL scripts); add a systemd unit +
-     install script; same hardening; consider rootless Docker or userns-remap.
-   - **Desktop (Windows/macOS/Linux)**: a Tauri (or Electron) shell around `web/` that either
-     manages the local Docker stack (start/stop/deploy/status) or connects to a remote GM by
-     URL + token; tray icon, notifications for errors/finished turns, native file drag-drop.
-   - **iOS**: start as a PWA against a remote GM over HTTPS; then a SwiftUI client (chat, projects,
-     uploads from Photos/Files, push notifications). Needs: HTTPS exposure (Cloudflare Tunnel or
-     Caddy), stronger auth than one shared token (per-device tokens or OAuth), and upload resume
-     for large media.
-   - Shared needs: per-device auth, a versioned API, notifications (turn finished / error),
-     background uploads.
+1. **Rotate SayGM + Ditto keys** (leaked 14 Oct) if not yet done; resolve the SayGM 402 for kimi-k3.
+2. Verify Atlas MCP with the new `atk_` key (MCP must be enabled per workspace by Atlas).
+3. **Separate tool container with no secrets** (GAPS #11): the agent's shell still runs as the
+   server's uid and can read `APP_TOKEN` from `/proc`; the Claude engine's shell inherits the
+   SayGM key. Every other hardening is done; this is the structural one left.
+4. **Clients** (`docs/CLIENTS.md`): Phase 2 desktop exists for Windows (`desktop/`, not yet
+   built on Tom's PC: needs rustup + VS Build Tools, then `npm run tauri build`). Still to do:
+   Phase 0.2–0.4 (client-core, token out of URLs, CORS, versioning) → Phase 1 per-device tokens
+   with scopes (`capture:<project>` for scanning phones) → remote profiles in the desktop app →
+   Phase 3 Linux install → Phase 4A iOS PWA + Cloudflare tunnel.
+4b. **Import the other Claude projects**: export each with Claude ("export this project for
+   GM", same layout as `claude-export/game-development/`), run `tools/import-project.mjs`, send
+   the printed prompt so the agent seeds Ditto.
+5. **Capture** (`docs/CAPTURE.md`): route 1 (phones → OneDrive → linked folder → ingest) works
+   now; route 2 (phone capture page → GM inbox) follows Phase 1.
+6. GAPS.md: checkpoints + diff + undo; parallel builds in git worktrees; approvals for
+   push/delete/install; hooks; browser testing; spend caps; CI version tags + vuln scanning.
 
 ## How Tom works
 
