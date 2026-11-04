@@ -21,6 +21,18 @@ env vars, `config.saygm`, provider ids. Older Ditto memories, chats and this fil
 say "GM"; read them as BitBob. The live stack was reinstalled fresh under the new names
 (old `gm` distro unregistered after `backup.ps1`).
 
+## Added later on 4 Nov 2026
+
+- **Claude.ai account import** (`tools/import-claude-export.mjs` + `POST /api/import/conversations`):
+  the Settings → Privacy → Export data zip → projects (with docs) and chats with original dates.
+- **QA swarm** (`server/src/swarm.ts`, `web/src/SwarmDialog.tsx`, top-bar button): reviewer
+  models in their own sessions (review round, then challenge round), then the originating chat's
+  model gives the verdict as a server-started turn the UI joins (`bitbob:turn-started`).
+  Reviewer prompts are read-only by instruction; they run in the normal sandbox.
+- Activity: dates on events not from today; right-click the error badge for inspect / ask the
+  agent / copy / clear. Hard-hat mark replaces "BB" in the UI; desktop `build.rs` re-runs on icon
+  changes; session auto-title only when the title is still "New chat".
+
 ## State on 4 Nov 2026
 
 `main` at f6e17ac, all merged and deployed to the live BitBob (http://localhost:8787). Built since

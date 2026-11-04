@@ -236,6 +236,14 @@ export const sessions = {
   delete(id: string) {
     db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
   },
+  /** Insert a session with a chosen id and timestamps (imports). Returns false if the id exists. */
+  importRow(row: SessionRow): boolean {
+    if (sessions.get(row.id)) return false;
+    db.prepare(
+      "INSERT INTO sessions (id,title,engine,model,engine_session_id,project_id,created_at,updated_at) VALUES (@id,@title,@engine,@model,@engine_session_id,@project_id,@created_at,@updated_at)",
+    ).run({ ...row });
+    return true;
+  },
 };
 
 export interface StoredFileRow {
@@ -421,5 +429,11 @@ export const messages = {
       "INSERT INTO messages (id,session_id,role,content,model,tools_json,usage_json,created_at) VALUES (@id,@session_id,@role,@content,@model,@tools_json,@usage_json,@created_at)",
     ).run({ ...row });
     return row;
+  },
+  /** Insert a message with its original timestamp (imports). */
+  importRow(row: MessageRow) {
+    db.prepare(
+      "INSERT INTO messages (id,session_id,role,content,model,tools_json,usage_json,created_at) VALUES (@id,@session_id,@role,@content,@model,@tools_json,@usage_json,@created_at)",
+    ).run({ ...row });
   },
 };

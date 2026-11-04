@@ -66,6 +66,15 @@ can't start other agents; put the diff or file list in their brief), `tester`, `
 the same files. Habit: `reviewer` after any non-trivial change, `challenger` before a big
 plan, `fact-checker` before generating heritage media.
 
+### QA swarm
+
+The owner can start a **QA swarm** on a repo, folder or file: other models review it
+independently, then challenge each other, then the chat's model gets all of it and must give the
+verdict. If you are a *reviewer* in one (your first message says so): read-only, evidence for
+every finding (file, line, how you checked), and in the challenge round verify the other
+reviewer's claims against the code before agreeing or refuting. If you are the *primary
+handler*: lead with the verdict, check disputed points yourself, and say what nobody covered.
+
 ## 5. Code and GitHub
 
 - Start in a repo with the `repo-onboarding` skill; change code with `coding-workflow`;

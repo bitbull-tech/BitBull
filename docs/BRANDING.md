@@ -42,7 +42,7 @@ Everything is optional; leave out what you don't want to change.
 | `logo` | Image file in `brand/`, used everywhere a mark appears |
 | `logoDark` | Alternative for dark surfaces. The sidebar is dark in both themes, so it uses this one there |
 | `icon` | Browser tab icon. Falls back to `logo` |
-| `mark` | 1–3 characters drawn on a tinted tile when there is no logo image |
+| `mark` | 1–3 characters drawn on a tinted tile instead of BitBob's hard-hat mark, when there is no logo image |
 | `tokens.light` / `tokens.dark` | Any of the design tokens below |
 
 Images must sit directly in `brand/` (no subfolders) and be `.svg`, `.png`, `.jpg`,

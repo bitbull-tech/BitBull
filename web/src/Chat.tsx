@@ -98,6 +98,8 @@ export function Chat({
   const taRef = useRef<HTMLTextAreaElement>(null)
   // When the first message of a draft creates a session, keep the local stream going
   const createdHere = useRef<string | null>(null)
+  const sessionRef = useRef(session)
+  sessionRef.current = session
   // The turn we are currently reading, so re-rendering doesn't attach to it twice
   const followingRef = useRef<string | null>(null)
 
@@ -143,7 +145,23 @@ export function Chat({
       }, 0)
     }
     window.addEventListener('bitbob:compose', onCompose)
-    return () => window.removeEventListener('bitbob:compose', onCompose)
+    // A turn the server started in this chat on its own (a QA swarm's verdict): join it
+    const onTurn = (e: Event) => {
+      const d = (e as CustomEvent<{ sessionId: string; turnId: string }>).detail
+      const cur = sessionRef.current
+      if (d && cur && d.sessionId === cur.id && followingRef.current !== d.turnId) {
+        void guard(api.session(cur.id)).then((r) => {
+          if (!r) return
+          setMsgs(r.messages.map(toView))
+          void resume(cur.id, d.turnId)
+        })
+      }
+    }
+    window.addEventListener('bitbob:turn-started', onTurn)
+    return () => {
+      window.removeEventListener('bitbob:compose', onCompose)
+      window.removeEventListener('bitbob:turn-started', onTurn)
+    }
   }, [])
 
   const patchLast = (fn: (m: ViewMessage) => ViewMessage) =>

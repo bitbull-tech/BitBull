@@ -190,6 +190,21 @@ export interface RepoBranch {
   behind?: number
   last?: string
 }
+export interface Swarm {
+  id: string
+  sessionId: string
+  projectId: string | null
+  target: string
+  focus: ('integrity' | 'security' | 'efficiency' | 'effectiveness')[]
+  primaryModel: string
+  reviewers: { model: string; sessionId: string; status: 'pending' | 'reviewing' | 'challenging' | 'done' | 'error'; error?: string; hasReport: boolean; hasRebuttal: boolean }[]
+  phase: 'review' | 'challenge' | 'final' | 'done' | 'error'
+  finalTurnId?: string
+  startedAt: number
+  finishedAt?: number
+  error?: string
+}
+
 export interface RepoInfo {
   path: string
   name: string
@@ -271,6 +286,10 @@ export const api = {
   network: () => req<NetworkState>('/api/network'),
   links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),
   repos: (projectId: string) => req<{ repos: RepoInfo[] }>(`/api/projects/${projectId}/repos`),
+  startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus'] }) =>
+    req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
+  swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),
+  swarms: (sessionId: string) => req<{ swarms: Swarm[] }>(`/api/swarm?sessionId=${encodeURIComponent(sessionId)}`),
   repoDiff: (projectId: string, repo: string, base?: string) =>
     req<{ stat: string }>(`/api/projects/${projectId}/repos/diff?repo=${encodeURIComponent(repo)}${base ? `&base=${encodeURIComponent(base)}` : ''}`),
   decideNetwork: (id: string, decision: 'host' | 'domain' | 'deny') =>

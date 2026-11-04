@@ -41,7 +41,7 @@ export const defaultBrand: Brand = {
   logo: null,
   logoDark: null,
   icon: null,
-  mark: "BB",
+  mark: "",
   tokens: { light: {}, dark: {} },
 };
 

@@ -416,11 +416,29 @@ dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The
 route (per-device upload-only tokens, tunnel, capture page) is planned in
 [docs/CAPTURE.md](docs/CAPTURE.md).
 
-## Moving a Claude.ai project in
+## Moving your Claude.ai projects and chats in
 
-Ask Claude, in that project, to "export this project for BitBob": it writes a folder with
-`project.json` (name, instructions, integrations), `docs/` and `memory/` (Claude's memory
-files for the project, verbatim). Then on the PC:
+Two routes, both safe to re-run.
+
+**Everything at once**: the account export. On claude.ai go to Settings → Privacy → **Export
+data**; Anthropic emails a zip with `conversations.json` and `projects.json`. Then:
+
+```powershell
+node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\data-2026-11-04.zip" --dry-run   # what would happen
+node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\data-2026-11-04.zip"
+```
+
+Every project becomes a BitBob project (description, instructions, its docs under
+`uploads/claude-import/docs/`) and every conversation becomes a chat with its original dates and
+messages, filed under its project when the export says which (`--project "<name>"` files them all
+under one project; `--since 2026-01-01` skips older ones; `--projects-only` /
+`--conversations-only`). Attachments keep their extracted text; images are named only, the
+export doesn't carry them. Imported chats have no engine session yet, so the first message you
+send in one hands the whole history to the agent as context.
+
+**One project, with Claude's memory files**: ask Claude, in that project, to "export this
+project for BitBob". It writes a folder with `project.json`, `docs/` and `memory/` (Claude's
+memory files for the project, verbatim), and on the PC:
 
 ```powershell
 node tools\import-project.mjs claude-export\game-development      # token read from .env
@@ -428,8 +446,21 @@ node tools\import-project.mjs claude-export\game-development      # token read f
 
 It creates the BitBob project (or reuses one with that name), uploads everything to
 `uploads/claude-import/` with an `INDEX.md`, and prints the chat message that asks the agent
-to seed Ditto from the memory files. Safe to re-run (`--overwrite` to replace files, `--dry-run`
-to only look). Exports hold personal notes: keep them out of git (`claude-export/` is ignored).
+to seed Ditto from the memory files. Exports hold personal notes: keep them out of git
+(`claude-export/` is ignored).
+
+## QA swarm
+
+**QA swarm** (top bar, in any chat) points up to two *other* models at a repo, folder or file in
+the workspace. Each reviews it on its own in the sandbox, read-only, across the areas you tick
+(integrity, security/exploitability, efficiency, effectiveness) and writes a report with
+evidence; then each reads the other's report and has to agree, refute or admit it can't tell,
+with evidence; then the chat's own model, the primary handler, weighs both rounds, checks any
+disputed point itself, and replies in the chat with a per-reviewer summary, a ranked table of
+verified issues and an overall recommendation (use as is / fix first / don't use). The
+reviewers' chats are in the sidebar as "QA swarm · …" and in the activity log, so their working
+is inspectable and exportable. Different model families catch different things; two reviewers
+from one family mostly share blind spots. `POST /api/swarm` starts one from outside.
 
 ## Repositories
 
@@ -479,6 +510,8 @@ container, and `/mcp/bitbob` only the engines (a token minted at startup).
 | `GET/POST` | `/api/projects` | List / create a project |
 | `PATCH/DELETE` | `/api/projects/:id` | Update (name, instructions, colour, integrations) / delete |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
+| `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
+| `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA swarm (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `GET` | `/api/projects/:id/repos` | Git clones in the workspace: branch, status, ahead/behind, branches, last commit (read-only) |
 | `GET` | `/api/projects/:id/repos/diff` | `?repo=<path>` uncommitted-changes stat; `&base=<ref>` compares base...HEAD |
 | `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |

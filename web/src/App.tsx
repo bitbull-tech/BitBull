@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type EngineId, type Model, type Project, type Session, type Status } from './api'
+import { api, clearToken, getToken, setToken, Unauthorized, type AppConfig, type EngineId, type Model, type Project, type Session, type Status, type Swarm } from './api'
 import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
+import { SwarmDialog, SwarmPill } from './SwarmDialog'
 import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
-import { ActivityDock, ActivityView, clearToasts, ErrorToasts, reportLocal, SelectionAsk, useActivity } from './activity'
+import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
@@ -135,11 +136,14 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
   const [filesDir, setFilesDir] = useState('')
   const [reposFor, setReposFor] = useState<Project | 'general' | null>(null)
+  const [swarmOpen, setSwarmOpen] = useState(false)
+  const [swarm, setSwarm] = useState<Swarm | null>(null)
   // right-click menu on a project row
   const [ctx, setCtx] = useState<{ p: Project; x: number; y: number } | null>(null)
+  const [errCtx, setErrCtx] = useState<{ x: number; y: number } | null>(null)
   useEffect(() => {
     if (!ctx) return
-    const close = () => setCtx(null)
+    const close = () => (setCtx(null), setErrCtx(null))
     window.addEventListener('mousedown', close)
     window.addEventListener('keydown', close)
     window.addEventListener('scroll', close, true)
@@ -439,7 +443,15 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <span className={`dot ${status ? (status.ditto.ok ? 'ok' : 'bad') : 'run'}`} /> Ditto
           </button>
           {unseen > 0 && (
-            <button className="act-badge" onClick={() => (clearToasts(), setActivityOpen(true))} title="Errors since you last looked">
+            <button
+              className="act-badge"
+              onClick={() => (clearToasts(), setActivityOpen(true))}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setErrCtx({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 180) })
+              }}
+              title="Errors since you last looked · right-click for options"
+            >
               {unseen} error{unseen > 1 ? 's' : ''}
             </button>
           )}
@@ -499,6 +511,25 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <button className="btn files-btn" title="Git repositories in this workspace: branches, status, actions via the agent" onClick={() => setReposFor(currentProject ?? 'general')}>
             <IconBranch size={14} /> Repos
           </button>
+          {swarm && swarm.sessionId === active?.id ? (
+            <SwarmPill
+              swarm={swarm}
+              onUpdate={setSwarm}
+              onFinalTurn={(sessionId, turnId) => window.dispatchEvent(new CustomEvent('bitbob:turn-started', { detail: { sessionId, turnId } }))}
+            />
+          ) : (
+            <button
+              className="btn files-btn"
+              title="QA swarm: other models review a repo, folder or file, challenge each other, and this chat's model gives the verdict"
+              onClick={() => {
+                // a swarm reports into a chat: start one if this is still a draft
+                if (active) setSwarmOpen(true)
+                else void createSession(cfg.defaultEngine).then((s) => s && setSwarmOpen(true))
+              }}
+            >
+              <IconSearch size={14} /> QA swarm
+            </button>
+          )}
           <ModelPicker models={models} value={model} onChange={setModel} />
         </header>
         <Chat
@@ -538,6 +569,20 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         />
       )}
       {filesFor && <FilesDialog project={filesFor === 'general' ? null : filesFor} startDir={filesDir} onClose={() => setFilesFor(null)} />}
+      {swarmOpen && active && (
+        <SwarmDialog
+          session={active}
+          project={currentProject}
+          models={models}
+          primaryModel={model}
+          onClose={() => setSwarmOpen(false)}
+          onStarted={(s) => {
+            setSwarm(s)
+            setSwarmOpen(false)
+            void refreshSessions()
+          }}
+        />
+      )}
       {reposFor && (
         <ReposDialog
           project={reposFor === 'general' ? null : reposFor}
@@ -563,6 +608,35 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <div className="sep" />
           <button onClick={() => (setCtx(null), setProjectDialog(ctx.p))}>
             <IconSettings size={14} /> Project settings
+          </button>
+        </div>
+      )}
+      {errCtx && (
+        <div className="ctx-menu" style={{ left: errCtx.x, top: errCtx.y }} role="menu" onMouseDown={(e) => e.stopPropagation()}>
+          <button onClick={() => (setErrCtx(null), clearToasts(), setActivityOpen(true))}>
+            <IconSearch size={14} /> Inspect errors
+          </button>
+          <button
+            onClick={() => {
+              setErrCtx(null)
+              const last = latestError()
+              if (last) composeInChat(`This error just appeared in the activity log. Explain what it means and what to do about it:\n\n${last.source} · ${last.ts}\n${last.message}${last.detail ? `\n\n${last.detail}` : ''}`)
+            }}
+          >
+            <IconPencil size={14} /> Ask the agent about the latest
+          </button>
+          <button
+            onClick={() => {
+              setErrCtx(null)
+              const last = latestError()
+              if (last) void navigator.clipboard?.writeText(`${last.ts} ${last.source}: ${last.message}${last.detail ? `\n${last.detail}` : ''}`)
+            }}
+          >
+            <IconMore size={14} /> Copy the latest
+          </button>
+          <div className="sep" />
+          <button onClick={() => (setErrCtx(null), markErrorsSeen())}>
+            <IconTrash size={14} /> Clear (mark all seen)
           </button>
         </div>
       )}

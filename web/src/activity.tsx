@@ -78,6 +78,11 @@ export function clearToasts() {
   emit()
 }
 
+/** The newest error in the feed (for the badge's right-click menu). */
+export function latestError(): ActivityEvent | undefined {
+  return events.filter((e) => e.level === 'error').at(-1)
+}
+
 export function markErrorsSeen() {
   const maxId = events.reduce((m, e) => (e.local ? m : Math.max(m, e.id)), lastSeenErrorId)
   lastSeenErrorId = maxId
@@ -199,7 +204,14 @@ export function useActivity() {
 
 /* ---------------- presentation helpers ---------------- */
 
-const time = (ts: string) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+/** "11:03:07" for today, "4 Nov 11:03:07" otherwise: an error list spans days. */
+const time = (ts: string) => {
+  const d = new Date(ts)
+  const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const now = new Date()
+  const today = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return today ? t : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${t}`
+}
 
 function Row({ e, open, onToggle, picked }: { e: ActivityEvent; open: boolean; onToggle: () => void; picked: boolean }) {
   return (

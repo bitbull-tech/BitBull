@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
@@ -36,6 +36,7 @@ import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } fro
 import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { listRepos, repoDiffStat } from "./repos.js";
+import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -463,6 +464,103 @@ app.post("/api/projects/:id/files", filesLimit, async (c) => {
     });
   }
   return c.json({ saved, skipped });
+});
+
+// ---------- import (conversations from another assistant) ----------
+/**
+ * Bring chats in from somewhere else (tools/import-claude-export.mjs): sessions + messages are
+ * written straight into history with their original timestamps. Each conversation gets a
+ * stable id from its source id, so re-running an import skips what is already here. No engine
+ * session is attached; the next turn replays the history as context, like a moved chat.
+ */
+const ImportSchema = z.object({
+  projectId: z.string().nullable().optional(),
+  source: z.string().min(1).max(40).regex(/^[a-z0-9.-]+$/),
+  conversations: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+        title: z.string().max(200).optional(),
+        createdAt: z.number().int().positive(),
+        updatedAt: z.number().int().positive().optional(),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(["user", "assistant"]),
+              content: z.string().max(400_000),
+              createdAt: z.number().int().positive(),
+            }),
+          )
+          .max(5000),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+app.post("/api/import/conversations", bodyLimit({ maxSize: 64 * 1024 * 1024, onError: tooBig }), async (c) => {
+  const body = ImportSchema.parse(await c.req.json());
+  if (body.projectId && !projects.get(body.projectId)) return c.json({ error: "unknown project" }, 400);
+  let imported = 0;
+  let skipped = 0;
+  let msgs = 0;
+  for (const conv of body.conversations) {
+    const id = `${body.source}-${conv.id}`.slice(0, 120);
+    const ok = sessions.importRow({
+      id,
+      title: (conv.title ?? "").trim().slice(0, 200) || "Imported chat",
+      engine: config.agent.defaultEngine as EngineId,
+      model: config.agent.defaultModel,
+      engine_session_id: null,
+      project_id: body.projectId ?? null,
+      created_at: conv.createdAt,
+      updated_at: conv.updatedAt ?? conv.createdAt,
+    });
+    if (!ok) {
+      skipped++;
+      continue;
+    }
+    imported++;
+    let t = conv.createdAt;
+    for (const m of conv.messages) {
+      // keep order even when the source has equal timestamps
+      t = Math.max(t + 1, m.createdAt);
+      messages.importRow({
+        id: randomUUID(),
+        session_id: id,
+        role: m.role,
+        content: m.content,
+        model: m.role === "assistant" ? body.source : null,
+        tools_json: null,
+        usage_json: null,
+        created_at: t,
+      });
+      msgs++;
+    }
+  }
+  console.log(`[import] ${body.source}: ${imported} conversation(s), ${msgs} message(s), ${skipped} already here`);
+  return c.json({ imported, skipped, messages: msgs });
+});
+
+// ---------- QA swarm ----------
+const SwarmSchema = z.object({
+  sessionId: z.string().min(1),
+  target: z.string().min(1).max(400),
+  models: z.array(z.string().min(1).max(120)).min(1).max(2),
+  focus: z.array(z.enum(FOCUS)).optional(),
+});
+app.post("/api/swarm", async (c) => {
+  const body = SwarmSchema.parse(await c.req.json());
+  if (activeTurnId(body.sessionId)) return c.json({ error: "This chat is already running a turn; wait for it to finish." }, 409);
+  try {
+    return c.json({ swarm: publicSwarm(startSwarm(body)) }, 201);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+app.get("/api/swarm", (c) => c.json({ swarms: listSwarms(c.req.query("sessionId") || undefined).map(publicSwarm) }));
+app.get("/api/swarm/:id", (c) => {
+  const s = getSwarm(c.req.param("id"));
+  return s ? c.json({ swarm: publicSwarm(s) }) : c.json({ error: "not found" }, 404);
 });
 
 // ---------- storage (Hippius) ----------

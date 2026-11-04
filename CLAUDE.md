@@ -29,6 +29,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   mcp.ts             BitBob's own MCP server ("bitbob") for the engines: request_network_access
   links.ts           read-only linked folders at /links (lists them; mount flags from mountinfo)
   repos.ts           git clones in a workspace, read-only (status/branches via git); actions go via the agent
+  swarm.ts           QA swarm: reviewer models in their own sessions (review → challenge), then the chat's model gives the verdict
   engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, bitbob-guard plugin
   engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
   config.ts          env + UI overrides (DATA_DIR/settings.local.json), live reloadConfig()
@@ -51,7 +52,8 @@ scripts/bitbob-wsl/      Windows: setup.ps1 (create bitbob distro), deploy.ps1, 
 docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md,
                      CAPTURE.md (phone scanning → cloud folder → ingest; later a capture page)
 tools/               atlas-run.mjs, hippius-setup.mjs, ingest.mjs (scans → archive/ with manifest, OCR, dedupe),
-                     import-project.mjs (a Claude.ai project export → BitBob project + uploads + Ditto seed prompt)
+                     import-project.mjs (a Claude.ai project export → BitBob project + uploads + Ditto seed prompt),
+                     import-claude-export.mjs (the claude.ai account export zip → projects + chats via POST /api/import/conversations)
 desktop/             Windows desktop app (Tauri 2): launcher checks WSL/distro/Docker/stack, runs scripts/bitbob-wsl
                      with buttons, opens BitBob's UI in an IPC-less window; Rust in src-tauri/src/{stack,lib}.rs
 claude-export/       (git-ignored) exported Claude.ai projects waiting to be imported; personal content

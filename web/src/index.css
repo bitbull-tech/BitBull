@@ -925,3 +925,15 @@ button.file-row:hover { background: var(--hover); }
 .col-sort:hover { color: var(--text); }
 .col-when { width: 82px; text-align: right; flex: none; }
 .col-size { width: 64px; text-align: right; flex: none; }
+
+/* QA swarm */
+.swarm-modal { width: min(640px, 94vw); }
+.swarm-modal .field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.swarm-modal .field > span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.swarm-modal .field input, .swarm-modal .field select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+.swarm-modal .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.swarm-modal .checks { display: flex; flex-wrap: wrap; gap: 12px; }
+.swarm-modal .row.end { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.swarm-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; }
+.swarm-pill.run { border-color: var(--accent); }
+.swarm-pill .link { padding: 0 2px; }

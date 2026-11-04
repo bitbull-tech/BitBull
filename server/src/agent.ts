@@ -131,7 +131,7 @@ export async function* runTurn(
     tools_json: attached.length ? JSON.stringify({ attachments: attached }) : null,
     usage_json: null,
   });
-  if (isFirst) sessions.update(session.id, { title: titleFrom(prompt) });
+  if (isFirst && (session.title === "New chat" || !session.title)) sessions.update(session.id, { title: titleFrom(prompt) });
   if (model !== session.model) sessions.update(session.id, { model });
 
   const title = sessions.get(session.id)?.title ?? session.title;
