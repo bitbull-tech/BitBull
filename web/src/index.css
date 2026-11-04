@@ -253,7 +253,7 @@ code, pre, kbd { font-family: var(--mono); }
 }
 
 /* ───────────── Shell ───────────── */
-.shell { display: grid; grid-template-columns: 276px 1fr; height: 100%; }
+.shell { display: grid; grid-template-columns: var(--side-w, 276px) 1fr; height: 100%; }
 .sidebar {
   /* Dark in both themes: redefining the surface tokens here re-colours the whole
      subtree, so nothing inside the sidebar needs to know it sits on a dark panel. */
@@ -938,3 +938,6 @@ button.file-row:hover { background: var(--hover); }
 .swarm-pill.run { border-color: var(--accent); }
 .swarm-pill .link { padding: 0 2px; }
 .project-row .ditto-sync { color: var(--accent); font-size: 9px; margin-right: 4px; }
+.sidebar { position: relative; }
+.side-resizer { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 5; }
+.side-resizer:hover { background: var(--accent); opacity: .5; }

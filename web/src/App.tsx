@@ -106,8 +106,59 @@ function groupLabel(ts: number) {
 // Date groups in the Chats list: open unless the user collapsed them; "Older" starts collapsed
 const GROUP_DEFAULT_OPEN: Record<string, boolean> = { Today: true, 'Previous 7 days': true, Older: false }
 
+/** Inside a project: Today, Previous 7 days, then one group per month ("Sep 2026"). */
+function monthLabel(ts: number) {
+  const g = groupLabel(ts)
+  if (g !== 'Older') return g
+  return new Date(ts).toLocaleDateString([], { month: 'short', year: 'numeric' })
+}
+function groupBy(list: Session[], label: (ts: number) => string): Array<[string, Session[]]> {
+  const out: Array<[string, Session[]]> = []
+  for (const s of list) {
+    const g = label(s.updated_at)
+    const last = out[out.length - 1]
+    if (last && last[0] === g) last[1].push(s)
+    else out.push([g, [s]])
+  }
+  return out
+}
+
+const SIDE_W_KEY = 'bitbob-side-width'
+/** Drag handle on the sidebar's right edge; the width is a CSS variable on .shell, remembered per browser. */
+function useSidebarWidth() {
+  const [w, setW] = useState(() => {
+    try {
+      return Math.min(520, Math.max(220, Number(localStorage.getItem(SIDE_W_KEY)) || 276))
+    } catch {
+      return 276
+    }
+  })
+  const start = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const x0 = e.clientX
+    const w0 = w
+    const move = (ev: MouseEvent) => setW(Math.min(520, Math.max(220, w0 + ev.clientX - x0)))
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      setW((cur) => {
+        try {
+          localStorage.setItem(SIDE_W_KEY, String(cur))
+        } catch {
+          /* ignore */
+        }
+        return cur
+      })
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+  return { width: w, start }
+}
+
 function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthorized: () => void; onLogout: () => void }) {
   const [theme, setTheme] = useTheme()
+  const side = useSidebarWidth()
   const [sessions, setSessions] = useState<Session[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [models, setModels] = useState<Model[]>([])
@@ -295,16 +346,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     return m
   }, [sessions])
   const unfiled = useMemo(() => {
-    const out: Array<[string, Session[]]> = []
-    for (const s of sessions) {
-      if (s.project_id && projects.some((p) => p.id === s.project_id)) continue
-      if (!matches(s)) continue
-      const g = groupLabel(s.updated_at)
-      const last = out[out.length - 1]
-      if (last && last[0] === g) last[1].push(s)
-      else out.push([g, [s]])
-    }
-    return out
+    return groupBy(
+      sessions.filter((s) => !(s.project_id && projects.some((p) => p.id === s.project_id)) && matches(s)),
+      groupLabel,
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, projects, filter])
 
@@ -329,7 +374,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   )
 
   return (
-    <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
+    <div className={`shell ${navOpen ? 'nav-open' : ''}`} style={{ ['--side-w' as string]: `${side.width}px` }}>
       <aside className="sidebar">
         <div className="brand">
           <BrandMark onDark />
@@ -421,7 +466,20 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                 </div>
                 {open && (
                   <div className="project-chats">
-                    {list.map(row)}
+                    {groupBy(list, monthLabel).map(([label, group], gi) => {
+                      const key = `group:${p.id}:${label}`
+                      const isOpen = !!f || (expanded[key] ?? (gi === 0 || label === 'Today' || label === 'Previous 7 days'))
+                      return (
+                        <div key={label} className="chat-group">
+                          <button className="group-label" aria-expanded={isOpen} onClick={() => setExpand(key, !isOpen)} title={isOpen ? 'Collapse' : 'Expand'}>
+                            <IconChevronRight size={12} className={`chev ${isOpen ? 'open' : ''}`} />
+                            <span>{label}</span>
+                            <span className="count">{group.length}</span>
+                          </button>
+                          {isOpen && <div className="group-chats">{group.map(row)}</div>}
+                        </div>
+                      )
+                    })}
                     {!list.length && (
                       <button className="empty-project" onClick={() => newChat(p.id)}>
                         <IconPlus size={12} /> Start a chat in {p.name}
@@ -500,6 +558,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <IconSettings />
           </button>
         </footer>
+        <div className="side-resizer" onMouseDown={side.start} title="Drag to resize" />
       </aside>
       <div className="scrim" onClick={() => setNavOpen(false)} />
 

@@ -100,7 +100,7 @@ export function ProjectDialog({
               rows={6}
               value={form.instructions}
               onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              placeholder={'Applied to every chat in this project, e.g.\n- Subjects: Thomas Quintus Horner (RAF, svc 26182) and Diana Mary Charlton (WAAF)\n- Output: 90-second cinematic per chapter, British English\n- Sources live in uploads/; never state a fact that isn\'t in them'}
+              placeholder={'Applied to every chat in this project: what it is for, style and language, rules, where the sources live…'}
             />
           </label>
           <div className="field">
@@ -115,6 +115,17 @@ export function ProjectDialog({
                   </div>
                 </label>
               ))}
+              {available
+                .filter((i) => i.global)
+                .map((i) => (
+                  <label key={i.id} className={`int-row ${i.configured ? '' : 'off'}`} title="Global: configured once in .env, available in every project">
+                    <input type="checkbox" checked={i.configured} disabled />
+                    <div>
+                      <b>{i.name}</b>
+                      <small>{i.configured ? 'On for every project (keys in .env)' : 'Not configured: add keys in .env (see Settings → Integrations)'}</small>
+                    </div>
+                  </label>
+                ))}
             </div>
           </div>
           <div className="field">
