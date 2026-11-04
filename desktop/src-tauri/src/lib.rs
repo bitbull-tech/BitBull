@@ -154,10 +154,22 @@ fn cancel_action(state: State<AppState>) -> bool {
     }
 }
 
-/// Show BitBob's own UI in its own (IPC-less) window.
+/// Show BitBob's own UI in its own (IPC-less) window. Async on purpose: a window must not be
+/// created from a sync command (that runs on the main thread, and window creation on Windows
+/// waits for that same thread, so the app freezes with a blank window).
 #[tauri::command]
-fn open_gm(app: AppHandle) -> Result<(), String> {
+async fn open_gm(app: AppHandle) -> Result<(), String> {
     show_gm(&app)
+}
+
+/// Same from a tray/menu callback, which also runs on the main thread.
+fn show_gm_later(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if show_gm(&app).is_err() {
+            show_launcher(app);
+        }
+    });
 }
 
 #[tauri::command]
@@ -240,19 +252,14 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, ev| match ev.id().as_ref() {
-                    "open" => {
-                        let _ = show_gm(app);
-                    }
+                    "open" => show_gm_later(app),
                     "launcher" => show_launcher(app.clone()),
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, ev| {
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = ev {
-                        let app = tray.app_handle();
-                        if show_gm(app).is_err() {
-                            show_launcher(app.clone());
-                        }
+                        show_gm_later(tray.app_handle());
                     }
                 })
                 .build(app)?;
