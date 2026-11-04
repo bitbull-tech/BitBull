@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -23,7 +23,7 @@ import {
   type TurnStatus,
 } from "./turns.js";
 import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
-import { mirrorFile, newEncryptionKey, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
+import { insideWorkspace, mirrorFile, newEncryptionKey, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
@@ -191,7 +191,8 @@ app.get("/api/activity", (c) => {
   return c.json({
     events: recent({
       after: q.after ? Number(q.after) : undefined,
-      level: (q.level as Level) || undefined,
+      // an unknown level must not silently widen the filter
+      level: q.level ? ((["debug", "info", "warn", "error"] as Level[]).includes(q.level as Level) ? (q.level as Level) : "error") : undefined,
       sessionId: q.sessionId || undefined,
       limit: q.limit ? Math.min(2000, Number(q.limit)) : 500,
     }),
@@ -467,8 +468,14 @@ app.post("/api/projects/:id/files", filesLimit, async (c) => {
     if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over ${config.uploadMaxMb} MB` }, 413);
     const rel = safeRel(target, rels[i] || f.name);
     if (!rel) return c.json({ error: "invalid path" }, 400);
-    const abs = path.join(ws, rel);
-    if (!abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
+    // lexical check plus realpath: a symlinked folder or file planted in the workspace by the
+    // agent must not turn an upload into a write somewhere else
+    let abs: string;
+    try {
+      abs = insideWorkspace(ws, rel);
+    } catch {
+      return c.json({ error: "invalid path" }, 400);
+    }
     if (existsSync(abs) && !overwrite) {
       skipped.push(rel);
       continue;
@@ -654,9 +661,18 @@ app.get("/api/projects/:id/repos/diff", async (c) => {
 app.get("/api/projects/:id/files", (c) => {
   const ws = workspaceOf(c.req.param("id"));
   if (!ws) return c.json({ error: "project not found" }, 404);
-  const rel = safeRel(c.req.query("dir") ?? "") ?? "";
+  const rel = safeRel(c.req.query("dir") ?? "");
+  if (rel === null) return c.json({ error: "invalid path" }, 400);
   const abs = path.join(ws, rel);
   if (abs !== ws && !abs.startsWith(ws + path.sep)) return c.json({ error: "invalid path" }, 400);
+  // a symlinked folder inside the workspace must not list what lies outside it
+  try {
+    const real = realpathSync(abs);
+    const realWs = realpathSync(ws);
+    if (real !== realWs && !real.startsWith(realWs + path.sep)) return c.json({ error: "invalid path" }, 400);
+  } catch {
+    return c.json({ dir: rel, entries: [], container: abs, host: null });
+  }
   // Where this folder really is, for anyone who wants to open it outside BitBob: inside the
   // container, and (when BitBob's data is a mounted host folder) the host's path to the same place.
   const container = abs;
@@ -697,7 +713,13 @@ app.post("/api/sessions/:id/files", chatLimit, async (c) => {
     if (f.size > MAX_UPLOAD) return c.json({ error: `${f.name} is over ${config.uploadMaxMb} MB` }, 413);
     let name = safeName(f.name);
     for (let i = 1; existsSync(path.join(dir, name)); i++) name = safeName(f.name).replace(/(\.[^.]*)?$/, `-${i}$1`);
-    writeFileSync(path.join(dir, name), Buffer.from(await f.arrayBuffer()));
+    let dest: string;
+    try {
+      dest = insideWorkspace(workspaceFor(projects.get(s.project_id)), path.join(rel, name));
+    } catch {
+      return c.json({ error: "invalid upload folder" }, 400);
+    }
+    writeFileSync(dest, Buffer.from(await f.arrayBuffer()));
     saved.push({ name: f.name, path: path.posix.join("uploads", s.id.slice(0, 8), name), size: f.size });
   }
   console.log(`[upload] ${saved.length} file(s) -> ${rel}`);

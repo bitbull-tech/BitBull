@@ -14,6 +14,8 @@ export type AgentEvent =
 
 export interface Usage {
   inputTokens?: number;
+  /** part of inputTokens that was served from the prompt cache (cheaper) */
+  cacheReadTokens?: number;
   outputTokens?: number;
   costUsd?: number;
 }

@@ -96,6 +96,8 @@ export async function archiveTurn(t: {
     `Agent: ${t.assistant}`,
   ].join("\n");
   await dittoCall("save_memory", {
+    // Ditto memories are capped at 20k characters: the full turn stays in local SQLite (messages),
+    // the memory is the searchable archive. Long tool outputs are what gets cut.
     content: content.slice(0, 20000),
     source: config.ditto.source,
     sourceContext: t.project ? `project:${t.project}` : `session:${t.sessionId}`,

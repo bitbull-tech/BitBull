@@ -318,6 +318,7 @@ export const opencodeEngine: AgentEngine = {
             const t = m.tokens ?? {};
             usage = {
               inputTokens: (t.input ?? 0) + (t.cache?.read ?? 0) + (t.cache?.write ?? 0),
+              cacheReadTokens: t.cache?.read ?? 0,
               outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
               costUsd: m.cost,
             };
@@ -377,6 +378,7 @@ export const opencodeEngine: AgentEngine = {
           for (const u of childUsage.values()) {
             total = {
               inputTokens: (total.inputTokens ?? 0) + (u.inputTokens ?? 0),
+              cacheReadTokens: (total.cacheReadTokens ?? 0) + (u.cacheReadTokens ?? 0),
               outputTokens: (total.outputTokens ?? 0) + (u.outputTokens ?? 0),
               costUsd: (total.costUsd ?? 0) + (u.costUsd ?? 0),
             };
@@ -401,6 +403,7 @@ export const opencodeEngine: AgentEngine = {
             const t = m.tokens ?? {};
             childUsage.set(m.id, {
               inputTokens: (t.input ?? 0) + (t.cache?.read ?? 0) + (t.cache?.write ?? 0),
+              cacheReadTokens: t.cache?.read ?? 0,
               outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
               costUsd: m.cost ?? 0,
             });
@@ -462,6 +465,8 @@ export const opencodeEngine: AgentEngine = {
       input.signal.removeEventListener("abort", onAbort);
       listeners.get(sid)?.delete(onEvent);
       for (const [c, fn] of children) listeners.get(c)?.delete(fn);
+      // drop empty sets so the map doesn't grow by one key per session for the life of the process
+      for (const k of [sid, ...children.keys()]) if (listeners.get(k)?.size === 0) listeners.delete(k);
     }
   },
 };

@@ -160,6 +160,13 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                       <button className="btn sm" onClick={() => ask(`In ${where(r)}: create and switch to a new branch called <name> from the current branch.`)}>
                         New branch…
                       </button>
+                      <button
+                        className="btn sm"
+                        title="The remote was renamed or moved: point origin at the new URL"
+                        onClick={() => ask(`In ${where(r)}: set origin to <new URL>, run \`git fetch --prune\`, and if the repository's name changed rename the folder to match. Don't touch uncommitted changes. Show me \`git remote -v\` and \`git status\` when done.`)}
+                      >
+                        Change remote…
+                      </button>
                     </div>
 
                     <div className="repo-section">

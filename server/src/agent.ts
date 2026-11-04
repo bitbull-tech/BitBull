@@ -211,7 +211,7 @@ export async function* runTurn(
 
   // Engines don't know SayGM's prices; estimate from the live price list.
   if (usage && !usage.costUsd && (usage.inputTokens || usage.outputTokens)) {
-    usage = { ...usage, costUsd: await estimateCost(model, usage.inputTokens, usage.outputTokens) };
+    usage = { ...usage, costUsd: await estimateCost(model, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens) };
   }
 
   if (engineSessionId && engineSessionId !== session.engine_session_id) {

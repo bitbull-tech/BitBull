@@ -170,7 +170,8 @@ export const claudeEngine: AgentEngine = {
               type: "done",
               engineSessionId: sessionId,
               usage: {
-                inputTokens: msg.usage?.input_tokens,
+                inputTokens: (msg.usage?.input_tokens ?? 0) + (msg.usage?.cache_read_input_tokens ?? 0) + (msg.usage?.cache_creation_input_tokens ?? 0),
+                cacheReadTokens: msg.usage?.cache_read_input_tokens ?? 0,
                 outputTokens: msg.usage?.output_tokens,
                 // total_cost_usd is an Anthropic list-price estimate, not SayGM billing — omitted.
               },

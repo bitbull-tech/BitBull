@@ -184,6 +184,20 @@ cloned repos, outputs, .claude/skills) · `integrations/atlas/workflows/` · `lo
 `logs/activity.jsonl` · `settings.local.json` · `home/ cache/ config/ opencode-sandbox/
 claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
 
+## QA swarm on the old clone (4 Nov 2026, fable-5 vs gpt-5.4, kimi-k3 as handler)
+
+Reviewed the 3-week-old clone (a4f8d88). Everything it found had already been fixed upstream
+except: symlink escape in the workspace file APIs (now closed: uploads and listing go through
+`insideWorkspace()`, which realpaths the parent and refuses planted links), `?dir=.claude`
+listing the root (now 400), empty listener-set keys in opencode.ts (now deleted), unknown
+`level` on /api/activity widening the filter (now falls back to error), cache-read tokens
+priced at full input rate (now `cacheReadTokens` at the cache rate), and the 20k Ditto archive
+cap (documented in ditto.ts). Still structural: OpenCode's process inherits the secrets (the
+guard plugin blanks them in shells; /proc remains, GAPS #11). Blind spots it named, not yet
+reviewed by anyone: the new surface since (links.ts, storage.ts, repos.ts, swarm.ts, import,
+desktop/), supply chain (no `npm audit` in CI, tag-pinned actions), db.ts, MCP/Ditto trust,
+React XSS surface, serveStatic path. → run a swarm on the current tree with those as the target.
+
 ## Open items / next
 
 1. **Rotate SayGM + Ditto keys** (leaked 14 Oct) if not yet done; resolve the SayGM 402 for kimi-k3.
