@@ -29,6 +29,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   mcp.ts             BitBob's own MCP server ("bitbob") for the engines: request_network_access
   links.ts           read-only linked folders at /links (lists them; mount flags from mountinfo)
   repos.ts           git clones in a workspace, read-only (status/branches via git); actions go via the agent
+  vault.ts           keys from the UI, AES-256-GCM in DATA_DIR/vault.json; key held by the link helper (DPAPI), unlocked from the page
   swarm.ts           QA swarm: reviewer models in their own sessions (review → challenge), then the chat's model gives the verdict
   engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, bitbob-guard plugin
   engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
@@ -47,8 +48,8 @@ skills/              skills mirrored into every workspace (.claude/skills) and b
 subagents/           reviewer, challenger, debugger, tester, worker, fact-checker
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
 scripts/bitbob-wsl/      Windows: setup.ps1 (create bitbob distro), deploy.ps1, start.ps1, test-stack.ps1,
-                     link.ps1 + bitbob-links.sh (read-only folder links), link-helper.ps1 (lets the UI open
-                     a folder picker on the PC, localhost:8790), copy-in.ps1 (fast copy), backup.ps1
+                     link.ps1 + bitbob-links.sh (read-only folder links), link-helper.ps1 (localhost:8790: folder
+                     picker, Open in Explorer, vault key), copy-in.ps1 (fast copy), backup.ps1
 docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md,
                      CAPTURE.md (phone scanning → cloud folder → ingest; later a capture page)
 tools/               atlas-run.mjs, hippius-setup.mjs, ingest.mjs (scans → archive/ with manifest, OCR, dedupe),

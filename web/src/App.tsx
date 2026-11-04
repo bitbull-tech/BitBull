@@ -4,6 +4,7 @@ import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
+import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
 import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
@@ -159,6 +160,25 @@ function useSidebarWidth() {
 function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthorized: () => void; onLogout: () => void }) {
   const [theme, setTheme] = useTheme()
   const side = useSidebarWidth()
+  // The vault (keys saved in Settings) unlocks on its own when the page runs on the PC that
+  // holds the key; anywhere else it stays locked and .env applies.
+  useEffect(() => {
+    let stop = false
+    void (async () => {
+      try {
+        const v = await api.vault()
+        if (v.unlocked || !onThisPc()) return
+        const key = await vaultKeyFromThisPc()
+        if (!key || stop) return
+        await api.vaultUnlock(key)
+      } catch {
+        /* locked stays locked; Settings shows why */
+      }
+    })()
+    return () => {
+      stop = true
+    }
+  }, [])
   const [sessions, setSessions] = useState<Session[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [models, setModels] = useState<Model[]>([])

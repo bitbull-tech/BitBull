@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { configureVault, vaultValues } from "./vault.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** Repo root (server/src or server/dist -> ../..) */
@@ -60,11 +61,13 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
 };
 
 export const overridesFile = path.join(DATA_DIR, "settings.local.json");
+configureVault(path.join(DATA_DIR, "vault.json"));
 /** process.env as it came from .env / the container, before any UI overrides */
 const baseEnv: Record<string, string | undefined> = { ...process.env };
 
 let warnedIgnored = false;
-export function readOverrides(): Record<string, string> {
+/** settings.local.json only (no vault): what updateSettings rewrites. */
+export function readFileOverrides(): Record<string, string> {
   try {
     if (!existsSync(overridesFile)) return {};
     const raw = JSON.parse(readFileSync(overridesFile, "utf8"));
@@ -87,6 +90,11 @@ export function readOverrides(): Record<string, string> {
   }
 }
 
+/** Everything the UI set: the file, with secrets from the vault winning while it is unlocked. */
+export function readOverrides(): Record<string, string> {
+  return { ...readFileOverrides(), ...vaultValues() };
+}
+
 export function writeOverrides(values: Record<string, string>) {
   mkdirSync(DATA_DIR, { recursive: true });
   const tmp = overridesFile + ".tmp";
@@ -100,7 +108,8 @@ export function writeOverrides(values: Record<string, string>) {
 }
 
 /** Where a setting's current value comes from. */
-export function settingSource(key: string): "ui" | "env" | "default" {
+export function settingSource(key: string): "ui" | "vault" | "env" | "default" {
+  if (key in vaultValues()) return "vault";
   if (key in readOverrides()) return "ui";
   return baseEnv[key] !== undefined && baseEnv[key] !== "" ? "env" : "default";
 }

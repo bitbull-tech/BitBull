@@ -62,7 +62,7 @@ for i in $(seq 1 10); do start=$(awk -F: '$1=="dockremap"{print $2}' /etc/subuid
 [ -n "$start" ] || { echo "dockremap subuid range not found"; exit 1; }
 uid=$((start + 1000))
 chown -R "$uid:$uid" "$HOME_DIR/bitbob-data"
-chmod 700 "$HOME_DIR/bitbob-data"
+chmod 755 "$HOME_DIR/bitbob-data"   # traversable: Explorer (\\wsl.localhost) reads as the default user; secrets inside are 600
 echo "bitbob-data owned by remapped uid $uid"
 
 say "Locking the distro down (applies after restart)"

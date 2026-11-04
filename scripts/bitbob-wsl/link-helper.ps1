@@ -11,6 +11,8 @@
        COPY without them (the agent never sees them), link it as it is, or cancel. BitBob's own repo
        is only ever linked as such a copy.
     4. It runs link.ps1 (all the usual checks: read-only mount, verified, BitBob restarted).
+  It also opens BitBob's data folders in Explorer (/open: path validated, nothing changed) and
+  keeps the vault key (/vault-key: DPAPI-protected file for this Windows user, see server/src/vault.ts).
 
   Who can reach it: only programs on this PC. The agent can't: its container has no route
   here (the egress proxy refuses private and local addresses). Other web pages can't either:
@@ -148,6 +150,42 @@ function Do-Unlink([string]$name) {
   return @{ ok = $true; message = "Removed $name" }
 }
 
+# Open a folder of BitBob's data in Explorer. The page sends the path as the distro sees it
+# (/home/<user>/bitbob-data/...); it is validated, mapped to \\wsl.localhost\<distro>\... and must
+# exist. Nothing is changed, so no dialog. explorer.exe gets the path as one argument.
+function Do-Open([string]$p) {
+  if ($p -notmatch '^/home/[a-z_][a-z0-9_-]{0,31}/bitbob-data(/[A-Za-z0-9 _.@+-]+)*/?$' -or $p -match '(^|/)\.\.(/|$)') {
+    return @{ ok = $false; message = "That path can't be opened from here (only folders under bitbob-data)." }
+  }
+  $rel = ($p.TrimEnd('/') -replace '/', '\')
+  $unc = "\\wsl.localhost\$Distro$rel"
+  if (-not (Test-Path -LiteralPath $unc)) { $unc = "\\wsl$\$Distro$rel" }
+  if (-not (Test-Path -LiteralPath $unc)) { return @{ ok = $false; message = "Not found or not readable from Windows: $unc. Run start.ps1 once after updating (it makes the data folder readable from this PC)." } }
+  Start-Process explorer.exe -ArgumentList @("`"$unc`"")
+  return @{ ok = $true; message = "Opened $unc" }
+}
+
+# The vault key: 32 random bytes made once, kept under %LOCALAPPDATA%\BitBob\vault.key protected
+# with Windows DPAPI for this user only. BitBob's page fetches it to unlock the vault on the
+# server; the server never stores it. Only answered to BitBob's own page (Origin).
+Add-Type -AssemblyName System.Security
+$vaultDir = Join-Path $env:LOCALAPPDATA "BitBob"
+$vaultKeyFile = Join-Path $vaultDir "vault.key"
+function Get-VaultKey {
+  if (Test-Path -LiteralPath $vaultKeyFile) {
+    $blob = [System.IO.File]::ReadAllBytes($vaultKeyFile)
+    $raw = [System.Security.Cryptography.ProtectedData]::Unprotect($blob, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+  } else {
+    New-Item -ItemType Directory -Force -Path $vaultDir | Out-Null
+    $raw = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($raw)
+    $blob = [System.Security.Cryptography.ProtectedData]::Protect($raw, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    [System.IO.File]::WriteAllBytes($vaultKeyFile, $blob)
+  }
+  if ($raw.Length -ne 32) { throw "vault key file is damaged" }
+  return (($raw | ForEach-Object { $_.ToString("x2") }) -join "")
+}
+
 while ($listener.IsListening) {
   $ctx = $listener.GetContext()
   try {
@@ -158,11 +196,19 @@ while ($listener.IsListening) {
     if ($req.HttpMethod -eq "OPTIONS") { Send $ctx 204 @{}; continue }
     $path = $req.Url.AbsolutePath
     if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links) }; continue }
+    if ($req.HttpMethod -eq "GET" -and $path -eq "/vault-key") {
+      if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBob's page only" }; continue }
+      Send $ctx 200 @{ ok = $true; key = (Get-VaultKey) }; continue
+    }
     if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from BitBob's page only" }; continue }
     if ($path -eq "/link") { Send $ctx 200 (Do-Link); continue }
     if ($path -eq "/refresh") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json
       Send $ctx 200 (Do-Refresh ([string]$body.name)); continue
+    }
+    if ($path -eq "/open") {
+      $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json
+      Send $ctx 200 (Do-Open ([string]$body.path)); continue
     }
     if ($path -eq "/unlink") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json

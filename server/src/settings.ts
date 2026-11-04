@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
-import { config, githubTokenKind, paths, readOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
+import { config, githubTokenKind, paths, readFileOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
 import { record } from "./activity.js";
 import { resetDitto } from "./ditto.js";
 import { probeDitto } from "./ditto.js";
 import { probeStorage, resetStorage } from "./storage.js";
+import { VAULT_KEYS, vaultSet, vaultUnlocked } from "./vault.js";
 import { listModels } from "./models.js";
 import { listSkills } from "./skills.js";
 import { listSubagents } from "./subagents.js";
@@ -23,7 +24,7 @@ export interface SettingRow {
   /** can be changed from the UI (saved to settings.local.json) */
   editable?: boolean;
   /** where the value comes from */
-  source: "ui" | "env" | "default";
+  source: "ui" | "vault" | "env" | "default";
   /** for editable choices */
   options?: string[];
 }
@@ -53,12 +54,22 @@ export async function updateSettings(values: Record<string, string | null>) {
       if (buf.length !== 32) throw new Error("HIPPIUS_ENCRYPTION_KEY must be 32 bytes (44 base64 characters, or 64 hex)");
     }
   }
-  const cur = readOverrides();
+  // secrets go to the vault when it is unlocked (and leave settings.local.json if they were there);
+  // other settings, and secrets while the vault is locked, go to settings.local.json as before
+  const cur = readFileOverrides();
+  let toFile = false;
   for (const [k, v] of Object.entries(values)) {
+    if (VAULT_KEYS.has(k) && vaultUnlocked()) {
+      vaultSet(k, v);
+      if (k in cur) delete cur[k];
+      toFile = true;
+      continue;
+    }
     if (v === null || v.trim() === "") delete cur[k];
     else cur[k] = v.trim();
+    toFile = true;
   }
-  writeOverrides(cur);
+  if (toFile) writeOverrides(cur);
   reloadConfig();
   resetDitto();
   resetStorage();

@@ -82,3 +82,29 @@ export async function refreshFolder(name: string, onStep?: (s: string) => void) 
   onStep?.(`Refreshing ${name}: checking it for secrets and copying it again…`)
   return post('/refresh', { name })
 }
+
+/** Open a folder of BitBob's data in Windows Explorer (the helper maps the distro path to \\wsl.localhost\…). */
+export async function openInExplorer(hostPath: string): Promise<{ ok: boolean; message?: string }> {
+  if (!onThisPc()) return { ok: false, message: 'Only from this PC' }
+  try {
+    return await post('/open', { path: hostPath })
+  } catch {
+    return { ok: false, message: HELPER_HINT }
+  }
+}
+
+/**
+ * The vault key kept on this PC by the helper (Windows DPAPI, this user only). null when the
+ * helper isn't running or this isn't the PC BitBob runs on; the vault then stays locked.
+ */
+export async function vaultKeyFromThisPc(): Promise<string | null> {
+  if (!onThisPc()) return null
+  try {
+    const r = await fetch(`${HELPER}/vault-key`, { signal: AbortSignal.timeout(2500) })
+    if (!r.ok) return null
+    const j = (await r.json()) as { ok: boolean; key?: string }
+    return j.ok && j.key && /^[0-9a-f]{64}$/.test(j.key) ? j.key : null
+  } catch {
+    return null
+  }
+}

@@ -453,6 +453,27 @@ It creates the BitBob project (or reuses one with that name), uploads everything
 to seed Ditto from the memory files. Exports hold personal notes: keep them out of git
 (`claude-export/` is ignored).
 
+## Keys: `.env` and the vault
+
+`.env` is what the stack boots on; it never leaves the PC and is copied into the distro by
+`deploy.ps1`. Keys you add later in **Settings → Config** go into the **vault**:
+`vault.json` in BitBob's data folder, AES-256-GCM, encrypted with a key BitBob never stores.
+The key is made once by the link helper on this PC and kept under `%LOCALAPPDATA%\BitBob\vault.key`,
+protected with Windows DPAPI for your Windows user. When you open BitBob on this PC the page
+fetches the key from the helper and unlocks the vault on the server (memory only); from a phone
+or another machine the vault stays locked and `.env` applies. Why: `settings.local.json` is
+readable by the agent's shell (it shares the server's user), so keys saved there were one prompt
+injection away from leaking; the vault file is ciphertext to it. The first unlock moves any
+secrets still in `settings.local.json` into the vault. Settings → Config shows the vault's state
+and a **Lock** / **Unlock from this PC** button; rows show `vault` as their source.
+
+## Opening folders in Explorer
+
+The Files view shows each folder's path inside the container and inside the `bitbob` distro;
+**Open in Explorer** opens it on Windows (`\\wsl.localhost\bitbob\…`) through the link helper,
+which only opens folders under `bitbob-data`. `start.ps1` makes the data folder traversable for
+this; `settings.local.json` and `vault.json` stay owner-only.
+
 ## Ditto sync per project
 
 Right-click a project → **Enable Ditto sync** (also a checkbox in Project settings). A ◆ next to
@@ -529,6 +550,7 @@ container, and `/mcp/bitbob` only the engines (a token minted at startup).
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
 | `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA swarm (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
+| `GET/POST` | `/api/vault`, `/api/vault/unlock {key}`, `/api/vault/lock` | Vault state; unlock with the 64-hex key (migrates secrets out of settings.local.json); lock |
 | `GET` | `/api/projects/:id/repos` | Git clones in the workspace: branch, status, ahead/behind, branches, last commit (read-only) |
 | `GET` | `/api/projects/:id/repos/diff` | `?repo=<path>` uncommitted-changes stat; `&base=<ref>` compares base...HEAD |
 | `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |

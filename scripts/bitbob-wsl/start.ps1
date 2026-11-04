@@ -34,6 +34,10 @@ for ($i = 0; $i -lt 30; $i++) {
   if ($LASTEXITCODE -eq 0) { $dockerUp = $true; break }
 }
 if ($dockerUp) {
+  # The data folder is owned by the container's remapped uid; make it traversable so Explorer
+  # (\\wsl.localhost, which reads as the distro's default user) can open it. Files inside keep
+  # their own modes (settings.local.json and vault.json stay 600).
+  & wsl.exe -d $Distro -u root --exec sh -c 'for d in /home/*/bitbob-data; do [ -d "$d" ] && chmod 755 "$d"; done; true' 2>$null
   & wsl.exe -d $Distro --exec sh -c 'test -f ~/BitBob/docker-compose.yml' 2>$null
   if ($LASTEXITCODE -eq 0) {
     Write-Host "Starting the containers..."

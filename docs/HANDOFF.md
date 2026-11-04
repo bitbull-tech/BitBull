@@ -184,6 +184,17 @@ cloned repos, outputs, .claude/skills) · `integrations/atlas/workflows/` · `lo
 `logs/activity.jsonl` · `settings.local.json` · `home/ cache/ config/ opencode-sandbox/
 claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
 
+## Vault and Open in Explorer (4 Nov 2026, late)
+
+- `server/src/vault.ts` + `/api/vault*`: UI-entered secrets (`VAULT_KEYS`) encrypted in
+  `DATA_DIR/vault.json`; key from the link helper (`/vault-key`, DPAPI file
+  `%LOCALAPPDATA%\BitBob\vault.key`), sent by the page at load when on the PC; server keeps key
+  and values in memory only; `readOverrides()` = file + vault; `updateSettings` routes secrets
+  to the vault while unlocked; first unlock migrates secrets out of `settings.local.json`.
+  Motivation: GAPS #11 (agent shares the server uid and could read that file).
+- Link helper `/open {path}`: validated distro path under `bitbob-data` → `\\wsl.localhost\bitbob\…`
+  → explorer.exe. `start.ps1`/`provision.sh` make `bitbob-data` 755 so Explorer can traverse it.
+
 ## QA swarm on the old clone (4 Nov 2026, fable-5 vs gpt-5.4, kimi-k3 as handler)
 
 Reviewed the 3-week-old clone (a4f8d88). Everything it found had already been fixed upstream

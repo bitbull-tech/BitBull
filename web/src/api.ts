@@ -101,7 +101,7 @@ export interface SettingRow {
   isDefault: boolean
   hint?: string
   editable?: boolean
-  source?: 'ui' | 'env' | 'default'
+  source?: 'ui' | 'vault' | 'env' | 'default'
   options?: string[]
 }
 export interface SettingGroup {
@@ -290,6 +290,9 @@ export const api = {
   status: () => req<Status>('/api/status'),
   network: () => req<NetworkState>('/api/network'),
   links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),
+  vault: () => req<{ unlocked: boolean; exists: boolean; keys: string[]; file: string }>('/api/vault'),
+  vaultUnlock: (key: string) => req<{ unlocked: boolean; keys: string[]; moved: string[] }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ key }) }),
+  vaultLock: () => req<{ unlocked: boolean }>('/api/vault/lock', { method: 'POST' }),
   repos: (projectId: string) => req<{ repos: RepoInfo[] }>(`/api/projects/${projectId}/repos`),
   startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus'] }) =>
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),

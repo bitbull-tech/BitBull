@@ -7,7 +7,7 @@ import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { assertConfig, config, paths, type EngineId } from "./config.js";
+import { assertConfig, config, paths, readFileOverrides, reloadConfig, writeOverrides, type EngineId } from "./config.js";
 import "./log.js";
 import { engines, isRunning } from "./agent.js";
 import {
@@ -23,10 +23,10 @@ import {
   type TurnStatus,
 } from "./turns.js";
 import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
-import { insideWorkspace, mirrorFile, newEncryptionKey, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
+import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
-import { dittoEnabled, listDittoTools, probeDitto } from "./ditto.js";
+import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
 import { listModels, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
@@ -37,6 +37,7 @@ import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { listRepos, repoDiffStat } from "./repos.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
+import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
 assertConfig();
@@ -572,6 +573,49 @@ app.post("/api/import/conversations", bodyLimit({ maxSize: 64 * 1024 * 1024, onE
   }
   console.log(`[import] ${body.source}: ${imported} conversation(s), ${msgs} message(s), ${skipped} already here`);
   return c.json({ imported, skipped, messages: msgs });
+});
+
+// ---------- vault ----------
+/**
+ * Keys entered in the UI live in DATA_DIR/vault.json, AES-256-GCM, with a key the server never
+ * stores: the owner's PC holds it (link helper, DPAPI) and the page sends it at unlock. While
+ * locked, .env applies. Unlocking also moves any secrets still in settings.local.json into the
+ * vault, so the agent-readable file ends up holding none.
+ */
+app.get("/api/vault", (c) => c.json({ unlocked: vaultUnlocked(), exists: vaultExists(), keys: vaultKeys(), file: vaultFile() }));
+app.post("/api/vault/unlock", async (c) => {
+  const body = z.object({ key: z.string().min(64).max(64) }).parse(await c.req.json());
+  let count: number;
+  try {
+    count = unlockVault(body.key);
+  } catch (e) {
+    record({ level: "warn", source: "config", message: `Vault unlock refused: ${e instanceof Error ? e.message : String(e)}` });
+    return c.json({ error: "That key does not open the vault" }, 400);
+  }
+  // migrate: secrets the UI saved before the vault existed leave the plain file
+  const cur = readFileOverrides();
+  const moved = Object.keys(cur).filter((k) => VAULT_KEYS.has(k));
+  if (moved.length) {
+    for (const k of moved) {
+      vaultSet(k, cur[k]);
+      delete cur[k];
+    }
+    writeOverrides(cur);
+  }
+  reloadConfig();
+  resetDitto();
+  resetStorage();
+  await listModels(true).catch(() => []);
+  record({ level: "info", source: "config", message: `Vault unlocked: ${count + moved.length} secret(s)${moved.length ? `, ${moved.length} moved out of settings.local.json` : ""}` });
+  return c.json({ unlocked: true, keys: vaultKeys(), moved });
+});
+app.post("/api/vault/lock", async (c) => {
+  lockVault();
+  reloadConfig();
+  resetDitto();
+  resetStorage();
+  record({ level: "info", source: "config", message: "Vault locked: .env values apply until the next unlock" });
+  return c.json({ unlocked: false });
 });
 
 // ---------- QA swarm ----------

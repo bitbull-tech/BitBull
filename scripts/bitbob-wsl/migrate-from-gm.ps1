@@ -79,7 +79,7 @@ mv "$h/bitbob-data" "$h/bitbob-data.fresh"
 tar -xzf - -C "$h"
 mv "$h/gm-data" "$h/bitbob-data"
 chown -R "$uid:$uid" "$h/bitbob-data"
-chmod 700 "$h/bitbob-data"
+chmod 755 "$h/bitbob-data"
 rm -rf "$h/bitbob-data.fresh"
 echo "restored $(du -sh "$h/bitbob-data" | cut -f1) into $h/bitbob-data (uid $uid)"
 '@

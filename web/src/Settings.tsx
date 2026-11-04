@@ -6,6 +6,7 @@ import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { NetworkPanel } from './network'
 import { FoldersPanel } from './Folders'
+import { HELPER_HINT, vaultKeyFromThisPc } from './linkHelper'
 
 type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'appearance'
 
@@ -185,10 +186,11 @@ export function Settings({
           {tab === 'config' && (
             <>
               <p className="muted small">
-                Keys and settings marked <b>Edit</b> can be changed here: they're saved on the BitBob server (in its data folder, readable only by
-                BitBob) and take effect straight away, overriding <code>.env</code>. <b>Use .env</b> removes the override. Everything else, including
-                access and sandbox settings, can only be changed in <code>.env</code> followed by a deploy. Secrets are never shown in full.
+                Keys and settings marked <b>Edit</b> can be changed here and take effect straight away, overriding <code>.env</code>. <b>Use .env</b>{' '}
+                removes the override. Everything else, including access and sandbox settings, can only be changed in <code>.env</code> followed by a
+                deploy. Secrets are never shown in full.
               </p>
+              <VaultPanel />
               {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}
               {!groups && <p className="muted">Loading…</p>}
               {groups?.map((g) => (
@@ -263,7 +265,60 @@ export function Settings({
   )
 }
 
-const SOURCE_LABEL = { ui: 'set here', env: '.env', default: 'default' } as const
+/**
+ * The vault: keys saved here are encrypted on the server with a key that lives on this PC
+ * (kept by the link helper under Windows DPAPI). Unlock happens on its own when the page runs
+ * on that PC; elsewhere the vault stays locked and .env applies.
+ */
+function VaultPanel() {
+  const [v, setV] = useState<{ unlocked: boolean; exists: boolean; keys: string[] } | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const load = () => void api.vault().then(setV).catch(() => setV(null))
+  useEffect(load, [])
+  const unlock = async () => {
+    setMsg(null)
+    const key = await vaultKeyFromThisPc()
+    if (!key) return setMsg(`No vault key from this PC: ${HELPER_HINT}`)
+    try {
+      const r = await api.vaultUnlock(key)
+      setMsg(r.moved.length ? `Unlocked; moved ${r.moved.join(', ')} out of settings.local.json into the vault.` : 'Unlocked.')
+      load()
+      window.dispatchEvent(new CustomEvent('bitbob:settings-changed'))
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const lock = async () => {
+    await api.vaultLock().catch(() => {})
+    setMsg('Locked: .env values apply until the next unlock.')
+    load()
+  }
+  if (!v) return null
+  return (
+    <section className="cfg-group vault">
+      <h3>Vault</h3>
+      <p className="muted small">
+        API keys saved here go into an encrypted vault on the server (AES-256-GCM). The key to it is kept on this PC by the link helper, not by
+        BitBob, so the agent's own shell can't read your keys. {v.unlocked ? <b>Unlocked</b> : <b>Locked</b>}
+        {v.keys.length ? ` · holds ${v.keys.join(', ')}` : v.exists ? '' : ' · not created yet (created at the first unlock)'}.
+      </p>
+      <div className="row-actions">
+        {v.unlocked ? (
+          <button className="btn sm" onClick={lock}>
+            Lock
+          </button>
+        ) : (
+          <button className="btn sm primary" onClick={unlock}>
+            Unlock from this PC
+          </button>
+        )}
+      </div>
+      {msg && <p className="small">{msg}</p>}
+    </section>
+  )
+}
+
+const SOURCE_LABEL = { ui: 'set here', vault: 'vault', env: '.env', default: 'default' } as const
 
 function ConfigRow({
   r,
@@ -306,7 +361,7 @@ function ConfigRow({
                 Edit
               </button>
             )}
-            {r.editable && r.source === 'ui' && (
+            {r.editable && (r.source === 'ui' || r.source === 'vault') && (
               <button className="link" disabled={busy} onClick={() => void save(null)} title="Remove the value set here">
                 Use .env
               </button>
