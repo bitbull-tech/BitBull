@@ -515,7 +515,7 @@ memory, since a chat can only read its own project's workspace.
 
 **QA swarm** (top bar, in any chat) points up to two *other* models at a repo, folder or file in
 the workspace. Each reviews it on its own in the sandbox, read-only, across the areas you tick
-(integrity, security/exploitability, efficiency, effectiveness) and writes a report with
+(attack vectors, correctness, code quality, performance, user experience) and writes a report with
 evidence; then each reads the other's report and has to agree, refute or admit it can't tell,
 with evidence; then the chat's own model, the primary handler, weighs both rounds, checks any
 disputed point itself, and replies in the chat with a per-reviewer summary, a ranked table of

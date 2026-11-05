@@ -319,6 +319,12 @@ function VaultPanel() {
 }
 
 const SOURCE_LABEL = { ui: 'set here', vault: 'vault', env: '.env', default: 'default' } as const
+const SOURCE_HINT = {
+  ui: 'Saved from this page in settings.local.json on the server; overrides .env',
+  vault: 'Saved from this page in the encrypted vault; overrides .env',
+  env: 'Comes from the .env file in the repo (copied in at deploy)',
+  default: 'Not set anywhere; the built-in default applies',
+} as const
 
 function ConfigRow({
   r,
@@ -362,7 +368,7 @@ function ConfigRow({
               </button>
             )}
             {r.editable && (r.source === 'ui' || r.source === 'vault') && (
-              <button className="link" disabled={busy} onClick={() => void save(null)} title="Remove the value set here">
+              <button className="link" disabled={busy} onClick={() => void save(null)} title="Drop the value saved in the UI so the one in .env (or the default) applies again">
                 Use .env
               </button>
             )}
@@ -433,7 +439,9 @@ function ConfigRow({
         )}
         <div className="cfg-env">
           {r.env}
-          <span className={`tag src-${r.source ?? 'env'}`}>{SOURCE_LABEL[r.source ?? (r.isDefault ? 'default' : 'env')]}</span>
+          <span className={`tag src-${r.source ?? 'env'}`} title={SOURCE_HINT[r.source ?? (r.isDefault ? 'default' : 'env')]}>
+            {SOURCE_LABEL[r.source ?? (r.isDefault ? 'default' : 'env')]}
+          </span>
         </div>
       </div>
     </div>

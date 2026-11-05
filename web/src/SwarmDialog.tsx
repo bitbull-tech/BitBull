@@ -3,10 +3,11 @@ import { api, type Model, type Project, type RepoInfo, type Session, type Swarm 
 import { IconX } from './icons'
 
 const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
-  { id: 'integrity', label: 'Integrity', hint: 'does what it claims, correctly; hidden behaviour, fake tests' },
-  { id: 'security', label: 'Security / exploitability', hint: 'injection, traversal, secrets, supply chain, network' },
-  { id: 'efficiency', label: 'Efficiency', hint: 'hot spots, waste, scalability, cost' },
-  { id: 'effectiveness', label: 'Effectiveness', hint: 'fit for purpose, API/UX, maintainability, coverage' },
+  { id: 'attack-vectors', label: 'Attack vectors', hint: 'how a hostile input, contributor, dependency or prompt-injected agent could abuse it; entry point → impact' },
+  { id: 'correctness', label: 'Correctness', hint: 'does what it claims; logic errors, races, data loss, misleading behaviour, tests that don’t test' },
+  { id: 'code-quality', label: 'Code quality', hint: 'duplication, structure, naming, dead code, error handling, coverage' },
+  { id: 'performance', label: 'Performance', hint: 'hot spots, waste, memory/I-O, scalability, leaks' },
+  { id: 'user-experience', label: 'User experience', hint: 'fit for purpose, first-run and everyday workflows, error messages, docs, real-world use' },
 ]
 
 /**
@@ -33,7 +34,7 @@ export function SwarmDialog({
   const [repos, setRepos] = useState<RepoInfo[]>([])
   const [a, setA] = useState('')
   const [b, setB] = useState('')
-  const [focus, setFocus] = useState<Swarm['focus']>(['integrity', 'security', 'efficiency', 'effectiveness'])
+  const [focus, setFocus] = useState<Swarm['focus']>(['attack-vectors', 'correctness', 'code-quality', 'performance', 'user-experience'])
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 

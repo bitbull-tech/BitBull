@@ -582,7 +582,26 @@ app.post("/api/import/conversations", bodyLimit({ maxSize: 64 * 1024 * 1024, onE
  * locked, .env applies. Unlocking also moves any secrets still in settings.local.json into the
  * vault, so the agent-readable file ends up holding none.
  */
-app.get("/api/vault", (c) => c.json({ unlocked: vaultUnlocked(), exists: vaultExists(), keys: vaultKeys(), file: vaultFile() }));
+/** Secrets the UI saved while the vault was locked move into it as soon as it is open. */
+function migrateSecretsIntoVault(): string[] {
+  if (!vaultUnlocked()) return [];
+  const cur = readFileOverrides();
+  const moved = Object.keys(cur).filter((k) => VAULT_KEYS.has(k));
+  if (moved.length) {
+    for (const k of moved) {
+      vaultSet(k, cur[k]);
+      delete cur[k];
+    }
+    writeOverrides(cur);
+    reloadConfig();
+    record({ level: "info", source: "config", message: `Moved ${moved.join(", ")} out of settings.local.json into the vault` });
+  }
+  return moved;
+}
+app.get("/api/vault", (c) => {
+  migrateSecretsIntoVault();
+  return c.json({ unlocked: vaultUnlocked(), exists: vaultExists(), keys: vaultKeys(), file: vaultFile() });
+});
 app.post("/api/vault/unlock", async (c) => {
   const body = z.object({ key: z.string().min(64).max(64) }).parse(await c.req.json());
   let count: number;
@@ -592,16 +611,7 @@ app.post("/api/vault/unlock", async (c) => {
     record({ level: "warn", source: "config", message: `Vault unlock refused: ${e instanceof Error ? e.message : String(e)}` });
     return c.json({ error: "That key does not open the vault" }, 400);
   }
-  // migrate: secrets the UI saved before the vault existed leave the plain file
-  const cur = readFileOverrides();
-  const moved = Object.keys(cur).filter((k) => VAULT_KEYS.has(k));
-  if (moved.length) {
-    for (const k of moved) {
-      vaultSet(k, cur[k]);
-      delete cur[k];
-    }
-    writeOverrides(cur);
-  }
+  const moved = migrateSecretsIntoVault();
   reloadConfig();
   resetDitto();
   resetStorage();

@@ -199,7 +199,7 @@ export interface Swarm {
   sessionId: string
   projectId: string | null
   target: string
-  focus: ('integrity' | 'security' | 'efficiency' | 'effectiveness')[]
+  focus: ('attack-vectors' | 'correctness' | 'code-quality' | 'performance' | 'user-experience')[]
   primaryModel: string
   reviewers: { model: string; sessionId: string; status: 'pending' | 'reviewing' | 'challenging' | 'done' | 'error'; error?: string; hasReport: boolean; hasRebuttal: boolean }[]
   phase: 'review' | 'challenge' | 'final' | 'done' | 'error'
