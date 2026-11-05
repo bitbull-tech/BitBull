@@ -128,9 +128,9 @@ function finish(t: LiveTurn, status: TurnStatus) {
 export function startTurn(
   session: SessionRow,
   input: { prompt: string; model: string; attachments?: string[]; plan?: boolean },
-): { turnId: string; status: TurnStatus } {
+): { turnId: string; status: TurnStatus; created: boolean } {
   const existing = activeBySession.get(session.id);
-  if (existing) return { turnId: existing, status: "running" };
+  if (existing) return { turnId: existing, status: "running", created: false };
 
   const row = turns.create({ sessionId: session.id, model: input.model });
   const t: LiveTurn = {
@@ -167,7 +167,7 @@ export function startTurn(
     }
   })();
 
-  return { turnId: t.id, status: "running" };
+  return { turnId: t.id, status: "running", created: true };
 }
 
 /** Stop the running turn of a session, if any. */

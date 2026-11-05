@@ -69,27 +69,37 @@ $newHome = (& wsl.exe -d $New --exec sh -c 'printf %s "$HOME"')
 if ($newHome -notmatch '^/[A-Za-z0-9/_.-]+$') { throw "unexpected home folder in $New`: $newHome" }
 Wsl @("-d", $New, "--cd", "~/BitBob", "--exec", "sh", "-c", "docker compose stop")
 # The restore script is written into the distro first (through stdin, as a file: a .cmd line would
-# mangle % and quotes), then the backup is piped through cmd, whose pipe is binary-safe.
+# mangle % and quotes), then the backup is copied in and extracted. Two safety rules from the
+# 2026-11 audit: the old distro's data folder was agent-writable, so the archive is hostile input —
+# (1) everything runs as the distro's DEFAULT USER, never root (a planted symlink can't write
+#     anywhere the user can't), and (2) an archive containing symlink/hardlink/fifo members is
+#     refused outright (GNU tar strips absolute paths and refuses '..' on its own; links are the
+#     gap, and a fifo can hang a later reader). Note: real gm-data folders often hold
+#     node_modules/.bin or .venv symlinks — delete those in the old distro first if you hit exit 3.
 $restore = @'
 set -e
+f=$1
 h=$HOME
-uid=$(stat -c %u "$h/bitbob-data")
+if tar -tvzf "$f" | grep -qE '^[lhp]'; then
+  echo "refusing to restore: the backup contains symlink, hardlink or fifo members (exit 3 — see the script's notes)" >&2
+  exit 3
+fi
 rm -rf "$h/bitbob-data.fresh"
 mv "$h/bitbob-data" "$h/bitbob-data.fresh"
-tar -xzf - -C "$h"
+tar -xzf "$f" -C "$h"
 mv "$h/gm-data" "$h/bitbob-data"
-chown -R "$uid:$uid" "$h/bitbob-data"
 chmod 755 "$h/bitbob-data"
-rm -rf "$h/bitbob-data.fresh"
-echo "restored $(du -sh "$h/bitbob-data" | cut -f1) into $h/bitbob-data (uid $uid)"
+rm -rf "$h/bitbob-data.fresh" "$f" "$h/bitbob-restore.sh"
+echo "restored $(du -sh "$h/bitbob-data" | cut -f1) into $h/bitbob-data"
 '@
 $restoreFile = Join-Path $env:TEMP "bitbob-restore.sh"
 [System.IO.File]::WriteAllText($restoreFile, ($restore -replace "`r`n", "`n"))
 $cmdFile2 = Join-Path $env:TEMP "bitbob-migrate-restore.cmd"
-# root's HOME is /root; the data lives in the default user's home, so run with HOME set to it
+# No -u root anywhere: HOME is set so the default user writes its own home
 Set-Content -LiteralPath $cmdFile2 -Encoding ASCII -Value @(
-  "@type `"$restoreFile`" | wsl.exe -d $New -u root --exec sh -c `"cat > /root/bitbob-restore.sh`"",
-  "@type `"$file`" | wsl.exe -d $New -u root --exec env HOME=$newHome sh /root/bitbob-restore.sh"
+  "@type `"$restoreFile`" | wsl.exe -d $New --exec env HOME=$newHome sh -c `"cat > `$HOME/bitbob-restore.sh`"",
+  "@type `"$file`" | wsl.exe -d $New --exec env HOME=$newHome sh -c `"cat > `$HOME/.migrate-backup.tgz`"",
+  "@wsl.exe -d $New --exec env HOME=$newHome sh `$HOME/bitbob-restore.sh `$HOME/.migrate-backup.tgz"
 )
 & cmd.exe /c $cmdFile2
 if ($LASTEXITCODE -ne 0) { throw "restore failed ($LASTEXITCODE); the backup is still at $file. Re-run with -RestoreFrom `"$file`"" }

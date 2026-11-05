@@ -15,7 +15,7 @@
  * own at-rest encryption doesn't say who can read a chunk on a storage miner.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, realpathSync, renameSync, statSync } from "node:fs";
 import { open, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -163,7 +163,14 @@ export function mirrorFile(input: {
   description?: string;
 }) {
   if (!storageEnabled()) return null;
-  const absPath = path.join(input.workspace, input.relPath);
+  // relPath can come from agent.db (agent-writable) via the retry route — validate containment
+  let absPath: string;
+  try {
+    absPath = insideWorkspace(input.workspace, input.relPath);
+  } catch (e) {
+    record({ level: "warn", source: "storage", message: `Not stored: ${e instanceof Error ? e.message : e}` });
+    return null;
+  }
   if (!existsSync(absPath)) return null;
   const size = statSync(absPath).size;
   if (size > config.storage.maxFileMb * 1024 * 1024) {
@@ -318,27 +325,34 @@ export function insideWorkspace(workspace: string, rel: string): string {
  */
 export async function restoreFile(row: StoredFileRow, workspace: string): Promise<{ path: string; verified: boolean }> {
   if (!storageEnabled()) throw new Error("Hippius storage is not configured");
+  // No hash on record = the (agent-writable) ledger can't vouch for this object: refuse rather
+  // than restore unverifiable content into the workspace and call it verified.
+  if (!row.sha256) throw new Error(`No checksum on record for ${row.rel_path}; refusing to restore`);
   const key = encryptionKey();
   const tmpDir = path.join(config.dataDir, "tmp");
   mkdirSync(tmpDir, { recursive: true });
   const tmp = path.join(tmpDir, `restore-${randomUUID()}`);
+  const plain = `${tmp}.plain`;
   const dest = insideWorkspace(workspace, row.rel_path);
   try {
     const res = await s3().send(new GetObjectCommand({ Bucket: config.storage.bucket, Key: row.key }));
     if (!res.Body) throw new Error("empty response from Hippius");
     await pipeline(res.Body as Readable, createWriteStream(tmp));
-    await decryptFile(tmp, dest, key);
+    // GCM only fails in final() — after plaintext has streamed out — so decrypt to a temp file:
+    // tampered, truncated or wrong-key data must never land in the workspace.
+    await decryptFile(tmp, plain, key);
     const hash = createHash("sha256");
-    await pipeline(createReadStream(dest), hash);
-    const verified = !row.sha256 || hash.digest("hex") === row.sha256;
-    record({
-      level: verified ? "info" : "warn",
-      source: "storage",
-      message: verified ? `Restored ${row.rel_path}` : `Restored ${row.rel_path}, but the checksum does not match`,
-    });
-    return { path: dest, verified };
+    await pipeline(createReadStream(plain), hash);
+    if (hash.digest("hex") !== row.sha256) throw new Error(`Checksum mismatch for ${row.rel_path}: the stored copy does not match the ledger`);
+    // the agent can swap a folder for a symlink while we downloaded — re-verify before writing
+    insideWorkspace(workspace, row.rel_path);
+    mkdirSync(path.dirname(dest), { recursive: true });
+    renameSync(plain, dest);
+    record({ level: "info", source: "storage", message: `Restored ${row.rel_path} (checksum verified)` });
+    return { path: dest, verified: true };
   } finally {
     await rm(tmp, { force: true }).catch(() => {});
+    await rm(plain, { force: true }).catch(() => {});
   }
 }
 

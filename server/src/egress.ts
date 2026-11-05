@@ -170,6 +170,14 @@ export function onSharedSuffix(host: string) {
   return false;
 }
 
+/** Thrown when a "whole domain" approval would cover a suffix itself rather than one owner's site. */
+export class ScopeRefused extends Error {}
+
+/** A bare suffix name (github.io, co.uk): a domain approval here covers every tenant, not one owner. */
+function isBareSuffix(target: string) {
+  return PUBLIC_SUFFIXES.has(target) || SLD.test(target);
+}
+
 /** The static list the proxy always allows (egress/allowlist.txt, baked into the image). */
 export function staticAllowlist(): string[] {
   const f = path.join(ROOT, "egress", "allowlist.txt");
@@ -308,6 +316,9 @@ export function decide(id: string, decision: "host" | "domain" | "deny"): Access
   r.decidedAt = new Date().toISOString();
   if (decision === "deny") r.status = "denied";
   else {
+    if (decision === "domain" && isBareSuffix(r.domain)) {
+      throw new ScopeRefused(`${r.domain} is a suffix anyone can register under, not one owner's domain — allow the host ${r.host} instead.`);
+    }
     r.status = "approved";
     r.scope = decision;
     addApproval(decision === "domain" ? r.domain : r.host, decision, r.reason);
@@ -329,6 +340,9 @@ export function addApproval(rawHost: string, scope: Scope, reason?: string): App
   const host = normalizeHost(rawHost);
   if (!host) return null;
   const target = scope === "domain" ? domainOf(host) : host;
+  if (scope === "domain" && isBareSuffix(target)) {
+    throw new ScopeRefused(`${target} is a suffix anyone can register under, not one owner's domain — allow individual hosts instead.`);
+  }
   approved = approved.filter((a) => !(a.host === target && a.scope === scope));
   const a: Approval = { host: target, scope, approvedAt: new Date().toISOString(), ...(reason ? { reason } : {}) };
   approved.push(a);

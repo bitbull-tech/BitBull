@@ -163,6 +163,34 @@ function freePort(preferred: number): Promise<number> {
   return tryPort(preferred).catch(() => tryPort(0));
 }
 
+/**
+ * Secrets the OpenCode process must not inherit in its environ: it runs as our uid, and a
+ * same-uid agent reads /proc/<pid>/environ (docs/THREAT-MODEL.md R1). What the engine's own
+ * config legitimately needs (SayGM for models, Ditto for the MCP) travels in
+ * OPENCODE_CONFIG_CONTENT; everything else ambient — APP_TOKEN, Hippius, and any vaulted
+ * keys applyOverrides() put into process.env — stays out. GITHUB_TOKEN/TAOSTATS_API_KEY stay
+ * by design (the agent gets them on purpose). Brief window: env is restored right after spawn.
+ */
+const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|ATLAS_API_KEY|FOUR04_API_KEY|HIPPIUS_.*)$/;
+
+async function withScrubbedEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const saved: Record<string, string | undefined> = {};
+  for (const k of Object.keys(process.env)) {
+    if (ENGINE_ENV_BLOCKLIST.test(k)) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
 async function start(force = false): Promise<Running> {
   if (server && !force) return server;
   if (starting) return starting;
@@ -172,12 +200,15 @@ async function start(force = false): Promise<Running> {
       server = null;
     }
     const models = await listModels(force);
-    const { client, server: srv } = await createOpencode({
-      hostname: "127.0.0.1",
-      port: await freePort(config.agent.opencodePort),
-      timeout: 30000,
-      config: buildConfig(models) as any,
-    });
+    const port = await freePort(config.agent.opencodePort);
+    const { client, server: srv } = await withScrubbedEnv(() =>
+      createOpencode({
+        hostname: "127.0.0.1",
+        port,
+        timeout: 30000,
+        config: buildConfig(models) as any,
+      }),
+    );
     const s: Running = { client, close: () => srv.close(), models: new Set(models.map((m) => m.id)), agents: subagentsSignature(), cfg: configVersion };
     checkSubagentModels(s.models);
     server = s;

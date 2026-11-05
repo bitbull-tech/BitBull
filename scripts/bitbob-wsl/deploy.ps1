@@ -6,19 +6,27 @@
 param([string]$Distro = "bitbob")
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
+if ($Distro -notmatch '^[A-Za-z0-9._-]{1,40}$') { throw "bad distro name" }
 $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 
 # Top-level entries to ship (never data/, node_modules/, dist/, .git/, the desktop app or Claude exports)
 $items = Get-ChildItem -Force -LiteralPath $Repo |
   Where-Object { $_.Name -notin @("data", "node_modules", "dist", ".git", "desktop", "claude-export") } |
   ForEach-Object { $_.Name }
+# These names land in a .cmd line: reject anything cmd could read as syntax (a hostile
+# contributor filename must not execute at deploy time). Plain characters only, never a
+# leading dash (tar would parse it as an option), then quoted, with -- as end-of-options.
+foreach ($n in $items) {
+  if ($n -notmatch '^[A-Za-z0-9 _.,()+\-]+$' -or $n.StartsWith("-")) { throw "Refusing to deploy: top-level name '$n' is not safe in a .cmd line" }
+}
+$quotedItems = ($items | ForEach-Object { '"{0}"' -f $_ }) -join ' '
 
 Write-Host "==> Copying code into $Distro" -ForegroundColor Cyan
 # cmd's pipe keeps the tar stream binary-safe (Windows PowerShell's doesn't)
 $unpack = "rm -rf ~/BitBob.new && mkdir ~/BitBob.new && tar -xf - -C ~/BitBob.new && sed -i 's/\r`$//' ~/BitBob.new/.env ~/BitBob.new/egress/* && rm -rf ~/BitBob && mv ~/BitBob.new ~/BitBob"
 # A .cmd file sidesteps PowerShell's native-argument quoting differences between 5.1 and 7
 $cmdFile = Join-Path $env:TEMP "bitbob-deploy.cmd"
-Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=node_modules --exclude=dist -C `"$Repo`" $($items -join ' ') | wsl.exe -d $Distro --exec sh -c `"$unpack`""
+Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=node_modules --exclude=dist -C `"$Repo`" -- $quotedItems | wsl.exe -d $Distro --exec sh -c `"$unpack`""
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
 
