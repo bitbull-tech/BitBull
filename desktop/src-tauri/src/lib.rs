@@ -79,10 +79,17 @@ async fn get_status(app: AppHandle) -> Status {
 
 #[tauri::command]
 async fn run_action(app: AppHandle, action: Action, source: Option<String>) -> Result<u32, String> {
+    start_action(&app, action, source.as_deref())
+}
+
+/// Start one of the repo's scripts and stream its output to the launcher window. One at a time.
+/// Split out of the command above so the tray can use it too.
+fn start_action(app: &AppHandle, action: Action, source: Option<&str>) -> Result<u32, String> {
+    let app = app.clone();
     let state = app.state::<AppState>();
     let s = state.settings.lock().unwrap().clone();
     let repo = s.repo.clone().ok_or("Choose the BitBob folder first")?;
-    let (program, args) = stack::command_for(action, &repo, &s.distro, source.as_deref())?;
+    let (program, args) = stack::command_for(action, &repo, &s.distro, source)?;
     let mut guard = state.child.lock().unwrap();
     if let Some(c) = guard.as_mut() {
         if c.try_wait().map(|x| x.is_none()).unwrap_or(false) {
@@ -152,6 +159,45 @@ fn cancel_action(state: State<AppState>) -> bool {
         }
         None => false,
     }
+}
+
+/// Tray "Stop BitBob and quit": shut the containers and the distro down, then close the app.
+/// The counterpart to plain Quit, which leaves the stack running. Everything here happens off the
+/// main thread: `blocking_show` must never block it, and the stop script takes a while.
+fn stop_and_quit(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        let confirmed = app
+            .dialog()
+            .message(
+                "This stops the BitBob containers and shuts the distro down, then closes this app. \
+                 Anything running inside BitBob is interrupted.\n\n\
+                 To close the app and leave BitBob running, use Quit instead.",
+            )
+            .title("Stop BitBob and quit?")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom("Stop and quit".into(), "Cancel".into()))
+            .blocking_show();
+        if !confirmed {
+            return;
+        }
+        // the launcher shows the script's output, so put it in front before the stop starts
+        show_launcher(app.clone());
+        if let Err(e) = start_action(&app, Action::Stop, None) {
+            let _ = app.emit_to("main", "bitbob-log", LogLine { run: 0, line: format!("! {e}") });
+            return;
+        }
+        // let start.ps1 -Stop finish before this process goes away (it is what brings the stack down)
+        let state = app.state::<AppState>();
+        for _ in 0..900 {
+            if state.child.lock().map(|c| c.is_none()).unwrap_or(true) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        app.exit(0);
+    });
 }
 
 /// Show BitBob's own UI in its own (IPC-less) window. Async on purpose: a window must not be
@@ -244,8 +290,9 @@ pub fn run() {
             // tray: the app lives here; closing windows never stops the stack
             let open = MenuItem::with_id(app, "open", "Open BitBob", true, None::<&str>)?;
             let launcher = MenuItem::with_id(app, "launcher", "Launcher / status", true, None::<&str>)?;
+            let stop = MenuItem::with_id(app, "stop", "Stop BitBob and quit", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit (BitBob keeps running)", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &launcher, &PredefinedMenuItem::separator(app)?, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &launcher, &PredefinedMenuItem::separator(app)?, &stop, &quit])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().expect("icon"))
                 .tooltip("BitBob")
@@ -254,6 +301,7 @@ pub fn run() {
                 .on_menu_event(|app, ev| match ev.id().as_ref() {
                     "open" => show_gm_later(app),
                     "launcher" => show_launcher(app.clone()),
+                    "stop" => stop_and_quit(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
