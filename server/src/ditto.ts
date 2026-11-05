@@ -15,34 +15,77 @@ export function dittoMcpHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${config.ditto.apiKey}` };
 }
 
-let client: Client | null = null;
-let connecting: Promise<Client> | null = null;
+/**
+ * Ditto groups saves into "sessions" (threads). Sent with these headers, a BitBob chat's
+ * archive lands in one Ditto thread named like the chat, instead of Ditto's time-based
+ * grouping that lumps unrelated chats together. The name header goes out once per thread.
+ */
+export const DITTO_SESSION_HEADER = "X-Ditto-Session-Id";
+export const DITTO_SESSION_NAME_HEADER = "X-Ditto-Session-Name";
+export interface DittoThread {
+  id: string;
+  title?: string;
+}
 
-async function getClient(): Promise<Client> {
-  if (client) return client;
-  if (connecting) return connecting;
-  connecting = (async () => {
+interface Conn {
+  client: Client;
+  lastUsed: number;
+}
+/** One connection per Ditto thread (key "" = none); idle ones are closed after a while. */
+const conns = new Map<string, Conn>();
+const connecting = new Map<string, Promise<Client>>();
+const IDLE_MS = 10 * 60 * 1000;
+const named = new Set<string>();
+
+async function getClient(thread?: DittoThread): Promise<Client> {
+  const key = thread?.id ?? "";
+  const cur = conns.get(key);
+  if (cur) {
+    cur.lastUsed = Date.now();
+    return cur.client;
+  }
+  const inflight = connecting.get(key);
+  if (inflight) return inflight;
+  const p = (async () => {
     const c = new Client({ name: "bitbob", version: "0.1.0" });
-    const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), {
-      requestInit: { headers: dittoMcpHeaders() },
-    });
+    const headers: Record<string, string> = { ...dittoMcpHeaders() };
+    if (thread) {
+      headers[DITTO_SESSION_HEADER] = thread.id;
+      // the title once: the first connection for this thread in this process carries it
+      if (thread.title && !named.has(thread.id)) {
+        headers[DITTO_SESSION_NAME_HEADER] = thread.title.replace(/[\r\n]+/g, " ").slice(0, 120);
+        named.add(thread.id);
+      }
+    }
+    const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), { requestInit: { headers } });
     await c.connect(transport);
-    client = c;
+    conns.set(key, { client: c, lastUsed: Date.now() });
     return c;
   })();
+  connecting.set(key, p);
   try {
-    return await connecting;
+    return await p;
   } finally {
-    connecting = null;
+    connecting.delete(key);
   }
 }
 
-/** Drop the cached connection (after the key or URL changes in Settings). */
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, c] of conns) {
+    if (k !== "" && now - c.lastUsed > IDLE_MS) {
+      conns.delete(k);
+      void c.client.close().catch(() => {});
+    }
+  }
+}, 60_000).unref();
+
+/** Drop the cached connections (after the key or URL changes in Settings). */
 export function resetDitto() {
-  const c = client;
-  client = null;
-  connecting = null;
-  void c?.close().catch(() => {});
+  for (const c of conns.values()) void c.client.close().catch(() => {});
+  conns.clear();
+  connecting.clear();
+  named.clear();
 }
 
 export const dittoEnabled = () => !!config.ditto.apiKey;
@@ -54,16 +97,16 @@ const transient = (msg: string) => /ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|
  * Call a Ditto tool. Transient network errors are retried with backoff (1s, 5s, 15s): writes
  * use a vendorId, so a retried save can't create duplicates.
  */
-export async function dittoCall(name: string, args: Record<string, unknown>, retries = [1000, 5000, 15000]) {
+export async function dittoCall(name: string, args: Record<string, unknown>, retries = [1000, 5000, 15000], thread?: DittoThread) {
   if (!dittoEnabled()) return null;
   for (let attempt = 0; ; attempt++) {
     try {
-      const c = await getClient();
+      const c = await getClient(thread);
       const res = await c.callTool({ name, arguments: args });
       if (attempt > 0) console.log(`[ditto] ${name} succeeded on retry ${attempt}`);
       return res;
     } catch (err) {
-      client = null; // force reconnect next time
+      conns.delete(thread?.id ?? ""); // force reconnect next time
       const msg = errText(err);
       if (attempt < retries.length && transient(msg)) {
         console.warn(`[ditto] ${name} failed (${msg}); retrying in ${retries[attempt] / 1000}s`);
@@ -95,15 +138,21 @@ export async function archiveTurn(t: {
     "",
     `Agent: ${t.assistant}`,
   ].join("\n");
-  await dittoCall("save_memory", {
-    // Ditto memories are capped at 20k characters: the full turn stays in local SQLite (messages),
-    // the memory is the searchable archive. Long tool outputs are what gets cut.
-    content: content.slice(0, 20000),
-    source: config.ditto.source,
-    sourceContext: t.project ? `project:${t.project}` : `session:${t.sessionId}`,
-    vendorId: `turn:${t.messageId}`,
-    metadata: { sessionId: t.sessionId, engine: t.engine, model: t.model, project: t.project ?? null, kind: "chat-turn" },
-  });
+  await dittoCall(
+    "save_memory",
+    {
+      // Ditto memories are capped at 20k characters: the full turn stays in local SQLite (messages),
+      // the memory is the searchable archive. Long tool outputs are what gets cut.
+      content: content.slice(0, 20000),
+      source: config.ditto.source,
+      sourceContext: t.project ? `project:${t.project}` : `session:${t.sessionId}`,
+      vendorId: `turn:${t.messageId}`,
+      metadata: { sessionId: t.sessionId, engine: t.engine, model: t.model, project: t.project ?? null, kind: "chat-turn" },
+    },
+    undefined,
+    // one Ditto thread per BitBob chat, titled like it (project first so threads sort together)
+    { id: t.sessionId, title: t.project ? `${t.project} · ${t.sessionTitle}` : t.sessionTitle },
+  );
 }
 
 /**
@@ -155,7 +204,7 @@ export async function listDittoTools(): Promise<string[]> {
     const { tools } = await c.listTools();
     return tools.map((t) => t.name);
   } catch {
-    client = null;
+    conns.delete("");
     return [];
   }
 }

@@ -184,6 +184,20 @@ cloned repos, outputs, .claude/skills) · `integrations/atlas/workflows/` · `lo
 `logs/activity.jsonl` · `settings.local.json` · `home/ cache/ config/ opencode-sandbox/
 claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
 
+## Ditto integration review (4 Nov 2026, from ditto-assistant/ditto-cli)
+
+Done: per-chat Ditto threads for the turn archive (`X-Ditto-Session-Id`/`-Name`, one MCP
+connection per thread in `ditto.ts`, idle-closed); `ditto_review` tool on BitBob's MCP
+(`@heyditto/cli` in the image, runs server-side with the Ditto key; `verify-changes` and
+`git-workflow` call for it before commit/PR); agent-readme + project-recall tell the agent to ask
+the Ditto Main Agent (`send_message_to_agent`) for judgement questions; README/.env.example
+describe giving BitBob its own claimable Ditto agent account (`heyditto init --name BitBob`).
+Tom still has to: run that `init`, claim it, swap `DITTO_API_KEY`; enable the repo for Ditto
+Review in his Ditto workspace (otherwise `ditto_review` returns the service's refusal).
+Not done, deliberately: the engines' own Ditto MCP calls don't carry the thread headers
+(OpenCode's MCP config is per server, not per chat); Ditto's inference router (`gm/` models,
+recall/record) is worth evaluating at the device-token phase, not before.
+
 ## Vault and Open in Explorer (4 Nov 2026, late)
 
 - `server/src/vault.ts` + `/api/vault*`: UI-entered secrets (`VAULT_KEYS`) encrypted in

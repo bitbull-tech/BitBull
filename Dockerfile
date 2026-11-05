@@ -38,6 +38,8 @@ COPY tools tools
 COPY agent-readme.md agent-readme.md
 # The proxy's static allowlist, so Settings -> Network can show it (the proxy has its own copy)
 COPY egress/allowlist.txt egress/allowlist.txt
+# Ditto's CLI, for the server-side ditto_review tool (runs with the server's key, never in the agent's shell)
+RUN npm install -g @heyditto/cli@3.6.4 && npm cache clean --force
 RUN mkdir -p /data && chown node:node /data
 # Non-root. The app and its code are root-owned and read-only to the agent.
 USER node

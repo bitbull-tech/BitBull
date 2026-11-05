@@ -453,6 +453,31 @@ It creates the BitBob project (or reuses one with that name), uploads everything
 to seed Ditto from the memory files. Exports hold personal notes: keep them out of git
 (`claude-export/` is ignored).
 
+## Ditto: identity, threads, review
+
+**Identity.** Give BitBob its own Ditto agent account instead of your personal key: once, on
+your PC, `npx -y --package @heyditto/cli heyditto init --name BitBob --json`, open the
+`claimURL` it prints and claim the account as yourself, then put the key it stored
+(`~/.config/heyditto/cli/config.json`, or `%APPDATA%\heyditto\cli` on Windows) into `.env` as
+`DITTO_API_KEY` (or into the vault via Settings). From then on everything BitBob saves shows in
+your graph as the **BitBob** agent thread, labelled as such, and the key in BitBob's config is
+BitBob's: revoke it without touching your own. The name is fixed at `init`, so pick it then.
+
+**Threads.** Each BitBob chat is archived into its own Ditto session thread, titled like the chat
+(`<project> · <chat title>`), via the `X-Ditto-Session-Id` / `-Name` headers, instead of Ditto's
+time-based grouping. The agent's own `save_memory` calls still go through the engine's MCP
+connection and are grouped by Ditto; the archive is the per-chat record.
+
+**Main Agent.** The agent is told to ask your Ditto Main Agent (`send_message_to_agent`) for
+questions that need judgement across your whole memory rather than one fact.
+
+**Ditto Review.** The `ditto_review` tool on BitBob's own MCP runs Ditto's CLI *on the server*
+(with the Ditto key, which the agent's shell never sees) against a clone in the workspace:
+working, staged or since-base changes, quick/standard/deep profile, findings back as JSON.
+The repo's GitHub origin has to be enabled for Ditto Review in your Ditto workspace and the key
+needs review access; until then the tool returns the service's refusal. `verify-changes` and
+`git-workflow` ask for it before a commit or PR. The CLI is in the image (`@heyditto/cli`).
+
 ## Keys: `.env` and the vault
 
 `.env` is what the stack boots on; it never leaves the PC and is copied into the distro by

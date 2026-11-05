@@ -2,13 +2,18 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
-import { config } from "./config.js";
-import { sessions } from "./db.js";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { config, paths } from "./config.js";
+import { projects, sessions, workspaceFor } from "./db.js";
 import { proxied, requestAccess } from "./egress.js";
+import { record } from "./activity.js";
 
 /**
  * BitBob's own MCP server, attached to both engines as "bitbob": tools that need the user or the
- * server rather than the sandbox. Today: request_network_access.
+ * server rather than the sandbox: request_network_access, and ditto_review (Ditto's own review
+ * service on a repo in the workspace: the CLI runs here with the Ditto key, never in the agent's shell).
  *
  * Served by the main listener (the engines reach it at 127.0.0.1) and guarded by a token
  * minted at startup, never written anywhere. The token is not a boundary against the agent
@@ -66,6 +71,77 @@ function build(sessionHint: string | undefined) {
       const title = sid ? sessions.get(sid)?.title : undefined;
       const r = await requestAccess({ domain, reason, sessionId: sid, sessionTitle: title });
       return { content: [{ type: "text" as const, text: r.text }] };
+    },
+  );
+
+  server.registerTool(
+    "ditto_review",
+    {
+      title: "Ditto Review of a repo's working changes",
+      description:
+        "Send a repository's uncommitted (or staged, or since-a-base) changes to Ditto Review, an independent reviewer, and get its findings back as JSON. " +
+        "Use it before proposing a commit or a PR, as a second opinion next to your own review. Nothing is committed, pushed or posted. " +
+        "Prerequisites the owner controls: the repo's GitHub origin must be set up for Ditto Review in their Ditto workspace, and the Ditto key must have review access; " +
+        "otherwise the tool returns the service's refusal, which you report rather than work around. preview=true is offline and only shows what would be sent.",
+      inputSchema: {
+        repo: z.string().describe("Workspace-relative path of the git clone, e.g. BitBob or my-repo ('.' for the workspace root if it is a clone)"),
+        mode: z.enum(["working", "staged", "base"]).default("working").describe("working = staged+unstaged+untracked; staged = index only; base = everything since the merge base with `base`"),
+        base: z.string().optional().describe("Branch or ref for mode=base, e.g. main"),
+        profile: z.enum(["quick", "standard", "deep"]).default("quick"),
+        preview: z.boolean().default(false).describe("Offline: list what would be uploaded, run nothing"),
+      },
+    },
+    async ({ repo, mode, base, profile, preview }) => {
+      const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+      const live = runningSessions();
+      const sid = sessionHint && sessions.get(sessionHint) ? sessionHint : live.length === 1 ? live[0] : undefined;
+      const session = sid ? sessions.get(sid) : undefined;
+      const project = session?.project_id ? projects.get(session.project_id) : null;
+      const ws = project ? workspaceFor(project) : paths.workspace;
+      const rel = repo
+        .split(/[\\/]+/)
+        .filter((x) => x && x !== "." && x !== "..")
+        .join("/");
+      const dir = path.resolve(ws, rel);
+      if (!(dir === ws || dir.startsWith(ws + path.sep)) || !existsSync(path.join(dir, ".git"))) return text(`"${repo}" is not a git clone in this workspace.`);
+      if (!config.ditto.apiKey) return text("Ditto is not configured (no DITTO_API_KEY), so Ditto Review is not available.");
+      if (mode === "base" && !(base && /^[A-Za-z0-9._/@^~-]{1,120}$/.test(base) && !base.startsWith("-"))) return text("mode=base needs a plain ref name in `base`, e.g. main.");
+      const args = ["review", "local", "--directory", dir, "--profile", profile, "--output", "json"];
+      if (mode === "staged") args.push("--staged");
+      if (mode === "base") args.push("--base", base!);
+      if (preview) args.push("--preview");
+      else args.push("--timeout", "900");
+      record({ level: "info", source: "ditto", sessionId: sid, sessionTitle: session?.title, message: `Ditto Review ${preview ? "preview" : "started"}: ${rel || "."} (${mode}, ${profile})` });
+      return await new Promise((resolve) => {
+        execFile(
+          "heyditto",
+          args,
+          {
+            cwd: dir,
+            timeout: preview ? 60_000 : 960_000,
+            maxBuffer: 16 * 1024 * 1024,
+            env: {
+              PATH: process.env.PATH ?? "",
+              HOME: process.env.HOME ?? "/tmp",
+              DITTO_API_KEY: config.ditto.apiKey,
+              DITTO_CONFIG_DIR: path.join(config.dataDir, "ditto-cli"),
+              ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTPS_PROXY } : {}),
+              ...(process.env.NO_PROXY ? { NO_PROXY: process.env.NO_PROXY } : {}),
+            },
+          },
+          (err, stdout, stderr) => {
+            const out = String(stdout || "").trim();
+            const errText = String(stderr || "").trim();
+            if (err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+              resolve(text("The Ditto CLI (heyditto) is not installed in this image; ask the owner to deploy a build that includes it."));
+              return;
+            }
+            const body = out || errText || (err ? err.message : "");
+            const clipped = body.length > 30_000 ? body.slice(0, 30_000) + "\n…(truncated)" : body;
+            resolve(text(err && !out ? `Ditto Review did not complete: ${clipped}` : clipped));
+          },
+        );
+      });
     },
   );
   return server;
