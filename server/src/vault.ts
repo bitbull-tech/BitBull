@@ -11,6 +11,11 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
  * Locked (no key yet, or after `lock()`): the vault contributes nothing and .env applies. The
  * SayGM key in .env is what the stack boots on; the vault is for what the owner adds later.
  *
+ * This is AT-REST protection. While unlocked, values are in server memory and engines are
+ * spawned without them in their environ (see engines/opencode.ts withScrubbedEnv) — but the
+ * agent shares the server's uid, so /proc keeps them reachable to a determined agent
+ * (docs/THREAT-MODEL.md R1). The helper hands the key out only after a Windows consent prompt.
+ *
  * No imports from config.ts: config reads `vaultValues()` while it is being evaluated, so this
  * module must stand on its own.
  */

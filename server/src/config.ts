@@ -133,7 +133,10 @@ applyOverrides();
 function buildConfig() {
   const c = {
   port: Number(env("PORT", "8787")),
-  host: env("HOST", "0.0.0.0"),
+  // Outside Docker, listen on loopback by default: a LAN-reachable agent API (even with a
+  // token) is a foot-gun for non-experts, and with ALLOW_NO_AUTH it is wide open (see
+  // assertConfig). Docker keeps 0.0.0.0 so the gateway can reach it on the internal network.
+  host: env("HOST", (process.env.BITBOB_SANDBOX || (existsSync("/.dockerenv") ? "docker" : "none")) === "none" ? "127.0.0.1" : "0.0.0.0"),
 
   /** Bearer token protecting the API + UI. Required unless explicitly disabled. */
   appToken: env("APP_TOKEN", ""),
@@ -361,7 +364,12 @@ export function assertConfig() {
   if (!config.saygm.apiKey) problems.push("SAYGM_API_KEY is not set");
   if (!config.appToken && !config.allowNoAuth)
     problems.push("APP_TOKEN is not set (or set ALLOW_NO_AUTH=true for local-only use)");
-  if (!config.ditto.apiKey) console.warn("[config] DITTO_API_KEY not set — memory disabled");
+  const loopback = ["127.0.0.1", "localhost", "::1"].includes(config.host); // "::" and 0.0.0.0 are any-address, never loopback
+  if (config.allowNoAuth && !config.appToken && !loopback)
+    problems.push(
+      `ALLOW_NO_AUTH=true with HOST=${config.host} exposes the entire unauthenticated API (agent, files, settings) to your network. Bind 127.0.0.1 or set APP_TOKEN.`,
+    );
+  if (!config.appToken) console.warn("[config] WARNING: no APP_TOKEN — every route is unauthenticated. Local-only use only.");
   if (problems.length) throw new Error("Config errors:\n - " + problems.join("\n - "));
 }
 

@@ -192,7 +192,9 @@ Add-Type -Namespace Win32 -Name Native -MemberDefinition @'
 
 # The vault key: 32 random bytes made once, kept under %LOCALAPPDATA%\BitBob\vault.key protected
 # with Windows DPAPI for this user only. BitBob's page fetches it to unlock the vault on the
-# server; the server never stores it. Only answered to BitBob's own page (Origin).
+# server; the server never stores it. Only answered to BitBob's own page (Origin) AND only with
+# you present: the Origin header is a browser boundary, not a local one — any process on this PC
+# can fake it, so handing the key out needs your OK in a Windows box, like every other action here.
 Add-Type -AssemblyName System.Security
 $vaultDir = Join-Path $env:LOCALAPPDATA "BitBob"
 $vaultKeyFile = Join-Path $vaultDir "vault.key"
@@ -211,6 +213,17 @@ function Get-VaultKey {
   return (($raw | ForEach-Object { $_.ToString("x2") }) -join "")
 }
 
+function Do-VaultKey {
+  $owner = New-Owner
+  try {
+    $q = [System.Windows.Forms.MessageBox]::Show($owner,
+      "BitBob wants the vault key to unlock your stored keys.`n`nOnly press OK if you just clicked Unlock in BitBob. This key decrypts every stored key, so nothing else should ever ask for it.",
+      "BitBob: unlock the vault?", "OKCancel", "Warning", "Button2")
+  } finally { $owner.Close() }
+  if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not unlocked." } }
+  return @{ ok = $true; key = (Get-VaultKey) }
+}
+
 while ($listener.IsListening) {
   $ctx = $listener.GetContext()
   try {
@@ -223,7 +236,7 @@ while ($listener.IsListening) {
     if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links) }; continue }
     if ($req.HttpMethod -eq "GET" -and $path -eq "/vault-key") {
       if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBob's page only" }; continue }
-      Send $ctx 200 @{ ok = $true; key = (Get-VaultKey) }; continue
+      Send $ctx 200 (Do-VaultKey); continue
     }
     if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from BitBob's page only" }; continue }
     if ($path -eq "/link") { Send $ctx 200 (Do-Link); continue }

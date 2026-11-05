@@ -115,3 +115,12 @@ test("domainOf: 'allow the whole domain' never collapses to a shared suffix", ()
   assert.equal(eg.domainOf("heyditto.ai"), "heyditto.ai");
   assert.equal(eg.domainOf("registry.npmjs.org"), "npmjs.org");
 })
+
+test("a bare suffix (github.io, co.uk) can never be domain-approved", () => {
+  eg._reset();
+  // the suffix ITSELF is not one owner's site (top-up on the 5 Nov fix)
+  assert.throws(() => eg.addApproval("github.io", "domain"), eg.ScopeRefused);
+  assert.throws(() => eg.addApproval("co.uk", "domain"), eg.ScopeRefused);
+  // but a site under it still gets a one-site domain approval
+  assert.equal(eg.addApproval("evil.github.io", "domain")?.host, "evil.github.io");
+});

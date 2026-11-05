@@ -32,7 +32,7 @@ import { listModels, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
-import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke } from "./egress.js";
+import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused } from "./egress.js";
 import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { listRepos, repoDiffStat } from "./repos.js";
@@ -151,15 +151,25 @@ app.get("/api/links", (c) => c.json({ available: linksAvailable(), links: listLi
 app.post("/api/network/requests/:id", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { decision?: string };
   if (body.decision !== "host" && body.decision !== "domain" && body.decision !== "deny") return c.json({ error: "decision must be host, domain or deny" }, 400);
-  const r = decide(c.req.param("id"), body.decision);
-  if (!r) return c.json({ error: "not found" }, 404);
-  return c.json({ request: r, ...networkState() });
+  try {
+    const r = decide(c.req.param("id"), body.decision);
+    if (!r) return c.json({ error: "not found" }, 404);
+    return c.json({ request: r, ...networkState() });
+  } catch (e) {
+    if (e instanceof ScopeRefused) return c.json({ error: e.message }, 400);
+    throw e;
+  }
 });
 app.post("/api/network/approved", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { host?: string; scope?: string };
-  const a = addApproval(String(body.host ?? ""), body.scope === "domain" ? "domain" : "host", "added in Settings");
-  if (!a) return c.json({ error: "Not a valid domain name (no IPs, ports or paths)" }, 400);
-  return c.json({ approval: a, ...networkState() });
+  try {
+    const a = addApproval(String(body.host ?? ""), body.scope === "domain" ? "domain" : "host", "added in Settings");
+    if (!a) return c.json({ error: "Not a valid domain name (no IPs, ports or paths)" }, 400);
+    return c.json({ approval: a, ...networkState() });
+  } catch (e) {
+    if (e instanceof ScopeRefused) return c.json({ error: e.message }, 400);
+    throw e;
+  }
 });
 app.delete("/api/network/approved/:host", (c) => {
   const scope = c.req.query("scope");

@@ -139,6 +139,9 @@ function build(sessionHint: string | undefined) {
               HOME: cliHome,
               GIT_CONFIG_NOSYSTEM: "1",
               GIT_CONFIG_GLOBAL: "/dev/null",
+              // The reviewed repo's OWN config is the remaining gap (it beats global/nosystem):
+              // neutralise its exec knobs with env-level config, which outranks repo config.
+              GIT_CONFIG_PARAMETERS: "'core.fsmonitor=' 'diff.external=' 'core.pager=cat'",
               GIT_TERMINAL_PROMPT: "0",
               DITTO_API_KEY: config.ditto.apiKey,
               DITTO_CONFIG_DIR: path.join(cliHome, "config"),

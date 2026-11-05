@@ -484,13 +484,17 @@ needs review access; until then the tool returns the service's refusal. `verify-
 `deploy.ps1`. Keys you add later in **Settings → Config** go into the **vault**:
 `vault.json` in BitBob's data folder, AES-256-GCM, encrypted with a key BitBob never stores.
 The key is made once by the link helper on this PC and kept under `%LOCALAPPDATA%\BitBob\vault.key`,
-protected with Windows DPAPI for your Windows user. When you open BitBob on this PC the page
-fetches the key from the helper and unlocks the vault on the server (memory only); from a phone
-or another machine the vault stays locked and `.env` applies. Why: `settings.local.json` is
-readable by the agent's shell (it shares the server's user), so keys saved there were one prompt
-injection away from leaking; the vault file is ciphertext to it. The first unlock moves any
-secrets still in `settings.local.json` into the vault. Settings → Config shows the vault's state
-and a **Lock** / **Unlock from this PC** button; rows show `vault` as their source.
+protected with Windows DPAPI for your Windows user. When you open BitBob on this PC and click
+**Unlock**, a Windows box from the link helper asks for your OK (any program on the PC can fake
+a browser header, so handing the key out needs you present) and the page unlocks the vault on
+the server (memory only); from a phone or another machine the vault stays locked and `.env`
+applies. Why: `settings.local.json` is readable by the agent's shell (it shares the server's
+user), so keys saved there were one prompt injection away from leaking; the vault file is
+ciphertext to it. The first unlock moves any secrets still in `settings.local.json` into the
+vault. Settings → Config shows the vault's state and a **Lock** / **Unlock from this PC**
+button; rows show `vault` as their source. The vault is **at-rest** protection: while unlocked,
+values live in server memory and engines are spawned without them in their environment — but
+server and agent share a uid, so `/proc` is not a hard wall (see docs/THREAT-MODEL.md R1).
 
 ## Opening folders in Explorer
 

@@ -4,12 +4,19 @@ on:
     branches: [main]
   pull_request:
 
+# Default to no token rights anywhere; jobs that need more declare it themselves.
+# PR-controlled code (dependencies, tests) must never inherit write permissions.
+permissions: {}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # actions are pinned to commit SHAs (tag noted for humans; update both together)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - run: npm run setup
@@ -26,13 +33,16 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/bitbob:latest
+          # also tag the commit so :latest isn't the only (mutable) reference
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/bitbob:latest
+            ghcr.io/${{ github.repository_owner }}/bitbob:${{ github.sha }}
