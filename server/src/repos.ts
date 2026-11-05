@@ -58,18 +58,31 @@ const GIT_SAFE_FLAGS = [
 /** Config keys whose value git runs as a command. Matched case-insensitively against key names. */
 const EXEC_KEY = /^(core\.(fsmonitor|hookspath|sshcommand|pager|editor|gitproxy|askpass)|diff\.external|credential\.(helper|.*\.helper)|uploadpack\.packobjectshook|gpg\..*program|sequence\.editor|.*\.textconv|filter\..*\.(clean|smudge|process)|alias\..*|ssh\.variant|init\.templatedir)$/i;
 
-/** Environment for git: no BitBob secrets, no user config, no interactive prompts. */
+/**
+ * Environment for git: no BitBob secrets, no user config, no interactive prompts.
+ * The null device (never a plantable path) stands in for the global config on both platforms;
+ * Windows needs a handful of ambient variables to start a process at all, and none are secrets.
+ */
 function gitEnv() {
-  return {
+  const win = process.platform === "win32";
+  const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-    HOME: "/nonexistent",
     LC_ALL: "C",
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_GLOBAL: win ? "NUL" : "/dev/null",
     GIT_ATTR_NOSYSTEM: "1",
     GIT_ALLOW_PROTOCOL: "file:https",
   };
+  if (win) {
+    for (const k of ["SystemRoot", "SYSTEMROOT", "SystemDrive", "windir", "TEMP", "TMP", "ComSpec", "PATHEXT", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS"]) {
+      const v = process.env[k];
+      if (v !== undefined) env[k] = v;
+    }
+  } else {
+    env.HOME = "/nonexistent";
+  }
+  return env;
 }
 
 /**
@@ -86,8 +99,10 @@ export async function execCapableConfig(dir: string): Promise<string[]> {
       env: gitEnv(),
     });
     return [...new Set(stdout.split("\0").filter((k) => k && EXEC_KEY.test(k)))];
-  } catch {
-    return []; // not readable as a repo; the inspect below reports the real error
+  } catch (e) {
+    // Fail CLOSED. Returning "nothing dangerous here" because the check itself broke would run
+    // git in a repo we could not vet — the exact thing this gate exists to prevent.
+    return [`unreadable config (${clean(e instanceof Error ? e.message : String(e), 100)})`];
   }
 }
 
@@ -127,7 +142,7 @@ export function findRepos(ws: string): string[] {
       return;
     }
     if (entries.some((e) => e.name === ".git")) {
-      out.push(path.relative(ws, dir) || ".");
+      out.push(path.relative(ws, dir).split(path.sep).join("/") || ".");
       return; // submodules inside count as part of this repo
     }
     if (depth >= MAX_DEPTH) return;

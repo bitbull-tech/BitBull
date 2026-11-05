@@ -58,6 +58,15 @@ test("hostile clone: exec-capable config is refused, and nothing runs", async ()
   }
 });
 
+test("the gate fails closed: a repo whose config cannot be read is refused, not trusted", async () => {
+  // if the check itself breaks (bad environment, git missing, unreadable config) the repo must
+  // be refused — returning "nothing dangerous" would run git in a repo we never vetted
+  const missing = path.join(ws, "does-not-exist");
+  const found = await execCapableConfig(missing);
+  assert.ok(found.length > 0, "an unreadable repo was reported as safe");
+  assert.match(found[0], /unreadable config/);
+});
+
 test("an ordinary clone still inspects normally", async () => {
   const dir = path.join(ws, "clean");
   mkdirSync(dir);
