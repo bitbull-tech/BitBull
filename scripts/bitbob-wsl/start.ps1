@@ -8,6 +8,12 @@
 param([string]$Distro = "bitbob", [switch]$InstallAtLogin, [switch]$Stop)
 $env:WSL_UTF8 = "1"
 
+# Native commands here write to stderr in normal operation (docker's "No swap limit support"),
+# and this script checks $LASTEXITCODE itself rather than relying on errors being thrown. Set
+# this explicitly: invoked with & from a script that sets Stop (setup.ps1), a child script
+# INHERITS that preference, and a stderr warning becomes a terminating NativeCommandError.
+$ErrorActionPreference = 'Continue'
+
 $helperScript = Join-Path $PSScriptRoot "link-helper.ps1"
 if ($Stop) {
   Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |

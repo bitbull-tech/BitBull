@@ -210,7 +210,31 @@ Pinned, reproducible images built by CI — ideally with provenance attestation 
 are a far better story for a project whose selling point is the sandbox. This is also what
 makes `BITBOB_TAG` in the compose file mean something: today it defaults to `local`.
 
-### 5.2 Bootstrap the distro from a downloaded rootfs
+### 5.2 Bootstrap the distro from a downloaded rootfs — **written 5 Nov 2026, untested**
+
+`setup.ps1` now downloads Canonical's published Ubuntu 24.04 WSL root filesystem from
+`cloud-images.ubuntu.com/wsl/releases/24.04/current/` and verifies it against the
+`SHA256SUMS` published beside it, then `wsl --import`s it. No existing distro, no Docker on
+Windows, no Microsoft Store. It also checks for WSL 2 up front and prints the
+`wsl --install --no-distribution` instruction rather than failing obscurely. `-Rootfs` takes
+a tarball you already have, `-Sha256` pins an expected hash, and `-Source` keeps the old
+export-from-Docker path as an explicit fallback.
+
+Two things the published checksum does **not** give us: it travels with the file, so it
+proves the download arrived intact rather than that it is the image anyone reviewed, and
+`SHA256SUMS.gpg` is not checked (that needs Canonical's signing key on the machine). The
+answer is `-Sha256`: after a good run the script prints the hash it used, and pinning it as
+the default puts it in git where it is reviewed like any other change.
+
+**Not yet exercised.** Every path goes through `wsl.exe`, so none of it can be tested from a
+cloud session. The open question is whether `provision.sh` runs clean on this base: the
+cloud-images rootfs is a fuller Ubuntu than the `ubuntu:24.04` Docker export it replaces
+(snapd, cloud-init, the WSL first-run setup), and `/etc/wsl.conf` is overwritten by
+provisioning, so `[boot] command` rather than systemd still starts Docker. Test against a
+throwaway `-Distro` name with the live stack stopped, since both would bind 127.0.0.1:8787.
+
+The original plan:
+
 
 `scripts/bitbob-wsl/setup.ps1` takes `-Source Ubuntu` and exports a clean `ubuntu:24.04`
 image **out of an existing distro that already has Docker**. No new user clears that: they
