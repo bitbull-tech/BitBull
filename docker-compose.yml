@@ -61,7 +61,12 @@ services:
       # ro,noexec in the bitbob distro; :ro here again. Only you can add one, from Windows.
       - ${BITBOB_LINKS_DIR:-./links}:/links:ro
     networks: [sandbox]
-    depends_on: [egress]
+    # Not just "egress exists": the agent's only route out is squid, and a container that is
+    # running but not yet listening gives connect timeouts rather than a clean refusal, which
+    # look like broken networking in the log. Wait until the proxy actually answers.
+    depends_on:
+      egress:
+        condition: service_healthy
     tmpfs:
       - /tmp:size=1g
     pids_limit: 512
@@ -82,6 +87,14 @@ services:
     networks: [sandbox, outside]
     pids_limit: 128
     mem_limit: 256m
+    healthcheck:
+      # connect and close: proves squid is accepting on 3128 without making a request it
+      # would have to refuse (and log) every few seconds
+      test: ["CMD", "socat", "-u", "OPEN:/dev/null", "TCP:127.0.0.1:3128"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   gateway:
     <<: *hardening
@@ -92,7 +105,13 @@ services:
     ports:
       - "127.0.0.1:${BITBOB_PORT:-8787}:8787"
     networks: [sandbox, outside]
-    depends_on: [egress, bitbob-agent]
+    # publishing the port before the server answers turns a slow start into a connection
+    # error in the browser rather than a wait
+    depends_on:
+      egress:
+        condition: service_healthy
+      bitbob-agent:
+        condition: service_healthy
     pids_limit: 128
     mem_limit: 128m
 

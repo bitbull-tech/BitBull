@@ -5,7 +5,7 @@
       ... -InstallAtLogin    also start it every time you log in to Windows
       ... -Stop              shut BitBob and the distro down
 #>
-param([string]$Distro = "bitbob", [switch]$InstallAtLogin, [switch]$Stop)
+param([string]$Distro = "bitbob", [int]$Port = 8787, [switch]$InstallAtLogin, [switch]$Stop)
 $env:WSL_UTF8 = "1"
 
 # Native commands here write to stderr in normal operation (docker's "No swap limit support"),
@@ -59,16 +59,28 @@ if ($dockerUp) {
 } else {
   Write-Host "Docker in the $Distro distro didn't start within 60s." -ForegroundColor Yellow
 }
+# A first start on freshly built images (or a first run on a new machine) does real work:
+# migrations, mirroring skills into every workspace. 90s was too short and the failure message
+# said nothing useful, which is exactly the moment someone new needs telling what went wrong.
 $ok = $false
-for ($i = 0; $i -lt 45; $i++) {
+$deadline = (Get-Date).AddMinutes(4)
+while ((Get-Date) -lt $deadline) {
   Start-Sleep -Seconds 2
   try {
-    $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Uri "http://127.0.0.1:8787/api/health"
+    $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Uri "http://127.0.0.1:$Port/api/health"
     if ($r.StatusCode -eq 200) { $ok = $true; break }
   } catch {}
 }
-if ($ok) { Write-Host "BitBob is up: http://localhost:8787" -ForegroundColor Green }
-else { Write-Host "BitBob didn't answer within 90s. Check: wsl -d bitbob --cd ~/BitBob --exec docker compose logs --tail 40" -ForegroundColor Yellow }
+if ($ok) {
+  Write-Host "BitBob is up: http://localhost:$Port" -ForegroundColor Green
+} else {
+  Write-Host "BitBob didn't answer within 4 minutes. What the containers say:" -ForegroundColor Yellow
+  & wsl.exe -d $Distro --cd ~/BitBob --exec docker compose ps -a
+  Write-Host "`nLast lines from the server:" -ForegroundColor Yellow
+  & wsl.exe -d $Distro --cd ~/BitBob --exec docker compose logs --tail 15 bitbob-agent
+  Write-Host "`nIf a container is missing or restarting, the full log is:" -ForegroundColor DarkGray
+  Write-Host "  wsl -d $Distro --cd ~/BitBob --exec docker compose logs --tail 80" -ForegroundColor DarkGray
+}
 
 if ($InstallAtLogin) {
   $startup = [Environment]::GetFolderPath("Startup")
