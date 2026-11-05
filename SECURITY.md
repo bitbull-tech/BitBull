@@ -19,8 +19,11 @@ you run your own copy, so keep it updated (`git pull` + redeploy).
   you have one.
 - **Never include real secrets** (API keys, tokens) in a report — describe the type of
   secret instead.
-- Expect an acknowledgement within 7 days. We aim to confirm or refute within 30 days and
-  will credit reporters in the fix notes unless you prefer otherwise.
+- BitBob is maintained by one person in his own time, so there is no response SLA. Reports
+  are read and acknowledged on a best-effort basis, usually within a week or two; a serious
+  one gets looked at first. If you have heard nothing after a month, please chase — it means
+  the report was missed, not ignored.
+- Reporters are credited in the fix notes unless you prefer otherwise.
 
 ## Scope notes
 

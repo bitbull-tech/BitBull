@@ -142,8 +142,11 @@ Every residual above applies directly to the owner's user account. Development o
 
 Full findings were triaged into the fix list below. P0 = gate the open-source release.
 
-**P0 — release blockers.** Status: 1, 4 and 6 are **fixed on main** (`084467c`, with
-regression tests); this branch carries 2, 5, 7–12, plus top-ups noted below.
+**P0 — release blockers.** Status after the security branch was merged into main
+(`8221226`, 5 Nov 2026): 1, 4 and 6 were fixed first (`084467c`, with regression tests);
+2, 5, 7, 9–12 landed with the merge. **8 no longer applies** — the file it concerned has
+been deleted. **3 is the only one still open.** The items below keep their original
+numbering; "this branch" means the security branch, now merged.
 
 1. ~~`repos.ts`: git executed repo-local config~~ — **FIXED on main**: scrubbed env, `-c`
    overrides, and a refusal when the repo's own config defines any exec-capable key (covers
@@ -154,7 +157,10 @@ regression tests); this branch carries 2, 5, 7–12, plus top-ups noted below.
 3. `desktop/src-tauri`: app commands are invocable from the BitBob webview (default-allow)
    — reject non-`main` webview labels in each command. **Status: prove it first** — the fix
    compiles (`cargo check` clean) but needs a runtime proof (invoke from the BitBob window's
-   devtools, pre-fix and post-fix) before merge.
+   devtools, pre-fix and post-fix) before it ships. **Still open as of 5 Nov 2026** — no
+   label guard is present in `lib.rs`; the webview-scoped capability in
+   `capabilities/default.json` (`"windows": ["main"]`) is the only control, and the whole
+   finding may be a false positive, which is what the proof would settle.
 4. ~~`mcp.ts` `ditto_review`~~ — **FIXED on main**: dedicated HOME, `GIT_CONFIG_NOSYSTEM`/
    `GLOBAL`. This branch adds `GIT_CONFIG_PARAMETERS` so the reviewed repo's *own* config
    can't name exec drivers either. Residuals: `DITTO_CONFIG_DIR` still points into
@@ -168,8 +174,11 @@ regression tests); this branch carries 2, 5, 7–12, plus top-ups noted below.
    domain-approved.
 7. Host mode binds `0.0.0.0` by default and suggests `ALLOW_NO_AUTH=true` — default to
    loopback and refuse/warn loudly on non-loopback no-auth.
-8. `migrate-from-gm.ps1`: root tar restore follows planted symlinks — restore unprivileged
-   or reject link members.
+8. ~~`migrate-from-gm.ps1`: root tar restore follows planted symlinks~~ — **REMOVED, not
+   fixed** (`a5fdeb5`): the script was a one-off for migrating off the retired `gm` distro
+   and is deleted. The unprivileged restore it would have needed could not chown to the
+   userns-remapped uid anyway, so there was no fix worth keeping the file for. Any future
+   restore path must reject link members in the tar.
 9. `deploy.ps1`: top-level filenames interpolated unquoted into a `.cmd` line — quote and
    validate (hostile-contributor filename → command execution at deploy).
 10. `storage.ts` restore: decrypt-to-temp, verify tag+sha256, then rename; `verified` must
