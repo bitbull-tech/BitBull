@@ -41,6 +41,8 @@ Write-Host "==> Rebuilding" -ForegroundColor Cyan
 # PowerShell's native-argument quoting (see docs/HANDOFF.md).
 $rebuild = @'
 set -e
+# build from this checkout rather than pulling the published images
+export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
 export BITBOB_DATA_DIR=$HOME/bitbob-data BITBOB_HOST_DATA_DIR=$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links
 docker compose up -d --build --remove-orphans
 if docker compose exec -T egress cat /etc/squid/allowlist.txt 2>/dev/null | diff -q - egress/allowlist.txt >/dev/null 2>&1; then

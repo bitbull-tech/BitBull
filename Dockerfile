@@ -1,5 +1,8 @@
+# Base images are pinned by digest so two builds of the same source produce the same image.
+# To move to a newer base: docker buildx imagetools inspect <image> and take the top "Digest:",
+# then update the tag in the FROM line to match (the tag is for humans, the digest is what builds).
 # ---------- build ----------
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS build
 WORKDIR /app
 COPY server/package*.json server/
 COPY web/package*.json web/
@@ -8,7 +11,7 @@ COPY . .
 RUN npm --prefix web run build && npm --prefix server run build && npm --prefix server prune --omit=dev
 
 # ---------- runtime (the agent's sandbox) ----------
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d
 # Tools the agent and its skills use inside the sandbox: git, search, media + document handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git gh ripgrep python3 \

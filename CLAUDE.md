@@ -68,7 +68,8 @@ npm run dev                   # API :8787 + Vite UI :5173 (host mode: agent shel
 npm run typecheck             # both packages
 cd server && npm test         # node:test via tsx: subagents (+ the real opencode binary), turns, egress, links, storage; CI runs them
 cd web && npx vite build      # UI build (server serves web/dist)
-docker compose up -d --build  # sandboxed: bitbob-agent + bitbob-egress + bitbob-gateway on 127.0.0.1:8787
+docker compose up -d           # sandboxed: pulls the published images (what a user gets)
+COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml docker compose up -d --build   # build from this checkout
 ```
 
 Windows (Tom's machine): edit/commit in `D:\github\BitBob`, ship with

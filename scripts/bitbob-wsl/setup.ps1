@@ -61,7 +61,7 @@ Write-Host ("  Windows drives visible in bitbob : " + $(if ($mnt) { "YES ($mnt) 
 Write-Host ("  Launch Windows programs     : " + $interop)
 
 Step "Building and starting BitBob (first build takes several minutes)"
-Wsl @("-d", $Distro, "--cd", "~/BitBob", "--exec", "sh", "-c", "BITBOB_DATA_DIR=`$HOME/bitbob-data BITBOB_HOST_DATA_DIR=`$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links docker compose up -d --build && docker compose ps")
+Wsl @("-d", $Distro, "--cd", "~/BitBob", "--exec", "sh", "-c", "COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml BITBOB_DATA_DIR=`$HOME/bitbob-data BITBOB_HOST_DATA_DIR=`$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links docker compose up -d --build && docker compose ps")
 
 Write-Host "`nDone. Open http://localhost:8787" -ForegroundColor Green
 Write-Host "Keep editing and committing in $Repo as before; run scripts\bitbob-wsl\deploy.ps1 to ship changes into bitbob."

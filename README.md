@@ -52,7 +52,7 @@ site you haven't allowed. Outside the container the agent's
 shell is switched off (set `ALLOW_HOST_SHELL=true` only if you accept the risk).
 
 ```bash
-docker compose up -d --build      # UI + API on http://localhost:8787 (this computer only)
+docker compose up -d              # UI + API on http://localhost:8787 (this computer only)
 docker compose logs -f bitbob-agent   # or the Activity panel in the UI
 docker compose logs -f egress     # every outbound request, allowed or refused
 docker compose exec egress squid -k reconfigure   # after editing egress/allowlist.txt (no dropped connections)
@@ -214,7 +214,15 @@ run more than one.
 
 ```bash
 cp .env.example .env   # fill it in
-docker compose up -d --build
+docker compose up -d   # pulls ghcr.io/tommyhgunz14/bitbob and ...-egress; nothing is built here
+```
+
+Pick a version with `BITBOB_TAG` (a published release, e.g. `1.2.3`); the default is `latest`,
+which follows `main`. To build the images from this checkout instead — what you want when you
+are changing BitBob itself — add the development override:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml docker compose up -d --build
 ```
 
 State lives in `./data` (or `BITBOB_DATA_DIR`). Put it behind HTTPS (Caddy, nginx or a

@@ -45,7 +45,7 @@ function Invoke-Sh([string]$script, [string]$cd = $dir, [switch]$AsRoot) {
   if ($LASTEXITCODE -ne 0) { throw "step failed ($LASTEXITCODE)" }
 }
 
-$envLine = "export BITBOB_SUFFIX=-$Name BITBOB_TAG=$Name BITBOB_PORT=$Port BITBOB_DATA_DIR=$data BITBOB_HOST_DATA_DIR=$data BITBOB_LINKS_DIR=/srv/bitbob-links COMPOSE_PROJECT_NAME=$proj"
+$envLine = "export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml BITBOB_SUFFIX=-$Name BITBOB_TAG=$Name BITBOB_PORT=$Port BITBOB_DATA_DIR=$data BITBOB_HOST_DATA_DIR=$data BITBOB_LINKS_DIR=/srv/bitbob-links COMPOSE_PROJECT_NAME=$proj"
 
 if ($Logs) {
   Invoke-Sh "$envLine`ndocker compose logs -f --tail 80 bitbob-agent"

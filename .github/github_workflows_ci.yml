@@ -1,0 +1,73 @@
+name: ci
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+# Default to no token rights anywhere; jobs that need more declare it themselves.
+# PR-controlled code (dependencies, tests) must never inherit write permissions.
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # actions are pinned to commit SHAs (tag noted for humans; update both together)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: npm run setup
+      - run: npm run typecheck
+      # the tests guard the sandbox rules (read-only agents, stored paths, egress approvals)
+      - run: npm test --prefix server
+      - run: npm run build
+
+  # Publish both images so an install can PULL them instead of building on the user's machine
+  # (docs/CLIENTS.md, Phase 5.1). docker-compose.yml references exactly these names.
+  docker:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: bitbob          # the server, UI and agent tooling
+            context: .
+          - image: bitbob-egress   # squid allowlist proxy, also used as the gateway
+            context: ./egress
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Always tag the commit, so there is an immutable reference; :latest only follows main,
+      # and a git tag v1.2.3 also publishes :1.2.3. A published version tag is never moved.
+      - id: tags
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          out="$IMAGE:$SHA"
+          case "$REF" in
+            refs/tags/v*)    out="$out,$IMAGE:${REF#refs/tags/v}" ;;
+            refs/heads/main) out="$out,$IMAGE:latest" ;;
+          esac
+          echo "tags=$out" >> "$GITHUB_OUTPUT"
+          echo "publishing: $out"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}

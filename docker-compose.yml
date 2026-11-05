@@ -1,7 +1,17 @@
 # BitBob in a sandbox.
-#   docker compose up -d --build     → UI + API on http://localhost:8787
+#   docker compose up -d             → pulls the published images, UI + API on http://localhost:8787
 #   docker compose logs -f bitbob-agent  → server output (also in data/logs/server.log)
 #   docker compose logs -f egress    → every outbound request, allowed or refused
+#
+# This file PULLS the images that CI publishes; nothing is built on the machine that runs it.
+# To build from this checkout instead (the development path), add the dev override:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# or set COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml once, which is what
+# deploy.ps1, setup.ps1 and test-stack.ps1 do.
+#
+# BITBOB_IMAGE / BITBOB_EGRESS_IMAGE point somewhere else (a fork, a private mirror);
+# BITBOB_TAG picks the version. See docs/CLIENTS.md "Phase 5".
+#
 #
 # The agent's shell, files and tools run inside bitbob-agent as an unprivileged user.
 # It can read and write only the data folder (mounted at /data). Its network is
@@ -26,8 +36,7 @@ x-hardening: &hardening
 services:
   bitbob-agent:
     <<: *hardening
-    build: .
-    image: bitbob:${BITBOB_TAG:-local}
+    image: ${BITBOB_IMAGE:-ghcr.io/tommyhgunz14/bitbob}:${BITBOB_TAG:-latest}
     container_name: bitbob-agent${BITBOB_SUFFIX:-}
     env_file: .env
     environment:
@@ -61,8 +70,7 @@ services:
 
   egress:
     <<: *hardening
-    build: ./egress
-    image: bitbob-egress:${BITBOB_TAG:-local}
+    image: ${BITBOB_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbob-egress}:${BITBOB_TAG:-latest}
     container_name: bitbob-egress${BITBOB_SUFFIX:-}
     volumes:
       - ./egress/allowlist.txt:/etc/squid/allowlist.txt:ro
@@ -77,8 +85,7 @@ services:
 
   gateway:
     <<: *hardening
-    build: ./egress
-    image: bitbob-egress:${BITBOB_TAG:-local}
+    image: ${BITBOB_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbob-egress}:${BITBOB_TAG:-latest}
     container_name: bitbob-gateway${BITBOB_SUFFIX:-}
     command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:bitbob-agent:8787"]
     # Only reachable from this computer. Put a reverse proxy with HTTPS in front to expose it.

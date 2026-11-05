@@ -169,7 +169,29 @@ delete it from the normal path.
 Five pieces. 5.1 and 5.2 are blockers — without them a new user cannot install BitBob at
 all. 5.3–5.5 are what make it feel like a product.
 
-### 5.1 Published images, not a build on the user's machine
+### 5.1 Published images, not a build on the user's machine — **done (5 Nov 2026)**
+
+`docker-compose.yml` now references `ghcr.io/tommyhgunz14/bitbob` and `…/bitbob-egress`
+(overridable with `BITBOB_IMAGE` / `BITBOB_EGRESS_IMAGE`, versioned with `BITBOB_TAG`), and
+builds nothing. The `build:` keys moved to `docker-compose.dev.yml`, which `deploy.ps1`,
+`setup.ps1` and `test-stack.ps1` select through `COMPOSE_FILE`, so the development loop is
+unchanged. CI's `docker` job publishes **both** images from a matrix, tagging every push with
+its commit SHA, `main` with `latest`, and a `v1.2.3` git tag with `1.2.3`; a published version
+tag is never moved.
+
+Still open, and deliberately not guessed at here:
+
+- ~~Base images are not digest-pinned~~ — **done**: both Dockerfiles pin by digest, with the
+  update procedure in a comment at the top of each. The tag stays in the `FROM` line for
+  humans; the digest is what builds.
+- **No provenance or SBOM attestation.** `build-push-action`'s `provenance`/`sbom` inputs need
+  the buildx driver, i.e. a `docker/setup-buildx-action` step, which means another action to
+  SHA-pin. Worth doing before the first tagged release.
+- **A user still needs the tree**, because compose itself and `egress/allowlist.txt` are read
+  from disk. 5.3 is what removes that.
+
+The original plan:
+
 
 `docker-compose.yml` is `build: .` (and `build: ./egress`), so first run is an `npm install`
 plus two Docker builds inside the distro: minutes, and it requires the whole source tree to

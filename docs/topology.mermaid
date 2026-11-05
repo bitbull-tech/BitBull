@@ -1,0 +1,45 @@
+flowchart TB
+  subgraph WIN["Windows — your PC"]
+    direction TB
+    REPO["<b>D:\github\BitBob</b><br/>the git clone — source of truth<br/>you edit and commit here"]
+    EXE["<b>C:\Program Files\BitBob\BitBob.exe</b><br/>launcher only, ~10 MB<br/>no server, no BitBob code"]
+    CFG["%APPDATA%\io.bitbob.desktop\<br/>bitbob-desktop.json<br/>repo path · distro · port"]
+    VKEY["%LOCALAPPDATA%\BitBob\vault.key<br/>DPAPI-protected"]
+    HELP["link-helper.ps1<br/>127.0.0.1:8790<br/><i>run from the repo</i>"]
+  end
+
+  subgraph WSL["WSL2 distro 'bitbob' — locked down, no C:/D: mounts"]
+    direction TB
+    CODE["<b>~/BitBob</b><br/>a <i>copy</i> of the repo<br/>replaced wholesale on deploy"]
+    DATA["<b>~/bitbob-data</b><br/>chats · uploads · workspaces<br/>settings.local.json · vault.json<br/><b>never touched by deploy</b>"]
+    subgraph DK["Docker Engine — userns-remapped"]
+      direction TB
+      IMG["image bitbob:local<br/>built from ~/BitBob<br/>npm ci + apt + heyditto CLI"]
+      AG["bitbob-agent<br/>network: sandbox (internal)<br/>no DNS, no route out"]
+      EG["bitbob-egress<br/>squid allowlist"]
+      GW["bitbob-gateway<br/>socat → 127.0.0.1:8787"]
+    end
+  end
+
+  NET(["internet<br/>SayGM · GitHub · Ditto"])
+
+  EXE -->|"reads"| CFG
+  CFG -->|"points at"| REPO
+  EXE -->|"runs its .ps1 scripts<br/>start / stop / deploy / backup"| REPO
+  EXE -->|"starts"| HELP
+  HELP -->|"holds"| VKEY
+  REPO ==>|"<b>deploy.ps1</b><br/>tar of the checkout<br/>(minus desktop/, .git, node_modules)"| CODE
+  CODE ==>|"<b>docker compose up -d --build</b>"| IMG
+  IMG ==>|"recreates"| AG
+  DATA -->|"bind mount → /data"| AG
+  AG --> EG --> NET
+  GW -->|"only inbound path"| AG
+  EXE -->|"opens http://localhost:8787"| GW
+  VKEY -.->|"sent on page load,<br/>after consent"| AG
+
+  classDef src fill:#fde68a,stroke:#b45309,color:#111
+  classDef live fill:#bfdbfe,stroke:#1d4ed8,color:#111
+  classDef keep fill:#bbf7d0,stroke:#15803d,color:#111
+  class REPO,CODE src
+  class IMG,AG,EG,GW live
+  class DATA,VKEY keep
