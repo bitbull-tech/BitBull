@@ -14,6 +14,83 @@ import { promisify } from "node:util";
  */
 const run = promisify(execFile);
 
+/**
+ * A clone is attacker-controlled: the agent clones whatever it is asked to, and an upload can
+ * plant a `.git` folder. Git executes commands named in the repo's OWN config — `core.fsmonitor`
+ * fires on `git status`, and a `filter.<x>.clean` referenced from the repo's `.gitattributes`
+ * fires too — which would run as this server process. Three layers, because no single one holds:
+ *
+ *  1. a scrubbed environment: nothing git spawns ever sees BitBob's secrets;
+ *  2. `-c` overrides for every exec knob that can be named up front;
+ *  3. a refusal when the repo's own config defines any exec-capable key, which is the only way
+ *     to cover `filter.*.clean` / `diff.*.textconv`, whose driver names are arbitrary.
+ */
+const GIT_SAFE_FLAGS = [
+  "--no-optional-locks",
+  "-c",
+  "core.quotepath=off",
+  "-c",
+  "core.fsmonitor=",
+  "-c",
+  "core.hooksPath=/dev/null",
+  "-c",
+  "core.pager=cat",
+  "-c",
+  "core.editor=true",
+  "-c",
+  "core.sshCommand=false",
+  "-c",
+  "core.gitProxy=",
+  "-c",
+  "core.askPass=",
+  "-c",
+  "diff.external=",
+  "-c",
+  "credential.helper=",
+  "-c",
+  "uploadpack.packObjectsHook=",
+  "-c",
+  "protocol.ext.allow=never",
+  "-c",
+  "gpg.program=false",
+];
+
+/** Config keys whose value git runs as a command. Matched case-insensitively against key names. */
+const EXEC_KEY = /^(core\.(fsmonitor|hookspath|sshcommand|pager|editor|gitproxy|askpass)|diff\.external|credential\.(helper|.*\.helper)|uploadpack\.packobjectshook|gpg\..*program|sequence\.editor|.*\.textconv|filter\..*\.(clean|smudge|process)|alias\..*|ssh\.variant|init\.templatedir)$/i;
+
+/** Environment for git: no BitBob secrets, no user config, no interactive prompts. */
+function gitEnv() {
+  return {
+    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: "/nonexistent",
+    LC_ALL: "C",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_ALLOW_PROTOCOL: "file:https",
+  };
+}
+
+/**
+ * Does this clone's own config define a key git would execute? `git config --list` only reads
+ * (it runs nothing), and it resolves `include.path`, which a hand parser would miss.
+ * Returns the offending key names, or [] when the repo is safe to inspect.
+ */
+export async function execCapableConfig(dir: string): Promise<string[]> {
+  try {
+    const { stdout } = await run("git", ["config", "--local", "--list", "--name-only", "-z"], {
+      cwd: dir,
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+      env: gitEnv(),
+    });
+    return [...new Set(stdout.split("\0").filter((k) => k && EXEC_KEY.test(k)))];
+  } catch {
+    return []; // not readable as a repo; the inspect below reports the real error
+  }
+}
+
 export interface RepoInfo {
   /** workspace-relative folder */
   path: string;
@@ -64,14 +141,18 @@ export function findRepos(ws: string): string[] {
 }
 
 async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await run("git", ["--no-optional-locks", "-c", "core.quotepath=off", ...args], {
+  const { stdout } = await run("git", [...GIT_SAFE_FLAGS, ...args], {
     cwd,
     timeout: 15_000,
     maxBuffer: 2 * 1024 * 1024,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" },
+    env: gitEnv(),
   });
   return stdout;
 }
+
+const UNSAFE_REPO = (keys: string[]) =>
+  `Not inspected: this clone's own git config sets ${keys.slice(0, 4).join(", ")}${keys.length > 4 ? ` and ${keys.length - 4} more` : ""}, which git would run as a command. ` +
+  `That is how a hostile repository attacks the machine inspecting it. Look at .git/config yourself before trusting this clone.`;
 
 const clean = (s: string, n = 200) => s.replace(/[\u0000-\u001f]/g, " ").slice(0, n);
 
@@ -96,6 +177,11 @@ export async function inspectRepo(ws: string, rel: string): Promise<RepoInfo> {
     stashes: 0,
   };
   try {
+    const unsafe = await execCapableConfig(dir);
+    if (unsafe.length) {
+      info.error = UNSAFE_REPO(unsafe);
+      return info;
+    }
     // status --porcelain=v2 --branch: machine-readable and stable
     const st = await git(dir, ["status", "--porcelain=v2", "--branch", "--untracked-files=normal"]);
     for (const line of st.split("\n")) {
@@ -187,6 +273,8 @@ export async function listRepos(ws: string): Promise<RepoInfo[]> {
 /** A branch's diff summary against the working tree or another ref, for the view's "what changed" (read-only). */
 export async function repoDiffStat(ws: string, rel: string, base?: string): Promise<string> {
   const dir = rel === "." ? ws : path.join(ws, rel);
+  const unsafe = await execCapableConfig(dir);
+  if (unsafe.length) return `(${UNSAFE_REPO(unsafe)})`;
   const safeBase = base && /^[A-Za-z0-9._/@^~-]{1,120}$/.test(base) && !base.startsWith("-") ? base : null;
   const args = safeBase ? ["diff", "--stat=100", `${safeBase}...HEAD`] : ["diff", "--stat=100", "HEAD"];
   try {

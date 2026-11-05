@@ -27,6 +27,28 @@ export interface DittoThread {
   title?: string;
 }
 
+/**
+ * HTTP header values are ByteStrings: anything above U+00FF throws when the request is built.
+ * Chat titles are user text (and auto-titles end in "…"), so fold the common typography to
+ * ASCII and drop the rest rather than losing the save. Exported for the test.
+ */
+export function headerSafe(value: string, max = 120): string {
+  const folded = value
+    .replace(/[\u2018\u2019\u201b]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u2026/g, "...")
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/[\u00b7\u2022]/g, "-")
+    .replace(/[\u00a0\u2000-\u200b]/g, " ");
+  let out = "";
+  for (const ch of folded) {
+    const c = ch.codePointAt(0)!;
+    // printable ASCII only: some servers re-encode latin-1 header bytes, ASCII is always safe
+    out += c >= 0x20 && c <= 0x7e ? ch : " ";
+  }
+  return out.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
 interface Conn {
   client: Client;
   lastUsed: number;
@@ -53,12 +75,14 @@ async function getClient(thread?: DittoThread): Promise<Client> {
       headers[DITTO_SESSION_HEADER] = thread.id;
       // the title once: the first connection for this thread in this process carries it
       if (thread.title && !named.has(thread.id)) {
-        headers[DITTO_SESSION_NAME_HEADER] = thread.title.replace(/[\r\n]+/g, " ").slice(0, 120);
-        named.add(thread.id);
+        const safe = headerSafe(thread.title);
+        if (safe) headers[DITTO_SESSION_NAME_HEADER] = safe;
       }
     }
     const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), { requestInit: { headers } });
     await c.connect(transport);
+    // only once it actually connected: a failed attempt must not consume the one-shot title
+    if (thread?.id && headers[DITTO_SESSION_NAME_HEADER]) named.add(thread.id);
     conns.set(key, { client: c, lastUsed: Date.now() });
     return c;
   })();

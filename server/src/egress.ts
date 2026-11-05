@@ -125,11 +125,49 @@ export function normalizeHost(input: string): string | null {
 
 // second-level labels under country codes that are registries, not owners (co.uk, com.au …)
 const SLD = /^(co|com|org|net|gov|ac|edu|ltd|plc|me|sch|nhs|police|mod|nic|or|ne|go)\.[a-z]{2}$/;
-/** The registrable domain a "whole domain" approval would cover. */
+
+/**
+ * Suffixes anyone can get a name under. Without these, "allow the whole domain" for one
+ * student.github.io would approve *every* GitHub Pages site — one click and the sandbox has an
+ * exfiltration channel it can write to. Under these suffixes the registrable domain is the
+ * suffix plus one label, so the approval covers that one site and nothing else.
+ * Not the full Public Suffix List (no room for a 200kB list and a fetch the proxy would block):
+ * the hosting, CDN and user-content suffixes an agent could plausibly reach.
+ */
+const PUBLIC_SUFFIXES = new Set([
+  "github.io", "githubusercontent.com", "gitlab.io", "bitbucket.io", "sourceforge.io",
+  "pages.dev", "workers.dev", "r2.dev", "cloudflareaccess.com", "trycloudflare.com",
+  "vercel.app", "netlify.app", "netlify.com", "herokuapp.com", "onrender.com", "fly.dev",
+  "railway.app", "deno.dev", "val.run", "glitch.me", "replit.dev", "repl.co", "codesandbox.io",
+  "firebaseapp.com", "web.app", "appspot.com", "run.app", "cloudfunctions.net",
+  "s3.amazonaws.com", "cloudfront.net", "elasticbeanstalk.com", "amplifyapp.com", "awsapprunner.com",
+  "blob.core.windows.net", "azurewebsites.net", "azureedge.net", "azurestaticapps.net",
+  "ngrok.io", "ngrok-free.app", "ngrok.app", "loca.lt", "serveo.net", "tunnelto.dev",
+  "surge.sh", "neocities.org", "gitbook.io", "notion.site", "webflow.io", "wixsite.com",
+  "blogspot.com", "wordpress.com", "tumblr.com", "myshopify.com", "squarespace.com",
+  "sharepoint.com", "googleusercontent.com", "googleapis.com", "discordapp.net", "discord.com",
+  "ipfs.io", "dweb.link", "pastebin.com", "gist.github.com", "requestbin.net", "webhook.site",
+  "pipedream.net", "beeceptor.com", "oast.fun", "interact.sh", "burpcollaborator.net",
+]);
+
+/**
+ * The registrable domain a "whole domain" approval would cover: the public suffix plus one
+ * label. Under a suffix anyone can register beneath, that is the single site, not the suffix.
+ */
 export function domainOf(host: string) {
   const parts = host.split(".");
+  for (let i = 1; i < parts.length; i++) {
+    if (PUBLIC_SUFFIXES.has(parts.slice(i).join("."))) return parts.slice(Math.max(0, i - 1)).join(".");
+  }
   const n = parts.length >= 3 && SLD.test(parts.slice(-2).join(".")) ? 3 : 2;
   return parts.slice(-n).join(".");
+}
+
+/** True when the host sits under a suffix anyone can register beneath (shown in the approval UI). */
+export function onSharedSuffix(host: string) {
+  const parts = host.split(".");
+  for (let i = 1; i < parts.length; i++) if (PUBLIC_SUFFIXES.has(parts.slice(i).join("."))) return true;
+  return false;
 }
 
 /** The static list the proxy always allows (egress/allowlist.txt, baked into the image). */

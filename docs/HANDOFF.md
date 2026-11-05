@@ -184,6 +184,51 @@ cloned repos, outputs, .claude/skills) · `integrations/atlas/workflows/` · `lo
 `logs/activity.jsonl` · `settings.local.json` · `home/ cache/ config/ opencode-sandbox/
 claude-sandbox/`. Files are **not** backed up off-machine yet (Hippius planned).
 
+## Security swarm #2 and the fixes (5 Nov 2026)
+
+Swarm (fable-5 + gpt-5.4, kimi-k3 handler) on the current tree for the open-source release:
+verdict "fix first", one live RCE, four more highs. Verified and fixed here, with tests:
+
+- **Hostile clone → RCE as the server (confirmed by PoC, was finding #1).** `git status` runs
+  `core.fsmonitor` from the clone's OWN config, and a `filter.<x>.clean` reached through the
+  repo's own `.gitattributes` — both executed in my reproduction, with the server's full env.
+  Reachable because the agent clones what it is asked to and an upload can plant `.git/`.
+  Fixed in `repos.ts` in three layers (no single one holds): a scrubbed env (git never sees
+  BitBob's secrets), `-c` overrides for every nameable exec knob, and `execCapableConfig()` —
+  a refusal when the repo's own config defines an exec-capable key, which is the only way to
+  cover `filter.*`/`textconv` whose driver names are arbitrary. `repos-hostile.test.ts` asserts
+  six vectors neither execute nor get inspected, and that ordinary clones still work.
+- **`ditto_review` (my code from 4 Nov, finding #4):** it shells the Ditto CLI, which runs git
+  in the same attacker-controlled clone → same vector; and `HOME` was `/data/home`, which the
+  agent can write, so a planted `~/.gitconfig` steered that git. Now refuses via
+  `execCapableConfig()` first, and runs with its own HOME plus `GIT_CONFIG_NOSYSTEM=1`,
+  `GIT_CONFIG_GLOBAL=/dev/null`.
+- **"Allow the whole domain" was public-suffix-blind (finding #6, found by both reviewers):**
+  one click on `evil.github.io` approved `github.io` — every GitHub Pages site, i.e. a writable
+  exfiltration channel. `domainOf()` now knows ~60 shared hosting/CDN/user-content suffixes and
+  returns suffix+1 label; test covers it.
+- **Ditto session-name header crash (mine, found in use, not by the swarm):** auto-titles end in
+  `…` (U+2026) and HTTP headers are ByteStrings, so every save on a truncated title threw
+  "Cannot convert argument to a ByteString". `headerSafe()` folds typography to ASCII; the
+  one-shot title is now consumed only on a successful connect. `ditto.test.ts`.
+
+Checked and NOT accepted: **finding #3 (Tauri IPC)** claims the desktop app's commands are
+callable from the BitBob webview and the README's "no IPC" is false. Tauri 2's ACL source and
+its own tests show window-scoped denial ("not allowed on window …"), and our capability lists
+only `main`, so the `gm` window has no permissions. One swarm, static, no PoC — needs a
+click-through proof before anything is redesigned.
+
+Still open from that swarm, for the coding agent: `/vault-key` has no consent dialog (any local
+process with a forged Origin can take the vault key — #2, real and worth the dialog); vault
+values land in `process.env` and so in the OpenCode child's `/proc` (#5, the known shared-uid
+residual, GAPS #11); host-mode `0.0.0.0` + `ALLOW_NO_AUTH` foot-gun (#7); `migrate-from-gm.ps1`
+root tar follows planted symlinks (#8); `deploy.ps1` unquoted filename interpolation (#9);
+storage restore writes plaintext before GCM verify (#10); swarm reviewers are full-capability
+agents on hostile repos and their output is interpolated into the verdict prompt (#11); CI has
+no `permissions:` block and tag-pinned actions (#12); redaction is exact-substring only (#13);
+`npm audit`: server 5 (2 high), web 0. The handler also wrote `docs/THREAT-MODEL.md` and
+`SECURITY.md` (uncommitted in its workspace).
+
 ## Ditto integration review (4 Nov 2026, from ditto-assistant/ditto-cli)
 
 Done: per-chat Ditto threads for the turn archive (`X-Ditto-Session-Id`/`-Name`, one MCP

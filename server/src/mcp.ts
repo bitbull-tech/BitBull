@@ -3,11 +3,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { config, paths } from "./config.js";
 import { projects, sessions, workspaceFor } from "./db.js";
 import { proxied, requestAccess } from "./egress.js";
+import { execCapableConfig } from "./repos.js";
 import { record } from "./activity.js";
 
 /**
@@ -104,6 +105,14 @@ function build(sessionHint: string | undefined) {
         .join("/");
       const dir = path.resolve(ws, rel);
       if (!(dir === ws || dir.startsWith(ws + path.sep)) || !existsSync(path.join(dir, ".git"))) return text(`"${repo}" is not a git clone in this workspace.`);
+      // The CLI snapshots the tree with git, so the clone's own config would run as this server
+      // (the same vector as the Repositories view). Refuse the same way, before spawning anything.
+      const unsafe = await execCapableConfig(dir);
+      if (unsafe.length)
+        return text(
+          `Refused: this clone's own git config sets ${unsafe.slice(0, 4).join(", ")}, which git would run as a command while capturing the diff. ` +
+            `Tell the owner; do not work around it.`,
+        );
       if (!config.ditto.apiKey) return text("Ditto is not configured (no DITTO_API_KEY), so Ditto Review is not available.");
       if (mode === "base" && !(base && /^[A-Za-z0-9._/@^~-]{1,120}$/.test(base) && !base.startsWith("-"))) return text("mode=base needs a plain ref name in `base`, e.g. main.");
       const args = ["review", "local", "--directory", dir, "--profile", profile, "--output", "json"];
@@ -111,6 +120,8 @@ function build(sessionHint: string | undefined) {
       if (mode === "base") args.push("--base", base!);
       if (preview) args.push("--preview");
       else args.push("--timeout", "900");
+      const cliHome = path.join(config.dataDir, "ditto-cli");
+      mkdirSync(cliHome, { recursive: true });
       record({ level: "info", source: "ditto", sessionId: sid, sessionTitle: session?.title, message: `Ditto Review ${preview ? "preview" : "started"}: ${rel || "."} (${mode}, ${profile})` });
       return await new Promise((resolve) => {
         execFile(
@@ -122,9 +133,15 @@ function build(sessionHint: string | undefined) {
             maxBuffer: 16 * 1024 * 1024,
             env: {
               PATH: process.env.PATH ?? "",
-              HOME: process.env.HOME ?? "/tmp",
+              // Its own HOME, and no user/system git config at all: $HOME is writable by the
+              // agent (it shares this uid), so a planted ~/.gitconfig must not steer the git
+              // the CLI runs. Nothing else of BitBob's environment is passed on.
+              HOME: cliHome,
+              GIT_CONFIG_NOSYSTEM: "1",
+              GIT_CONFIG_GLOBAL: "/dev/null",
+              GIT_TERMINAL_PROMPT: "0",
               DITTO_API_KEY: config.ditto.apiKey,
-              DITTO_CONFIG_DIR: path.join(config.dataDir, "ditto-cli"),
+              DITTO_CONFIG_DIR: path.join(cliHome, "config"),
               ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTPS_PROXY } : {}),
               ...(process.env.NO_PROXY ? { NO_PROXY: process.env.NO_PROXY } : {}),
             },

@@ -100,3 +100,18 @@ test("approving from Settings answers a matching pending request", async () => {
   eg.addApproval("example.org", "domain");
   assert.equal((await p).ok, true);
 });
+
+test("domainOf: 'allow the whole domain' never collapses to a shared suffix", () => {
+  // one click must not approve every site on a hosting provider (found by the 5 Nov QA swarm)
+  assert.equal(eg.domainOf("evil.github.io"), "evil.github.io");
+  assert.equal(eg.domainOf("a.b.evil.github.io"), "evil.github.io");
+  assert.equal(eg.domainOf("exfil.vercel.app"), "exfil.vercel.app");
+  assert.equal(eg.domainOf("bucket.s3.amazonaws.com"), "bucket.s3.amazonaws.com");
+  assert.equal(eg.domainOf("x.blob.core.windows.net"), "x.blob.core.windows.net");
+  assert.equal(eg.domainOf("drop.webhook.site"), "drop.webhook.site");
+  // ordinary domains are unchanged
+  assert.equal(eg.domainOf("api.saygm.com"), "saygm.com");
+  assert.equal(eg.domainOf("a.b.example.co.uk"), "example.co.uk");
+  assert.equal(eg.domainOf("heyditto.ai"), "heyditto.ai");
+  assert.equal(eg.domainOf("registry.npmjs.org"), "npmjs.org");
+})
