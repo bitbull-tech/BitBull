@@ -60,7 +60,9 @@ if ($Check) {
   # later compose change that quietly gives the agent a routable network fails loudly.
   $target = if ($Live) { "bitbob-agent" } else { "bitbob-agent-$Name" }
   Write-Host "==> Checking the sandbox walls on $target" -ForegroundColor Cyan
-  Invoke-Sh @"
+  # from "~", not $dir: these checks only talk to a running container, and ~/BitBob-test does
+  # not exist unless a test stack was built (with -Live it never does)
+  Invoke-Sh -cd "~" @"
 $envLine
 c=$target
 docker inspect -f '{{.State.Status}}' "`$c" >/dev/null 2>&1 || { echo "`$c is not running - start the stack first"; exit 1; }
