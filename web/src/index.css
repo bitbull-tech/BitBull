@@ -933,6 +933,10 @@ button.file-row:hover { background: var(--hover); }
 .swarm-modal .field input, .swarm-modal .field select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
 .swarm-modal .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .swarm-modal .checks { display: flex; flex-wrap: wrap; gap: 12px; }
+.swarm-modal .chips { margin: 2px 0 0; }
+.swarm-modal .chip { padding: 4px 9px; cursor: pointer; color: var(--text); font: inherit; font-size: 12px; }
+.swarm-modal .chip:hover { border-color: var(--text-2); }
+.swarm-modal .chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .swarm-modal .row.end { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .swarm-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; }
 .swarm-pill.run { border-color: var(--accent); }

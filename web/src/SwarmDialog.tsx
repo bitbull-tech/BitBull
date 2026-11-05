@@ -32,6 +32,7 @@ export function SwarmDialog({
 }) {
   const [target, setTarget] = useState('')
   const [repos, setRepos] = useState<RepoInfo[]>([])
+  const [reposLoaded, setReposLoaded] = useState(false)
   const [a, setA] = useState('')
   const [b, setB] = useState('')
   const [focus, setFocus] = useState<Swarm['focus']>(['attack-vectors', 'correctness', 'code-quality', 'performance', 'user-experience'])
@@ -43,9 +44,12 @@ export function SwarmDialog({
       .repos(project?.id ?? 'general')
       .then((r) => {
         setRepos(r.repos)
-        if (r.repos.length === 1) setTarget(r.repos[0].path)
+        // default to the first repo in this workspace, whatever the count: reviewing "the repo
+        // I'm working on" is the normal case, and an empty box invites a path that isn't there
+        setTarget((cur) => cur || r.repos[0]?.path || '')
+        setReposLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => setReposLoaded(true))
   }, [project])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -101,6 +105,21 @@ export function SwarmDialog({
                 </option>
               ))}
             </datalist>
+            {repos.length > 1 && (
+              <span className="chips">
+                {repos.map((r) => (
+                  <button key={r.path} type="button" className={`chip${target === r.path ? ' on' : ''}`} onClick={() => setTarget(r.path)}>
+                    {r.name}
+                  </button>
+                ))}
+              </span>
+            )}
+            {reposLoaded && repos.length === 0 && (
+              <span className="muted small">
+                No repos cloned in {project ? `"${project.name}"` : 'the general workspace'}. Clone one from Repositories first, or give a path to
+                something that is here (an upload, a linked folder).
+              </span>
+            )}
           </label>
           <div className="row2">
             <label className="field">

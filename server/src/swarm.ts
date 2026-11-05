@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { paths, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type SessionRow } from "./db.js";
@@ -87,6 +87,20 @@ function targetExists(ws: string, target: string) {
   return abs.startsWith(ws) && existsSync(abs);
 }
 
+/** Each project has its own workspace, so "it's in my other chat" is the usual cause of a miss. */
+function whatIsHere(ws: string) {
+  try {
+    const top = readdirSync(ws, { withFileTypes: true })
+      .filter((e) => !e.name.startsWith("."))
+      .map((e) => e.name + (e.isDirectory() ? "/" : ""))
+      .sort();
+    if (!top.length) return "This workspace is empty \u2014 clone a repo into it first.";
+    return `This workspace holds: ${top.slice(0, 12).join(", ")}${top.length > 12 ? `, +${top.length - 12} more` : ""}.`;
+  } catch {
+    return "";
+  }
+}
+
 const safeTarget = (t: string) =>
   t
     .split(/[\\/]+/)
@@ -166,7 +180,7 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
   const ws = project ? workspaceFor(project) : paths.workspace;
   const target = safeTarget(input.target);
   if (!target) throw new Error("target is required (a repo, folder or file path in the workspace)");
-  if (!targetExists(ws, target)) throw new Error(`"${target}" is not in this workspace`);
+  if (!targetExists(ws, target)) throw new Error(`"${target}" is not in this workspace. ${whatIsHere(ws)}`);
   const models = [...new Set(input.models.map((m) => m.trim()).filter(Boolean))].slice(0, 2);
   if (!models.length) throw new Error("choose at least one reviewer model");
   const focus = (input.focus?.length ? input.focus : [...FOCUS]).filter((f): f is Focus => (FOCUS as readonly string[]).includes(f));
