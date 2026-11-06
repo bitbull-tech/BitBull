@@ -1,6 +1,8 @@
 {
   "name": "bitbob-desktop",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "BitBob Ltd",
   "version": "0.1.0",
   "description": "BitBob desktop wrapper (Tauri 2)",
   "scripts": {

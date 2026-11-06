@@ -2,6 +2,8 @@
   "name": "bitbob",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "BitBob Ltd",
   "description": "BitBob — a personal agent on top of the SayGM gateway with Ditto memory, pluggable engines (OpenCode / Claude Agent SDK) and its own web UI.",
   "scripts": {
     "setup": "npm --prefix server ci && npm --prefix web ci",

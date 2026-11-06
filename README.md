@@ -636,3 +636,34 @@ web/src/               React UI
 Implement `AgentEngine` from `server/src/engines/types.ts` (yield `text` / `tool_*` /
 `done` events) and register it in `server/src/agent.ts`. The UI picks it up from
 `/api/config`.
+
+## Installing the Windows app: the warning you will see
+
+The desktop installer is **not code-signed yet**. Windows will say "Windows protected your
+PC" (SmartScreen): choose **More info → Run anyway**. On a machine with **Smart App Control**
+switched on — the default on a clean Windows 11 install — the installer is blocked outright
+with no override. Do not turn Smart App Control off: it cannot be switched back on without
+reinstalling Windows, and you do not need the installer.
+
+BitBob itself is the Docker stack, and the desktop app is only a launcher for it. Everything
+works without the installer:
+
+```bash
+cp .env.example .env   # fill it in
+docker compose up -d   # then open http://localhost:8787
+```
+
+Every release publishes SHA256 checksums beside the binaries; check your download against the
+one for its release before running it. Signing is planned (see `docs/CLIENTS.md`, Phase 5.5);
+until then an unsigned installer is the honest state of things rather than something to work
+around.
+
+## Licence
+
+BitBob is free software under the **GNU Affero General Public License v3.0** — see
+[LICENSE](LICENSE). Copyright © 2026 BitBob Ltd.
+
+The AGPL is chosen deliberately: BitBob is server software, and the AGPL is the licence that
+asks anyone who runs a modified version as a service to publish their modifications, not only
+those who distribute a copy. If you run BitBob privately, change it and never offer it to
+anyone else, the AGPL asks nothing of you.
