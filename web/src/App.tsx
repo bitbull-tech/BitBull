@@ -5,7 +5,7 @@ import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX } from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip} from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { ReposDialog } from './ReposDialog'
@@ -623,6 +623,13 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           </button>
           <button className="btn files-btn" title="Git repositories in this workspace: branches, status, actions via the agent" onClick={() => setReposFor(currentProject ?? 'general')}>
             <IconBranch size={14} /> Repos
+          </button>
+          <button
+            className="btn files-btn"
+            title="Every model SayGM serves: price, context, capabilities and the gateway's own record"
+            onClick={() => setBrowsingModels(true)}
+          >
+            <IconChip size={14} /> Models
           </button>
           {swarm && swarm.sessionId === active?.id ? (
             <SwarmPill

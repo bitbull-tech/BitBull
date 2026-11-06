@@ -45,4 +45,5 @@ export const IconChevronRight = (p: P) => (<svg {...base(p)}><path d="m9 6 6 6-6
 export const IconMore = (p: P) => (<svg {...base(p)}><circle cx="5" cy="12" r="1.3" fill="currentColor" /><circle cx="12" cy="12" r="1.3" fill="currentColor" /><circle cx="19" cy="12" r="1.3" fill="currentColor" /></svg>)
 export const IconPlan = (p: P) => (<svg {...base(p)}><path d="M9 6h11M9 12h11M9 18h11" /><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17" /></svg>)
 export const IconPlug = (p: P) => (<svg {...base(p)}><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" /></svg>)
+export const IconChip = (p: P) => (<svg {...base(p)}><rect x="7" y="7" width="10" height="10" rx="2" /><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" /></svg>)
 export const IconBranch = (p: P) => (<svg {...base(p)}><circle cx="6" cy="4" r="2" /><circle cx="6" cy="20" r="2" /><circle cx="18" cy="8" r="2" /><path d="M6 6v12M18 10c0 4-12 2-12 8" /></svg>)
