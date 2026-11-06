@@ -6,7 +6,7 @@
  * a token name must be one we know, and a value may not contain the characters that would
  * let it escape its declaration. Assets may only be image files inside `<DATA_DIR>/brand/`.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { record } from "./activity.js";
@@ -64,12 +64,30 @@ function safeValue(v: unknown): string | null {
   return s;
 }
 
-/** A bare image filename inside the brand folder: no paths, no traversal, no surprises. */
+/**
+ * A bare image filename inside the brand folder: no paths, no traversal, no surprises.
+ *
+ * The name having no separators is not enough. /api/brand/* is UNAUTHENTICATED (the login screen
+ * needs it) and the agent shares the server's uid (GAPS #11), so it can drop a symlink into the
+ * brand folder — `leak.png -> /data/agent.db` — and any caller on 127.0.0.1 could then fetch it
+ * with no token at all. The file itself must therefore be a real file, inside the real brand
+ * folder, reached without following a link out. (2026-11 swarm, gemini-3.8-flash.)
+ */
 function safeAsset(v: unknown): string | null {
   const s = clean(v, 80);
   if (!s || s.includes("/") || s.includes("\\") || s.startsWith(".")) return null;
   if (!ASSET_EXT.has(path.extname(s).toLowerCase())) return null;
-  return existsSync(path.join(brandDir(), s)) ? s : null;
+  const dir = brandDir();
+  const full = path.join(dir, s);
+  try {
+    if (!lstatSync(full).isFile()) return null; // a symlink is not a file: refused before it is followed
+    const realRoot = realpathSync(dir);
+    const real = realpathSync(full);
+    if (path.dirname(real) !== realRoot) return null;
+  } catch {
+    return null; // missing, unreadable, or a broken link
+  }
+  return s;
 }
 
 function tokensOf(raw: unknown): Partial<Record<BrandToken, string>> {

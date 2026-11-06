@@ -128,6 +128,12 @@ export function buildConfig(models: ModelInfo[]) {
         mode: "primary",
         prompt: PLAN_PROMPT,
         permission: { edit: "deny", bash: "deny" },
+        // Denying edit and bash is not enough: `task` delegates to a subagent, and the write
+        // ones (worker, tester, debugger) have both. Without this, plan mode fences the agent
+        // and leaves the door to a deputy wide open — and swarm reviewers run in plan mode
+        // precisely so a hostile repo cannot drive them into writing anything.
+        // Same denial read-only subagents already get (opencodeAgentAccess).
+        tools: { bash: false, task: false, edit: false, write: false, patch: false },
       },
     },
     permission: {

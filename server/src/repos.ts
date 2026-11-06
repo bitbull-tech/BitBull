@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -169,6 +169,23 @@ const UNSAFE_REPO = (keys: string[]) =>
   `Not inspected: this clone's own git config sets ${keys.slice(0, 4).join(", ")}${keys.length > 4 ? ` and ${keys.length - 4} more` : ""}, which git would run as a command. ` +
   `That is how a hostile repository attacks the machine inspecting it. Look at .git/config yourself before trusting this clone.`;
 
+/**
+ * The clone must be a real directory inside the real workspace. A lexical prefix check passes a
+ * symlinked folder that points anywhere on disk, and every git call below then runs there — and
+ * `sync` fetches over the network from whatever remote it finds. (2026-11 swarm.)
+ */
+function containedDir(ws: string, rel: string): string | null {
+  const dir = rel === "." ? ws : path.join(ws, rel);
+  try {
+    const root = realpathSync(path.resolve(ws));
+    const real = realpathSync(dir);
+    if (real !== root && !real.startsWith(root + path.sep)) return null;
+    return dir;
+  } catch {
+    return null;
+  }
+}
+
 const clean = (s: string, n = 200) => s.replace(/[\u0000-\u001f]/g, " ").slice(0, n);
 
 /** Everything the Repositories view shows for one clone. Never throws: errors are reported in the row. */
@@ -297,7 +314,8 @@ export async function listRepos(ws: string): Promise<RepoInfo[]> {
  * read: a repo whose own config names exec-capable keys is refused before git runs at all.
  */
 export async function syncRepo(ws: string, rel: string, fetchOnly = false): Promise<{ ok: boolean; message: string }> {
-  const dir = rel === "." ? ws : path.join(ws, rel);
+  const dir = containedDir(ws, rel);
+  if (!dir) return { ok: false, message: "That path leaves the workspace through a link; refusing to fetch into it." };
   const unsafe = await execCapableConfig(dir);
   if (unsafe.length) return { ok: false, message: UNSAFE_REPO(unsafe) };
   const before = await inspectRepo(ws, rel);
@@ -329,7 +347,8 @@ export async function syncRepo(ws: string, rel: string, fetchOnly = false): Prom
 }
 
 export async function repoDiffStat(ws: string, rel: string, base?: string): Promise<string> {
-  const dir = rel === "." ? ws : path.join(ws, rel);
+  const dir = containedDir(ws, rel);
+  if (!dir) return "(that path leaves the workspace through a link; refusing to read it)";
   const unsafe = await execCapableConfig(dir);
   if (unsafe.length) return `(${UNSAFE_REPO(unsafe)})`;
   const safeBase = base && /^[A-Za-z0-9._/@^~-]{1,120}$/.test(base) && !base.startsWith("-") ? base : null;
