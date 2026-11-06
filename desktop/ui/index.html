@@ -68,6 +68,7 @@
       <tr><td class="k">Docker in distro</td><td class="v" id="c_docker">…</td></tr>
       <tr><td class="k">Containers</td><td class="v" id="c_containers">…</td></tr>
       <tr><td class="k">BitBob</td><td class="v" id="c_health">…</td></tr>
+      <tr><td class="k">Built from</td><td class="v" id="c_build">…</td></tr>
     </table>
     <p class="hint" id="next"></p>
   </div>
@@ -138,6 +139,19 @@ async function refresh() {
   check($('c_env'), s.env_ok, s.env_ok ? '.env present' : 'no .env in the repo');
   for (const k of ['wsl', 'distro', 'docker', 'containers']) check($('c_' + k), s[k].ok, s[k].detail, /only checked on Windows/.test(s[k].detail));
   check($('c_health'), s.healthy, s.healthy ? 'answering at ' + s.url : 'not answering at ' + s.url);
+  // Which commit the running containers came from, next to what the checkout is on now. Without
+  // this you cannot tell a deployed change from an undeployed one after a few rounds.
+  const built = s.built || null;
+  const head = s.checkout || null;
+  const current = built && head && built.split(' ')[0] === head;
+  check(
+    $('c_build'),
+    !!built && (current || !head),
+    !built
+      ? (s.healthy ? 'this build predates version stamping — deploy once to record it' : 'unknown until BitBob answers')
+      : built + (head ? (current ? '  ·  matches your checkout' : '  ·  your checkout is on ' + head + ' — deploy to update') : ''),
+    !built && !s.healthy, // only "not applicable" when there is nothing to ask yet
+  );
   $('dot').className = 'dot ' + (s.healthy ? 'ok' : 'bad');
   $('headline').textContent = s.healthy ? 'running' : 'not running';
   $('open').disabled = !s.healthy;

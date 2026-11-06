@@ -30,6 +30,29 @@ Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=n
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
 
+# Record what this build came from. The image has no .git (it is excluded above), so without
+# this there is no way to tell which commit the running containers were built against — which
+# is exactly how you lose track after a few deploys.
+$sha = (& git -C $Repo rev-parse --short HEAD 2>$null)
+$branch = (& git -C $Repo rev-parse --abbrev-ref HEAD 2>$null)
+$when = (& git -C $Repo log -1 --format=%cI 2>$null)
+$dirty = [bool]((& git -C $Repo status --porcelain 2>$null) | Where-Object { $_ })
+if (-not $sha) { $sha = "unknown"; $branch = "unknown"; $when = "" }
+$info = [ordered]@{
+  commit    = "$sha"
+  branch    = "$branch"
+  committed = "$when"
+  dirty     = $dirty
+  deployedAt = (Get-Date).ToUniversalTime().ToString("o")
+} | ConvertTo-Json -Compress
+$infoFile = Join-Path $env:TEMP "bitbob-build-info.json"
+[System.IO.File]::WriteAllText($infoFile, $info)
+$infoCmd = Join-Path $env:TEMP "bitbob-build-info.cmd"
+Set-Content -LiteralPath $infoCmd -Encoding ASCII -Value "@type `"$infoFile`" | wsl.exe -d $Distro --exec sh -c `"cat > ~/BitBob/build-info.json`""
+& cmd.exe /c $infoCmd
+if ($LASTEXITCODE -ne 0) { throw "could not write build-info.json ($LASTEXITCODE)" }
+Write-Host ("  building from {0} on {1}{2}" -f $sha, $branch, $(if ($dirty) { " (uncommitted changes)" } else { "" }))
+
 Write-Host "==> Rebuilding" -ForegroundColor Cyan
 # The allowlist is bind-mounted as a single FILE, so the container holds its inode. This
 # deploy replaces the whole directory, which gives the file a new inode: the running proxy

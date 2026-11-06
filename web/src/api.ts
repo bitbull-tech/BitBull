@@ -215,6 +215,8 @@ export interface Swarm {
     hasRebuttal: boolean
     /** what it is doing right now: the tool it reached for, or the tail of what it is writing */
     note?: string
+    /** how much it actually opened — a report with almost no evidence behind it reads the same */
+    effort?: { tools: number; files: number }
   }[]
   phase: 'review' | 'challenge' | 'final' | 'done' | 'error'
   finalTurnId?: string

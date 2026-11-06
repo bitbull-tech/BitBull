@@ -129,6 +129,10 @@ pub struct Status {
     /// BitBob answered /api/health on the configured port
     pub healthy: bool,
     pub url: String,
+    /// commit the running containers were built from (deploy.ps1 records it; the image has no .git)
+    pub built: Option<String>,
+    /// HEAD of the checkout this launcher points at, to compare against `built`
+    pub checkout: Option<String>,
 }
 
 /// One pass over everything the launcher shows. Each probe is short (a few seconds at most)
@@ -140,7 +144,10 @@ pub fn status(s: &Settings) -> Status {
         st.repo_ok = is_repo(repo);
         st.env_ok = repo.join(".env").is_file();
     }
-    st.healthy = health(s.port);
+    let (ok, body) = health_body(s.port);
+    st.healthy = ok;
+    st.built = body.as_deref().and_then(build_commit);
+    st.checkout = s.repo.as_deref().and_then(head_commit);
     if !cfg!(windows) {
         let na = Check { ok: false, detail: "only checked on Windows".into() };
         st.wsl = na.clone();
@@ -188,21 +195,57 @@ pub fn status(s: &Settings) -> Status {
     st
 }
 
-/// GET /api/health on the local port. Plain std TCP so there is no HTTP client to keep current.
-pub fn health(port: u16) -> bool {
+/// The `commit` (and dirty flag) out of /api/health's JSON, without pulling in a JSON parser
+/// for one field. Returns e.g. "a1b2c3d on main" or "a1b2c3d on main (uncommitted)".
+pub fn build_commit(body: &str) -> Option<String> {
+    let field = |k: &str| -> Option<String> {
+        let at = body.find(&format!("\"{k}\""))?;
+        let rest = &body[at + k.len() + 2..];
+        let start = rest.find('"')? + 1;
+        let end = rest[start..].find('"')? + start;
+        let v = &rest[start..end];
+        if v.is_empty() || v.len() > 80 { None } else { Some(v.to_string()) }
+    };
+    let commit = field("commit")?;
+    let branch = field("branch").unwrap_or_default();
+    let dirty = body.contains("\"dirty\":true");
+    let mut out = commit;
+    if !branch.is_empty() { out = format!("{out} on {branch}"); }
+    if dirty { out.push_str(" (uncommitted)"); }
+    Some(out)
+}
+
+/// Short HEAD of the checkout, so the launcher can say whether a deploy is still current.
+pub fn head_commit(repo: &str) -> Option<String> {
+    let (code, out) = run_capture("git", &["-C", repo, "rev-parse", "--short", "HEAD"], Duration::from_secs(4)).ok()?;
+    if code != 0 { return None }
+    let sha = out.trim().lines().next()?.trim().to_string();
+    if sha.is_empty() || sha.len() > 40 { None } else { Some(sha) }
+}
+
+/// GET /api/health on the local port, keeping the body. Plain std TCP so there is no HTTP client
+/// to keep current.
+pub fn health_body(port: u16) -> (bool, Option<String>) {
     use std::io::{Read, Write};
     use std::net::TcpStream;
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-    let Ok(mut s) = TcpStream::connect_timeout(&addr, Duration::from_millis(800)) else { return false };
+    let Ok(mut s) = TcpStream::connect_timeout(&addr, Duration::from_millis(800)) else { return (false, None) };
     let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = s.set_write_timeout(Some(Duration::from_secs(2)));
     if s.write_all(format!("GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).is_err() {
-        return false;
+        return (false, None);
     }
     let mut buf = Vec::new();
     let _ = s.read_to_end(&mut buf);
     let text = String::from_utf8_lossy(&buf);
-    text.starts_with("HTTP/1.1 200") || text.starts_with("HTTP/1.0 200")
+    let ok = text.starts_with("HTTP/1.1 200") || text.starts_with("HTTP/1.0 200");
+    let body = text.split("\r\n\r\n").nth(1).map(|b| b.to_string());
+    (ok, if ok { body } else { None })
+}
+
+/// Just the boolean, for callers that only want to know whether it answered.
+pub fn health(port: u16) -> bool {
+    health_body(port).0
 }
 
 pub fn parse_distro_list(out: &str) -> Vec<String> {

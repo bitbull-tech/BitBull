@@ -1026,3 +1026,5 @@ button.file-row:hover { background: var(--hover); }
   .sleuth .smoke circle { animation: none; opacity: .18; }
   .sleuth { transition: none; }
 }
+.detective .evidence { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.detective .evidence.thin { color: var(--bad, #dc2626); font-weight: 600; }

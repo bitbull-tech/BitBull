@@ -121,6 +121,9 @@ function Sleuth({ model, busy, verdict }: { model: string; busy: boolean; verdic
 
 /* ---------------- the room ---------------- */
 
+/** Mirrors the server's floor: a report behind this much evidence has not reviewed anything. */
+const thin = (e: { tools: number; files: number }) => e.files < 5 || e.tools < 8
+
 const PHASE_LINE: Record<Swarm['phase'], string> = {
   review: 'Working the case separately. Neither has seen the other’s notes.',
   challenge: 'Cross-examination: each has read the other’s report and is trying to knock it down.',
@@ -180,6 +183,12 @@ export function SwarmTheatre({ swarm, onUpdate, onClose, onOpenSession }: { swar
                 <div className="who">
                   <b>{r.model}</b>
                   <span className="muted">{r.status}</span>
+                  {r.effort && (
+                    <span className={thin(r.effort) && r.status === 'done' ? 'evidence thin' : 'evidence'}>
+                      {r.effort.files} file{r.effort.files === 1 ? '' : 's'} · {r.effort.tools} tool call{r.effort.tools === 1 ? '' : 's'}
+                      {thin(r.effort) && r.status === 'done' ? ' — too little to trust' : ''}
+                    </span>
+                  )}
                   {onOpenSession && (
                     <button className="link" onClick={() => onOpenSession(r.sessionId)}>
                       read its working

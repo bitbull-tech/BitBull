@@ -70,7 +70,24 @@ app.use("/api/*", async (c, next) => {
 });
 
 // ---------- meta ----------
-app.get("/api/health", (c) => c.json({ ok: true }));
+/**
+ * Health, plus what this image was built from. `build-info.json` is written into the tree by
+ * deploy.ps1, because the image deliberately carries no .git. Unauthenticated like the rest of
+ * /api/health: it is a commit id on 127.0.0.1, and the threat model already treats localhost on
+ * the owner's machine as trusted (R6). The launcher reads it to show deployed-vs-checkout.
+ */
+const buildInfo = (() => {
+  try {
+    const raw = readFileSync(path.join(process.cwd(), "build-info.json"), "utf8");
+    const j = JSON.parse(raw) as Record<string, unknown>;
+    const str = (k: string) => (typeof j[k] === "string" ? (j[k] as string).slice(0, 80) : undefined);
+    return { commit: str("commit"), branch: str("branch"), committed: str("committed"), dirty: j.dirty === true, deployedAt: str("deployedAt") };
+  } catch {
+    return { commit: undefined, branch: undefined, committed: undefined, dirty: false, deployedAt: undefined };
+  }
+})();
+
+app.get("/api/health", (c) => c.json({ ok: true, build: buildInfo }));
 
 /** Name, logos and colour overrides (see docs/BRANDING.md). Public: the login screen needs it. */
 app.get("/api/brand", (c) => c.json(brand()));

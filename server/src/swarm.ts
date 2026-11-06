@@ -5,6 +5,7 @@ import { paths, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type SessionRow } from "./db.js";
 import { activeTurnId, collectTurn, snapshot, startTurn } from "./turns.js";
 import { record } from "./activity.js";
+import type { AgentEvent } from "./engines/types.js";
 
 /**
  * QA swarm: up to two reviewer models go over a repo, folder or file in the sandbox, each in
@@ -46,6 +47,9 @@ export interface SwarmReviewer {
   status: "pending" | "reviewing" | "challenging" | "done" | "error";
   /** the turn it is running right now, so the UI can show what it is doing */
   turnId?: string;
+  /** how much work it actually did: tool calls made, and the distinct files it opened */
+  toolCalls: number;
+  filesRead: string[];
   report?: string;
   rebuttal?: string;
   error?: string;
@@ -81,6 +85,31 @@ export function listSwarms(sessionId?: string) {
  * tail of what it is writing. Read from the turn's event log, so it costs nothing extra and
  * works for a reviewer whose chat nobody has open.
  */
+/**
+ * What a reviewer actually opened. A swarm's whole value is evidence, and a model that writes a
+ * confident report after one `read` is the failure mode that is hardest to spot by eye: the
+ * prose looks identical. Counting is cheap, so count, show it, and tell the handler.
+ */
+function effortOf(events: { event: AgentEvent }[]) {
+  let tools = 0;
+  const files = new Set<string>();
+  for (const { event: ev } of events) {
+    if (ev.type !== "tool_start") continue;
+    tools++;
+    const input = ev.input as Record<string, unknown> | undefined;
+    const f = input?.filePath ?? input?.path ?? input?.file;
+    if (typeof f === "string" && f) files.add(f.slice(0, 300));
+  }
+  return { tools, files: [...files] };
+}
+
+/** The same, for a turn still running, so the UI can count up as it goes. */
+function liveEffort(turnId?: string) {
+  if (!turnId) return { tools: 0, files: [] as string[] };
+  const snap = snapshot(turnId);
+  return snap ? effortOf(snap.events) : { tools: 0, files: [] as string[] };
+}
+
 function noteFor(turnId?: string): string | undefined {
   if (!turnId) return undefined;
   const snap = snapshot(turnId);
@@ -107,12 +136,17 @@ function toolHint(input: unknown): string {
 export function publicSwarm(s: Swarm) {
   return {
     ...s,
-    reviewers: s.reviewers.map(({ report, rebuttal, ...r }) => ({
-      ...r,
-      hasReport: !!report,
-      hasRebuttal: !!rebuttal,
-      note: r.status === "reviewing" || r.status === "challenging" ? noteFor(r.turnId) : undefined,
-    })),
+    reviewers: s.reviewers.map(({ report, rebuttal, filesRead, ...r }) => {
+      const live = liveEffort(r.turnId);
+      const files = new Set([...filesRead, ...live.files]);
+      return {
+        ...r,
+        hasReport: !!report,
+        hasRebuttal: !!rebuttal,
+        note: r.status === "reviewing" || r.status === "challenging" ? noteFor(r.turnId) : undefined,
+        effort: { tools: r.toolCalls + live.tools, files: files.size },
+      };
+    }),
   };
 }
 
@@ -147,14 +181,19 @@ function textOf(events: Awaited<ReturnType<typeof collectTurn>>["events"]) {
   return text.trim();
 }
 
-async function runIn(session: SessionRow, prompt: string, model: string, onTurn?: (id: string) => void): Promise<{ text: string; ok: boolean; error?: string }> {
+async function runIn(
+  session: SessionRow,
+  prompt: string,
+  model: string,
+  onTurn?: (id: string) => void,
+): Promise<{ text: string; ok: boolean; error?: string; effort: { tools: number; files: string[] } }> {
   // Reviewers run in plan mode: read-only by enforcement, not by prompt text — the target may
   // be a hostile repo whose contents try to drive them (2026-11 audit).
   const { turnId } = startTurn(session, { prompt, model, plan: true });
   onTurn?.(turnId);
   const { events, status } = await collectTurn(turnId);
   const errors = events.filter((e) => e.event.type === "error").map((e) => (e.event as { message: string }).message);
-  return { text: textOf(events), ok: status === "done", error: errors.at(-1) };
+  return { text: textOf(events), ok: status === "done", error: errors.at(-1), effort: effortOf(events) };
 }
 
 /** startTurn returns the in-flight turn when a chat is busy — wait for a free slot (bounded). */
@@ -195,14 +234,26 @@ function challengePrompt(s: Swarm, me: SwarmReviewer, others: SwarmReviewer[]) {
   ].join("\n\n");
 }
 
+/** A report written without opening files reads exactly like one written after forty. */
+const THIN_FILES = 5;
+const THIN_TOOLS = 8;
+function effortLine(r: SwarmReviewer) {
+  const thin = r.filesRead.length < THIN_FILES || r.toolCalls < THIN_TOOLS;
+  const base = `Evidence gathered: ${r.toolCalls} tool call${r.toolCalls === 1 ? "" : "s"}, ${r.filesRead.length} distinct file${r.filesRead.length === 1 ? "" : "s"} opened`;
+  return thin
+    ? `${base}. **This is far too little to have reviewed the target.** Treat every claim below as unverified unless you confirm it yourself, and say so plainly in your verdict rather than passing it on.`
+    : `${base}.`;
+}
+
 function finalPrompt(s: Swarm) {
   const parts = s.reviewers.map(
     (r) =>
-      `## Reviewer: ${r.model}${r.status === "error" ? ` (failed: ${r.error ?? "unknown error"})` : ""}\n\n### Initial report\n\n${fence(r.report || "(none)")}\n\n### After the challenge round\n\n${fence(r.rebuttal || "(none)")}`,
+      `## Reviewer: ${r.model}${r.status === "error" ? ` (failed: ${r.error ?? "unknown error"})` : ""}\n\n${effortLine(r)}\n\n### Initial report\n\n${fence(r.report || "(none)")}\n\n### After the challenge round\n\n${fence(r.rebuttal || "(none)")}`,
   );
   return [
     `A QA swarm just finished on \`${s.target}\` (${s.focus.map((f) => FOCUS_LABEL[f]).join(", ")}). ${s.reviewers.length} reviewer(s) on other models reviewed it independently and then challenged each other; their full chats are in the sidebar as "QA swarm · …". You are the primary handler: weigh their work and give the owner a verdict.`,
     FENCE_NOTE,
+    `A reviewer's authority comes from what it opened, not how it writes: a confident report produced from one or two tool calls is not evidence, and saying so is more useful to the owner than summarising it. Weigh the reports by the evidence line above each one.`,
     `Produce, in Markdown: **1. Per reviewer**, 3–6 bullets each: their strongest verified findings, what the other side refuted, where they were wrong. **2. Verified issues**, one table ranked by severity (severity, location, what, who found it, status: confirmed by both / disputed / only one saw it). For any disputed item that matters, check the code yourself before ruling, read-only. **3. Overall recommendation**: use as is / fix first / do not use, with the 3–5 fixes to do first and why. **4. Blind spots**: what no reviewer covered. Keep the owner's time: lead with the verdict.`,
     ...parts,
   ].join("\n\n");
@@ -236,6 +287,8 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
         projectId: session.project_id,
       }).id,
       status: "pending",
+      toolCalls: 0,
+      filesRead: [],
     })),
     phase: "review",
     startedAt: Date.now(),
@@ -253,6 +306,9 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
           r.status = "reviewing";
           const others = s.reviewers.filter((x) => x !== r).map((x) => x.model);
           const out = await runIn(rs, reviewPrompt(s, others), r.model, (id) => (r.turnId = id));
+          r.turnId = undefined; // its totals are folded in below; don't count the same turn twice
+          r.toolCalls += out.effort.tools;
+          r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
           r.report = out.text;
           if (!out.ok || !out.text) {
             r.status = "error";
@@ -270,6 +326,9 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
             const rs = sessions.get(r.sessionId)!;
             r.status = "challenging";
             const out = await runIn(rs, challengePrompt(s, r, alive.filter((x) => x !== r)), r.model, (id) => (r.turnId = id));
+            r.turnId = undefined;
+            r.toolCalls += out.effort.tools;
+            r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
             r.rebuttal = out.text;
             r.status = out.ok && out.text ? "done" : "error";
             if (r.status === "error") r.error = out.error ?? "no output";

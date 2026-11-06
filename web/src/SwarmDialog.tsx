@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type Model, type Project, type RepoInfo, type Session, type Swarm } from './api'
 import { IconX } from './icons'
+import { priceLabel } from './ModelPicker'
 
 const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
   { id: 'attack-vectors', label: 'Attack vectors', hint: 'how a hostile input, contributor, dependency or prompt-injected agent could abuse it; entry point → impact' },
@@ -58,10 +59,13 @@ export function SwarmDialog({
   }, [onClose])
 
   const others = models.filter((m) => m.id !== primaryModel)
+  // The id, not just the name: SayGM ships TEE and non-TEE builds under the SAME display name
+  // (DeepSeek-V4.1-Flash twice, Kimi K3.1 Pro twice), and they differ in price by multiples.
   const option = (m: Model) => (
     <option key={m.id} value={m.id}>
       {m.name || m.id}
-      {m.provider ? ` · ${m.provider}` : ''}
+      {m.confidential ? ' (TEE)' : ''} — {m.id}
+      {m.price ? ` · ${priceLabel(m)}` : ''}
     </option>
   )
   // The reviewers read the agent's copy in this workspace, not your machine and not what the
