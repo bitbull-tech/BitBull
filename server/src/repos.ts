@@ -286,6 +286,48 @@ export async function listRepos(ws: string): Promise<RepoInfo[]> {
 }
 
 /** A branch's diff summary against the working tree or another ref, for the view's "what changed" (read-only). */
+/**
+ * Fetch, then fast-forward the clone onto its upstream. The one write this module does, and
+ * deliberately the narrowest useful one: no merge commits, no rebase, nothing when the tree is
+ * dirty or the branch has diverged. The workspace clone is a *copy* for the agent to read and
+ * work in — it is not what the server runs — so bringing it level with origin is routine, and
+ * anything that needs judgement is left to the agent in the chat.
+ *
+ * `git fetch` talks to the network, so the hostile-clone gate matters even more here than for a
+ * read: a repo whose own config names exec-capable keys is refused before git runs at all.
+ */
+export async function syncRepo(ws: string, rel: string, fetchOnly = false): Promise<{ ok: boolean; message: string }> {
+  const dir = rel === "." ? ws : path.join(ws, rel);
+  const unsafe = await execCapableConfig(dir);
+  if (unsafe.length) return { ok: false, message: UNSAFE_REPO(unsafe) };
+  const before = await inspectRepo(ws, rel);
+  if (before.error) return { ok: false, message: before.error };
+  if (!before.upstream) return { ok: false, message: "This branch has no upstream to sync from. Set one, or use the agent." };
+  if (!fetchOnly && (before.changed || before.staged || before.conflicts)) {
+    return { ok: false, message: "Uncommitted changes here: sync would overwrite them. Ask the agent to commit or stash first." };
+  }
+  try {
+    await git(dir, ["fetch", "--quiet", "--prune"]);
+  } catch (e) {
+    return { ok: false, message: `Could not fetch: ${clean(e instanceof Error ? e.message : String(e), 200)}` };
+  }
+  const after = await inspectRepo(ws, rel);
+  // fetchOnly: just make `behind` truthful, so a caller can warn before spending anything.
+  if (fetchOnly) {
+    return { ok: true, message: after.behind ? `${after.behind} behind ${after.upstream ?? "origin"}.` : `Level with ${after.upstream ?? "origin"}.` };
+  }
+  if (!after.behind) return { ok: true, message: `Already level with ${after.upstream ?? "origin"}.` };
+  if (after.ahead) {
+    return { ok: false, message: `This branch is ${after.ahead} ahead and ${after.behind} behind ${after.upstream}: it has diverged, so a fast-forward is not possible. Ask the agent.` };
+  }
+  try {
+    await git(dir, ["merge", "--ff-only", "--quiet", "@{upstream}"]);
+  } catch (e) {
+    return { ok: false, message: `Fetched, but could not fast-forward: ${clean(e instanceof Error ? e.message : String(e), 200)}` };
+  }
+  return { ok: true, message: `Fast-forwarded ${after.behind} commit${after.behind === 1 ? "" : "s"} to ${after.upstream}.` };
+}
+
 export async function repoDiffStat(ws: string, rel: string, base?: string): Promise<string> {
   const dir = rel === "." ? ws : path.join(ws, rel);
   const unsafe = await execCapableConfig(dir);

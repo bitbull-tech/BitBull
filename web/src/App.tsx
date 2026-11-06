@@ -4,6 +4,7 @@ import { getBrand } from './brand'
 import { BrandMark } from './BrandMark'
 import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
+import { SwarmTheatre } from './SwarmTheatre'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
 import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip} from './icons'
 import { ProjectDialog } from './ProjectDialog'
@@ -186,6 +187,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   // The model picker asks for this by event rather than a prop, so every picker gets it
   // without threading a callback through each one (same pattern as bitbob:compose).
   const [browsingModels, setBrowsingModels] = useState(false)
+  const [theatre, setTheatre] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   // Project a new (draft) chat will be created in
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null)
@@ -634,6 +636,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           {swarm && swarm.sessionId === active?.id ? (
             <SwarmPill
               swarm={swarm}
+              onOpen={() => setTheatre(true)}
               onUpdate={setSwarm}
               onFinalTurn={(sessionId, turnId) => window.dispatchEvent(new CustomEvent('bitbob:turn-started', { detail: { sessionId, turnId } }))}
             />
@@ -688,6 +691,20 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           onModelsRefreshed={() => void loadModels()}
         />
       )}
+      {theatre && swarm && (
+        <SwarmTheatre
+          swarm={swarm}
+          onUpdate={(x) => {
+            setSwarm(x)
+            if (!x) setTheatre(false)
+          }}
+          onOpenSession={(id) => {
+            setActiveId(id)
+            setTheatre(false)
+          }}
+          onClose={() => setTheatre(false)}
+        />
+      )}
       {browsingModels && (
         <ModelsDialog
           models={models}
@@ -710,6 +727,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           onStarted={(s) => {
             setSwarm(s)
             setSwarmOpen(false)
+            setTheatre(true) // a swarm costs real money and takes minutes: show it working
             void refreshSessions()
           }}
         />

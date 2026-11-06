@@ -35,7 +35,7 @@ import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused } from "./egress.js";
 import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
-import { listRepos, repoDiffStat } from "./repos.js";
+import { listRepos, repoDiffStat, syncRepo } from "./repos.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
@@ -720,6 +720,18 @@ app.get("/api/projects/:id/repos", async (c) => {
   if (!ws) return c.json({ error: "project not found" }, 404);
   return c.json({ repos: await listRepos(ws) });
 });
+/** Fetch + fast-forward one clone in this workspace onto origin (the Sync button). */
+app.post("/api/projects/:id/repos/sync", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const rel = safeRel(typeof body.repo === "string" ? body.repo : "");
+  if (rel === null) return c.json({ error: "invalid path" }, 400);
+  const r = await syncRepo(ws, rel || ".", body.fetchOnly === true);
+  record({ level: r.ok ? "info" : "warn", source: "server", message: `repo sync ${rel || "."}: ${r.message}` });
+  return c.json({ ...r, repos: await listRepos(ws) });
+});
+
 app.get("/api/projects/:id/repos/diff", async (c) => {
   const ws = workspaceOf(c.req.param("id"));
   if (!ws) return c.json({ error: "project not found" }, 404);

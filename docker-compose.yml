@@ -105,13 +105,14 @@ services:
     ports:
       - "127.0.0.1:${BITBOB_PORT:-8787}:8787"
     networks: [sandbox, outside]
-    # publishing the port before the server answers turns a slow start into a connection
-    # error in the browser rather than a wait
+    # egress must be LISTENING (the agent's only route out). The agent only has to exist: making
+    # the gateway wait for it to be *healthy* fails the whole `up` whenever a first start is slow,
+    # which is a real cost for the cosmetic gain of not publishing the port a few seconds early.
     depends_on:
       egress:
         condition: service_healthy
       bitbob-agent:
-        condition: service_healthy
+        condition: service_started
     pids_limit: 128
     mem_limit: 128m
 

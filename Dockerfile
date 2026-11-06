@@ -48,5 +48,7 @@ RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]
 EXPOSE 8787
-HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS http://localhost:8787/api/health || exit 1
+# A first start does real work (migrations, mirroring skills into every workspace), and now
+# that the gateway waits for this to be healthy, too strict a check fails the whole `up`.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=6 CMD curl -fsS http://localhost:8787/api/health || exit 1
 CMD ["node", "server/dist/index.js"]

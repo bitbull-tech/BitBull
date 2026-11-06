@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { paths, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type SessionRow } from "./db.js";
-import { activeTurnId, collectTurn, startTurn } from "./turns.js";
+import { activeTurnId, collectTurn, snapshot, startTurn } from "./turns.js";
 import { record } from "./activity.js";
 
 /**
@@ -44,6 +44,8 @@ export interface SwarmReviewer {
   model: string;
   sessionId: string;
   status: "pending" | "reviewing" | "challenging" | "done" | "error";
+  /** the turn it is running right now, so the UI can show what it is doing */
+  turnId?: string;
   report?: string;
   rebuttal?: string;
   error?: string;
@@ -74,11 +76,43 @@ export function listSwarms(sessionId?: string) {
   return [...swarms.values()].filter((s) => !sessionId || s.sessionId === sessionId).sort((a, b) => b.startedAt - a.startedAt);
 }
 
+/**
+ * What a reviewer is doing *right now*, in a few words: the tool it just reached for, or the
+ * tail of what it is writing. Read from the turn's event log, so it costs nothing extra and
+ * works for a reviewer whose chat nobody has open.
+ */
+function noteFor(turnId?: string): string | undefined {
+  if (!turnId) return undefined;
+  const snap = snapshot(turnId);
+  if (!snap) return undefined;
+  let text = "";
+  for (let i = snap.events.length - 1; i >= 0 && snap.events.length - i < 60; i--) {
+    const ev = snap.events[i].event;
+    if (ev.type === "tool_start") return `${ev.name}${toolHint(ev.input)}`;
+    if (ev.type === "text" && !text) text = ev.delta;
+  }
+  const t = text.trim().replace(/\s+/g, " ");
+  return t ? t.slice(-120) : undefined;
+}
+
+/** A short, safe hint of what a tool was pointed at — never the whole input. */
+function toolHint(input: unknown): string {
+  if (!input || typeof input !== "object") return "";
+  const o = input as Record<string, unknown>;
+  const v = o.path ?? o.file ?? o.pattern ?? o.command ?? o.query;
+  return typeof v === "string" && v ? ` · ${v.replace(/[\u0000-\u001f]/g, " ").slice(0, 60)}` : "";
+}
+
 /** Public view: no report bodies (they are in the reviewer sessions). */
 export function publicSwarm(s: Swarm) {
   return {
     ...s,
-    reviewers: s.reviewers.map(({ report, rebuttal, ...r }) => ({ ...r, hasReport: !!report, hasRebuttal: !!rebuttal })),
+    reviewers: s.reviewers.map(({ report, rebuttal, ...r }) => ({
+      ...r,
+      hasReport: !!report,
+      hasRebuttal: !!rebuttal,
+      note: r.status === "reviewing" || r.status === "challenging" ? noteFor(r.turnId) : undefined,
+    })),
   };
 }
 
@@ -113,10 +147,11 @@ function textOf(events: Awaited<ReturnType<typeof collectTurn>>["events"]) {
   return text.trim();
 }
 
-async function runIn(session: SessionRow, prompt: string, model: string): Promise<{ text: string; ok: boolean; error?: string }> {
+async function runIn(session: SessionRow, prompt: string, model: string, onTurn?: (id: string) => void): Promise<{ text: string; ok: boolean; error?: string }> {
   // Reviewers run in plan mode: read-only by enforcement, not by prompt text — the target may
   // be a hostile repo whose contents try to drive them (2026-11 audit).
   const { turnId } = startTurn(session, { prompt, model, plan: true });
+  onTurn?.(turnId);
   const { events, status } = await collectTurn(turnId);
   const errors = events.filter((e) => e.event.type === "error").map((e) => (e.event as { message: string }).message);
   return { text: textOf(events), ok: status === "done", error: errors.at(-1) };
@@ -217,7 +252,7 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
           const rs = sessions.get(r.sessionId)!;
           r.status = "reviewing";
           const others = s.reviewers.filter((x) => x !== r).map((x) => x.model);
-          const out = await runIn(rs, reviewPrompt(s, others), r.model);
+          const out = await runIn(rs, reviewPrompt(s, others), r.model, (id) => (r.turnId = id));
           r.report = out.text;
           if (!out.ok || !out.text) {
             r.status = "error";
@@ -234,7 +269,7 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
           alive.map(async (r) => {
             const rs = sessions.get(r.sessionId)!;
             r.status = "challenging";
-            const out = await runIn(rs, challengePrompt(s, r, alive.filter((x) => x !== r)), r.model);
+            const out = await runIn(rs, challengePrompt(s, r, alive.filter((x) => x !== r)), r.model, (id) => (r.turnId = id));
             r.rebuttal = out.text;
             r.status = out.ok && out.text ? "done" : "error";
             if (r.status === "error") r.error = out.error ?? "no output";

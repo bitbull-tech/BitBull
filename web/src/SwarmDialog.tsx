@@ -64,6 +64,38 @@ export function SwarmDialog({
       {m.provider ? ` · ${m.provider}` : ''}
     </option>
   )
+  // The reviewers read the agent's copy in this workspace, not your machine and not what the
+  // server is running. A copy that is behind origin means a swarm spends real money reviewing
+  // code you already changed, so say so before it starts rather than in the verdict.
+  const stale = repos.find((r) => r.path === target.trim() && r.behind > 0)
+  const [syncing, setSyncing] = useState(false)
+  const [fetched, setFetched] = useState<string[]>([])
+  // `behind` is only true as of the last fetch, so a copy nobody has fetched always looks level.
+  // Fetch once per target when it is a repo, so the warning below means something.
+  useEffect(() => {
+    const t = target.trim()
+    if (!t || fetched.includes(t) || !repos.some((r) => r.path === t)) return
+    setFetched((f) => [...f, t])
+    void api
+      .syncRepo(project?.id ?? 'general', t, true)
+      .then((r) => setRepos(r.repos))
+      .catch(() => {})
+  }, [target, repos, fetched, project])
+  const syncNow = async () => {
+    if (!stale) return
+    setSyncing(true)
+    setErr(null)
+    try {
+      const r = await api.syncRepo(project?.id ?? 'general', stale.path)
+      setRepos(r.repos)
+      if (!r.ok) setErr(r.message)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const start = async () => {
     setErr(null)
     const chosen = [a, b].filter(Boolean)
@@ -156,6 +188,15 @@ export function SwarmDialog({
             Different model families catch different things; two reviewers from the same family mostly share blind spots. Cost: three to five
             full passes over the target, so pick models you can afford.
           </p>
+          {stale && (
+            <p className="small warn-line">
+              <b>{stale.name} is {stale.behind} commit{stale.behind === 1 ? '' : 's'} behind {stale.upstream ?? 'origin'}.</b> The reviewers read
+              this workspace copy, so they would review the older code.{' '}
+              <button className="link" disabled={syncing} onClick={() => void syncNow()}>
+                {syncing ? 'Syncing…' : 'Sync it first'}
+              </button>
+            </p>
+          )}
           {err && <p className="error small">{err}</p>}
           <div className="row end">
             <button className="btn" onClick={onClose}>
@@ -172,7 +213,7 @@ export function SwarmDialog({
 }
 
 /** The top-bar pill while a swarm runs; polls until the verdict turn starts, then hands over to the chat. */
-export function SwarmPill({ swarm, onUpdate, onFinalTurn }: { swarm: Swarm; onUpdate: (s: Swarm | null) => void; onFinalTurn: (sessionId: string, turnId: string) => void }) {
+export function SwarmPill({ swarm, onUpdate, onFinalTurn, onOpen }: { swarm: Swarm; onUpdate: (s: Swarm | null) => void; onFinalTurn: (sessionId: string, turnId: string) => void; onOpen?: () => void }) {
   const [seenFinal, setSeenFinal] = useState(false)
   useEffect(() => {
     if (swarm.phase === 'done' || swarm.phase === 'error') return
@@ -203,7 +244,9 @@ export function SwarmPill({ swarm, onUpdate, onFinalTurn }: { swarm: Swarm; onUp
   const detail = swarm.reviewers.map((r) => `${r.model}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n')
   return (
     <span className={`pill swarm-pill ${swarm.phase === 'error' ? 'bad' : swarm.phase === 'done' ? 'ok' : 'run'}`} title={`QA swarm on ${swarm.target}\n${detail}${swarm.error ? `\n${swarm.error}` : ''}`}>
-      swarm · {label}
+      <button className="link" onClick={() => onOpen?.()} title="Watch the inquiry">
+        swarm · {label}
+      </button>
       {swarm.phase === 'done' || swarm.phase === 'error' ? (
         <button className="link small" onClick={() => onUpdate(null)} aria-label="Dismiss">
           ×

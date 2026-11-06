@@ -206,7 +206,16 @@ export interface Swarm {
   target: string
   focus: ('attack-vectors' | 'correctness' | 'code-quality' | 'performance' | 'user-experience')[]
   primaryModel: string
-  reviewers: { model: string; sessionId: string; status: 'pending' | 'reviewing' | 'challenging' | 'done' | 'error'; error?: string; hasReport: boolean; hasRebuttal: boolean }[]
+  reviewers: {
+    model: string
+    sessionId: string
+    status: 'pending' | 'reviewing' | 'challenging' | 'done' | 'error'
+    error?: string
+    hasReport: boolean
+    hasRebuttal: boolean
+    /** what it is doing right now: the tool it reached for, or the tail of what it is writing */
+    note?: string
+  }[]
   phase: 'review' | 'challenge' | 'final' | 'done' | 'error'
   finalTurnId?: string
   startedAt: number
@@ -300,6 +309,11 @@ export const api = {
   vaultUnlock: (key: string) => req<{ unlocked: boolean; keys: string[]; moved: string[] }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ key }) }),
   vaultLock: () => req<{ unlocked: boolean }>('/api/vault/lock', { method: 'POST' }),
   repos: (projectId: string) => req<{ repos: RepoInfo[] }>(`/api/projects/${projectId}/repos`),
+  syncRepo: (projectId: string, repo: string, fetchOnly = false) =>
+    req<{ ok: boolean; message: string; repos: RepoInfo[] }>(`/api/projects/${projectId}/repos/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ repo, fetchOnly }),
+    }),
   startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus'] }) =>
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
   swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),

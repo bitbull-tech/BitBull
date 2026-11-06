@@ -5,8 +5,12 @@ import { IconChevronRight, IconFolder, IconRefresh, IconX } from './icons'
 
 /**
  * Git clones in a project's workspace: branch, what's uncommitted, ahead/behind, branches.
- * Read-only. Every change (checkout, pull, commit, push) is handed to the agent as a chat
- * message, so it happens in the sandbox, in view, and the reviewer can look at it.
+ * These are the AGENT'S copies inside the sandbox — not the code the server runs (that is
+ * deployed separately from the machine you edit on) and not a folder on your PC.
+ *
+ * Almost read-only: "Sync from origin" fetches and fast-forwards, because a stale copy quietly
+ * wastes a QA swarm. Every other change (checkout, commit, push) is handed to the agent as a
+ * chat message, so it happens in view and the reviewer can look at it.
  */
 export function ReposDialog({ project, onClose, onBrowse }: { project: Project | null; onClose: () => void; onBrowse: (dir: string) => void }) {
   const pid = project?.id ?? 'general'
@@ -15,6 +19,8 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
   const [open, setOpen] = useState<string | null>(null)
   const [diff, setDiff] = useState<Record<string, string>>({})
   const [showRemote, setShowRemote] = useState(false)
+  const [syncing, setSyncing] = useState<string | null>(null)
+  const [synced, setSynced] = useState<{ path: string; ok: boolean; message: string } | null>(null)
 
   const load = () => {
     setErr(null)
@@ -32,6 +38,20 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  const sync = async (repo: string) => {
+    setSyncing(repo)
+    setSynced(null)
+    try {
+      const r = await api.syncRepo(pid, repo)
+      setRepos(r.repos)
+      setSynced({ path: repo, ok: r.ok, message: r.message })
+    } catch (e) {
+      setSynced({ path: repo, ok: false, message: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setSyncing(null)
+    }
+  }
 
   const ask = (text: string) => {
     composeInChat(text)
@@ -151,8 +171,13 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                       <button className="btn sm" onClick={() => ask(`In ${where(r)}: fetch from origin and tell me what is new on the remote compared with my branch (don't merge or pull yet).`)}>
                         Fetch and compare
                       </button>
-                      <button className="btn sm" onClick={() => ask(`In ${where(r)}: pull the current branch from origin (fast-forward only). If that isn't possible, stop and show me why.`)}>
-                        Pull (ff only)
+                      <button
+                        className="btn sm"
+                        title="Fetch from origin and fast-forward this copy. Refuses if the tree is dirty or the branch has diverged."
+                        disabled={syncing === r.path}
+                        onClick={() => void sync(r.path)}
+                      >
+                        {syncing === r.path ? 'Syncing…' : 'Sync from origin'}
                       </button>
                       <button className="btn sm" onClick={() => ask(`In ${where(r)}: review the uncommitted changes with the reviewer subagent, then propose a commit message. Don't commit until I say so.`)}>
                         Review and propose commit
@@ -168,6 +193,13 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                         Change remote…
                       </button>
                     </div>
+                    {synced?.path === r.path && <p className={`small ${synced.ok ? 'muted' : 'error'}`}>{synced.message}</p>}
+                    {r.behind > 0 && (
+                      <p className="small warn-line">
+                        This copy is {r.behind} commit{r.behind === 1 ? '' : 's'} behind {r.upstream ?? 'origin'}
+                        {r.ahead ? ` and ${r.ahead} ahead` : ''}. A QA swarm would review the older code.
+                      </p>
+                    )}
 
                     <div className="repo-section">
                       <div className="section-head">
@@ -220,8 +252,9 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
             )
           })}
           <p className="muted small">
-            This view only reads. Every button puts a request in the chat for the agent, so branch changes, pulls and commits happen in the
-            sandbox where you can see them.
+            <b>These are the agent's working copies</b>, inside BitBob's sandbox — not the code BitBob itself is running, and not the folder on
+            your PC. They are what the agent reads, edits and reviews, and what a QA swarm looks at. "Sync from origin" fetches and
+            fast-forwards a copy; every other button puts a request in the chat so the agent does the work where you can see it.
           </p>
         </div>
       </div>
