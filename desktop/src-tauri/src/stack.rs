@@ -216,8 +216,9 @@ pub fn build_commit(body: &str) -> Option<String> {
 }
 
 /// Short HEAD of the checkout, so the launcher can say whether a deploy is still current.
-pub fn head_commit(repo: &str) -> Option<String> {
-    let (code, out) = run_capture("git", &["-C", repo, "rev-parse", "--short", "HEAD"], Duration::from_secs(4)).ok()?;
+pub fn head_commit(repo: &Path) -> Option<String> {
+    let dir = repo.to_str()?;
+    let (code, out) = run_capture("git", &["-C", dir, "rev-parse", "--short", "HEAD"], Duration::from_secs(4)).ok()?;
     if code != 0 { return None }
     let sha = out.trim().lines().next()?.trim().to_string();
     if sha.is_empty() || sha.len() > 40 { None } else { Some(sha) }
@@ -241,11 +242,6 @@ pub fn health_body(port: u16) -> (bool, Option<String>) {
     let ok = text.starts_with("HTTP/1.1 200") || text.starts_with("HTTP/1.0 200");
     let body = text.split("\r\n\r\n").nth(1).map(|b| b.to_string());
     (ok, if ok { body } else { None })
-}
-
-/// Just the boolean, for callers that only want to know whether it answered.
-pub fn health(port: u16) -> bool {
-    health_body(port).0
 }
 
 pub fn parse_distro_list(out: &str) -> Vec<String> {
