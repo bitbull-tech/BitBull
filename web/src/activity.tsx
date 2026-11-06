@@ -52,7 +52,20 @@ export function onLiveActivity(fn: (e: ActivityEvent) => void) {
 function add(e: ActivityEvent, live: boolean) {
   if (!e.local && events.some((x) => x.id === e.id)) return
   if (live) liveSubs.forEach((f) => f(e))
-  events = [...events, e].slice(-MAX)
+  // Keep the feed in time order rather than arrival order. History is replayed over SSE while
+  // the page is already running, so an error logged in the browser at 09:11 can arrive BEFORE
+  // yesterday's history and would otherwise sit in the middle of it. ISO timestamps compare
+  // lexicographically, and appending is still the normal case.
+  const last = events[events.length - 1]
+  if (!last || last.ts <= e.ts) {
+    events = [...events, e].slice(-MAX)
+  } else {
+    const next = [...events]
+    let i = next.length
+    while (i > 0 && next[i - 1].ts > e.ts) i--
+    next.splice(i, 0, e)
+    events = next.slice(-MAX)
+  }
   // Only events that arrive while the page is open pop up; history doesn't
   if (live && e.level === 'error') {
     // The same error repeating (e.g. a retry loop) bumps one toast instead of stacking new ones
@@ -65,6 +78,13 @@ function add(e: ActivityEvent, live: boolean) {
 
 /** Errors raised in the browser (failed requests etc.) join the same feed. */
 export function reportLocal(message: string, detail?: string, level: Level = 'error') {
+  // A request that fails at the network layer almost always means the server is restarting
+  // (a deploy), not that anything is wrong. Say that instead of "Failed to fetch" with a
+  // minified stack, and keep it a warning so it doesn't light up the error badge.
+  if (/^(failed to fetch|networkerror.*|load failed|the internet connection appears to be offline\.)$/i.test(message.trim())) {
+    message = 'Server unreachable - probably restarting (deploy). Retrying.'
+    level = 'warn'
+  }
   add({ id: localId--, ts: new Date().toISOString(), level, source: 'ui', message, detail, local: true }, true)
 }
 
