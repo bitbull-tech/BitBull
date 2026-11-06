@@ -321,11 +321,14 @@ pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&st
     };
     Ok(match action {
         Action::Setup => {
-            let src = source.unwrap_or("Ubuntu");
-            if !valid_distro(src) {
-                return Err("invalid source distro name".into());
+            // No source distro: setup.ps1 downloads and verifies Canonical's WSL image instead,
+            // which is the normal path now (docs/CLIENTS.md 5.2). Only pass -Source when the user
+            // explicitly names a distro to build the base from.
+            match source.map(str::trim).filter(|s| !s.is_empty()) {
+                None => ps(script("setup"), &[]),
+                Some(src) if valid_distro(src) => ps(script("setup"), &["-Source", src]),
+                Some(_) => return Err("invalid source distro name".into()),
             }
-            ps(script("setup"), &["-Source", src])
         }
         Action::Start => ps(script("start"), &[]),
         Action::Stop => ps(script("start"), &["-Stop"]),

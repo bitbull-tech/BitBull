@@ -88,10 +88,10 @@
     <details style="margin-top:10px">
       <summary>First-time setup (creates the locked-down <code>bitbob</code> distro)</summary>
       <div class="row" style="margin-top:8px">
-        <label>export a clean image from your existing distro: <input type="text" id="source" value="Ubuntu" size="10"></label>
+        <label>or build the base from a distro you already have (leave blank to download): <input type="text" id="source" value="" size="10" placeholder="Ubuntu"></label>
         <button data-action="setup">Run setup.ps1</button>
       </div>
-      <p class="hint">Needs: Windows 11 with WSL 2, an existing Ubuntu distro that has Docker, and a filled-in <code>.env</code> in the repo (copy <code>.env.example</code>). Takes a few minutes; output appears below.</p>
+      <p class="hint">Downloads Canonical's Ubuntu 24.04 image for WSL and checks it against the published SHA256 before importing, so nothing else needs to be installed first. Needs Windows 11 with WSL 2 and a filled-in <code>.env</code> in the repo (copy <code>.env.example</code>). Takes a few minutes; output appears below.</p>
     </details>
     <pre id="log"></pre>
   </div>
