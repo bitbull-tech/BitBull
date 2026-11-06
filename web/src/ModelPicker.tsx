@@ -160,6 +160,16 @@ export function ModelPicker({
                             <IconLock size={11} /> TEE
                           </span>
                         )}
+                        {m.tools && (
+                          <span className="tag" title="Supports tool calling (the agent needs this)">
+                            Tools
+                          </span>
+                        )}
+                        {m.contextLength ? (
+                          <span className="tag" title={`${m.contextLength.toLocaleString()} token context window`}>
+                            {m.contextLength >= 1000 ? `${Math.round(m.contextLength / 1000)}k` : m.contextLength}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mp-cost">
@@ -180,7 +190,18 @@ export function ModelPicker({
             })}
             {!filtered.length && <div className="mp-empty">No models match “{q}”.</div>}
           </div>
-          <div className="mp-foot">Prices are SayGM's live in / out rates · −% is the saving against list price</div>
+          <div className="mp-foot">
+            <span>Prices are SayGM's live in / out rates · −% is the saving against list price</span>
+            <button
+              className="link"
+              onClick={() => {
+                setOpen(false)
+                window.dispatchEvent(new CustomEvent('bitbob:browse-models'))
+              }}
+            >
+              See all models
+            </button>
+          </div>
         </div>
       )}
     </div>

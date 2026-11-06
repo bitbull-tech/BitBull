@@ -945,3 +945,36 @@ button.file-row:hover { background: var(--hover); }
 .sidebar { position: relative; }
 .side-resizer { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 5; }
 .side-resizer:hover { background: var(--accent); opacity: .5; }
+
+/* Models view: the whole SayGM catalogue, sortable, with the gateway's own record */
+.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mp-foot .link { white-space: nowrap; }
+.models-modal { width: min(1100px, 96vw); }
+.models-bar { display: flex; align-items: center; gap: 14px; padding: 10px 16px 0; flex-wrap: wrap; }
+.models-search { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--panel); }
+.models-search input { border: none; background: none; color: var(--text); font: inherit; outline: none; width: 100%; }
+.models-filters { display: flex; gap: 12px; }
+.models-body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; padding: 12px 16px 0; min-height: 0; }
+.models-table-wrap { overflow: auto; max-height: min(60vh, 560px); border: 1px solid var(--line); border-radius: 8px; }
+.models-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.models-table th { position: sticky; top: 0; z-index: 1; background: var(--panel); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; white-space: nowrap; font-weight: 600; }
+.models-table th.sorted { color: var(--accent); }
+.models-table th.num, .models-table td.num { text-align: right; }
+.models-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.models-table tbody tr { cursor: pointer; }
+.models-table tbody tr:hover { background: var(--hover); }
+.models-table tbody tr.sel { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.models-table tbody tr.cur td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.models-id { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+.models-detail { overflow: auto; max-height: min(60vh, 560px); border-left: 1px solid var(--line); padding-left: 14px; }
+.models-detail h3 { margin: 0 0 2px; font-size: 14px; }
+.models-detail h4 { margin: 16px 0 6px; font-size: 12px; color: var(--text-2); }
+.models-detail dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 12px 0; font-size: 12.5px; }
+.models-detail dt { color: var(--muted); }
+.models-detail dd { margin: 0; }
+.models-raw { background: var(--hover); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 11px; overflow: auto; max-height: 240px; white-space: pre-wrap; word-break: break-word; }
+.modal-foot { padding: 10px 16px 14px; }
+@media (max-width: 820px) {
+  .models-body { grid-template-columns: minmax(0, 1fr); }
+  .models-detail { border-left: none; border-top: 1px solid var(--line); padding: 12px 0 0; }
+}

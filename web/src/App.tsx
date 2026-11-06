@@ -12,6 +12,7 @@ import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
+import { ModelsDialog } from './ModelsDialog'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
 import { NetworkPrompt } from './network'
@@ -182,6 +183,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [sessions, setSessions] = useState<Session[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [models, setModels] = useState<Model[]>([])
+  // The model picker asks for this by event rather than a prop, so every picker gets it
+  // without threading a callback through each one (same pattern as bitbob:compose).
+  const [browsingModels, setBrowsingModels] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   // Project a new (draft) chat will be created in
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null)
@@ -293,6 +297,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const currentProjectId = active ? active.project_id : draftProjectId
   const currentProject = projects.find((p) => p.id === currentProjectId) ?? null
   const modelInfo = models.find((m) => m.id === model)
+  useEffect(() => {
+    const open = () => setBrowsingModels(true)
+    window.addEventListener('bitbob:browse-models', open)
+    return () => window.removeEventListener('bitbob:browse-models', open)
+  }, [])
 
   const newChat = (projectId: string | null = null) => {
     setActiveId(null)
@@ -670,6 +679,17 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           }}
           onLogout={onLogout}
           onModelsRefreshed={() => void loadModels()}
+        />
+      )}
+      {browsingModels && (
+        <ModelsDialog
+          models={models}
+          current={model}
+          onPick={(id) => {
+            setModel(id)
+            setBrowsingModels(false)
+          }}
+          onClose={() => setBrowsingModels(false)}
         />
       )}
       {filesFor && <FilesDialog project={filesFor === 'general' ? null : filesFor} startDir={filesDir} onClose={() => setFilesFor(null)} />}

@@ -28,7 +28,7 @@ import { brand, brandAsset } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
-import { listModels, publicModels } from "./models.js";
+import { listModels, modelDetail, publicModels } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
@@ -105,6 +105,13 @@ app.get("/api/config", async (c) =>
 );
 
 app.get("/api/models", async (c) => c.json({ models: await publicModels(c.req.query("refresh") === "1") }));
+
+/** One model in full, including the gateway's raw record (the Models view). */
+app.get("/api/models/:id", async (c) => {
+  const m = await modelDetail(c.req.param("id"));
+  if (!m) return c.json({ error: "not found" }, 404);
+  return c.json({ model: m });
+});
 
 app.post("/api/models/refresh", async (c) => {
   await listModels(true);

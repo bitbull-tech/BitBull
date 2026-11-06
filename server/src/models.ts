@@ -1,3 +1,4 @@
+import { redact } from "./activity.js";
 import { config } from "./config.js";
 
 export interface ModelInfo {
@@ -141,6 +142,17 @@ export async function estimateCost(modelId: string, inputTokens = 0, outputToken
 /** Model list for clients, without the raw gateway payload. */
 export async function publicModels(force = false) {
   return (await listModels(force)).map(({ raw: _raw, ...rest }) => rest);
+}
+
+/**
+ * One model, with the gateway's own record attached. This is the only place `raw` leaves the
+ * server: the Models view shows what SayGM publishes, so you don't have to go to SayGM to
+ * read it. Redacted like anything else user-visible, since the record is third-party data.
+ */
+export async function modelDetail(id: string, force = false) {
+  const m = (await listModels(force)).find((x) => x.id === id);
+  if (!m) return null;
+  return JSON.parse(redact(JSON.stringify(m))) as ModelInfo;
 }
 
 /** fetch() errors hide the real reason (DNS, refused, TLS, proxy) in .cause */
