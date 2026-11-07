@@ -128,7 +128,8 @@ function noteFor(turnId?: string): string | undefined {
 function toolHint(input: unknown): string {
   if (!input || typeof input !== "object") return "";
   const o = input as Record<string, unknown>;
-  const v = o.path ?? o.file ?? o.pattern ?? o.command ?? o.query;
+  // OpenCode names its argument filePath; the evidence counter already knew, the bubble didn't
+  const v = o.filePath ?? o.path ?? o.file ?? o.pattern ?? o.command ?? o.query;
   return typeof v === "string" && v ? ` · ${v.replace(/[\u0000-\u001f]/g, " ").slice(0, 60)}` : "";
 }
 

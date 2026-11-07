@@ -993,23 +993,7 @@ button.file-row:hover { background: var(--hover); }
 .theatre-room { display: flex; gap: 22px; justify-content: center; align-items: flex-start; padding: 18px; flex-wrap: wrap; }
 .theatre-room.phase-challenge .detective:first-child .sleuth { transform: scaleX(-1); }
 .detective { flex: 1 1 240px; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.sleuth { width: 128px; height: 140px; transition: transform .4s ease; }
-.sleuth .ink { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.sleuth .head { fill: color-mix(in srgb, currentColor 10%, transparent); }
-.sleuth .dot { fill: currentColor; stroke: none; }
-.sleuth.fam-anthropic { color: var(--fam-anthropic, #c2703c); }
-.sleuth.fam-openai { color: var(--fam-openai, #10a37f); }
-.sleuth.fam-google { color: var(--fam-google, #4285f4); }
-.sleuth.fam-open { color: var(--fam-open, #8b5cf6); }
-.sleuth.fam-other { color: var(--muted); }
-.sleuth .smoke circle { fill: currentColor; opacity: .25; animation: puff 2.6s ease-out infinite; }
-.sleuth .smoke circle:nth-child(2) { animation-delay: .5s; }
-.sleuth .smoke circle:nth-child(3) { animation-delay: 1s; }
 @keyframes puff { 0% { opacity: .3; transform: translateY(4px) scale(.7); } 100% { opacity: 0; transform: translateY(-14px) scale(1.3); } }
-.sleuth .stamp { fill: none; stroke-width: 2.4; stroke-linecap: round; }
-.sleuth .stamp.pass { stroke: var(--ok, #16a34a); }
-.sleuth .stamp.fail { stroke: var(--bad, #dc2626); }
-.sleuth .stamp circle { fill: color-mix(in srgb, currentColor 8%, transparent); }
 .detective .bubble {
   position: relative; min-height: 46px; width: 100%; padding: 9px 11px; border-radius: 10px;
   background: var(--panel-2); border: 1px solid var(--line); font-size: 12px; line-height: 1.45;
@@ -1028,3 +1012,42 @@ button.file-row:hover { background: var(--hover); }
 }
 .detective .evidence { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .detective .evidence.thin { color: var(--bad, #dc2626); font-weight: 600; }
+
+/* The sleuths: filled illustration, coat in the family colour via --coat (set inline), never a
+   .fam-* class on the svg — that name already carries a background for the picker's dots. */
+.sleuth { width: 150px; height: 188px; overflow: visible; transition: transform .4s ease; }
+.sleuth .coat { fill: var(--coat); }
+.sleuth .cape { fill: rgba(0, 0, 0, .18); }
+.sleuth .cravat { fill: color-mix(in srgb, var(--coat) 60%, #000); }
+.sleuth .eye { fill: #1d1b19; }
+.sleuth .hair { fill: #5b3b25; }
+.sleuth .line { fill: none; stroke: #3a2a1f; stroke-width: 2; stroke-linecap: round; }
+.sleuth .line.thin { stroke-width: 1.4; }
+.sleuth .hat { stroke: rgba(0, 0, 0, .35); stroke-width: 1; }
+.sleuth .hat.dark { fill: #26221f; }
+.sleuth .band { stroke: color-mix(in srgb, var(--coat) 70%, #000); stroke-width: 3; }
+.sleuth .seam { fill: none; stroke: rgba(0, 0, 0, .25); stroke-width: 1; }
+.sleuth .bow { stroke: rgba(0, 0, 0, .35); stroke-width: .8; }
+.sleuth .glass { fill: rgba(255, 255, 255, .18); stroke: #c9a227; stroke-width: 1.6; }
+.sleuth .chain { fill: none; stroke: #c9a227; stroke-width: 1; stroke-dasharray: 2 2; }
+.sleuth .stem { fill: none; stroke: #4a2f1d; stroke-width: 3; stroke-linecap: round; }
+.sleuth .bowl { fill: #6b4226; stroke: #3d2516; stroke-width: 1; }
+.sleuth .ember { fill: #ff8a3d; animation: ember 1.6s ease-in-out infinite; }
+.sleuth .smoke circle { fill: var(--text-2); opacity: .25; animation: puff 2.6s ease-out infinite; }
+.sleuth .smoke circle:nth-child(2) { animation-delay: .5s; }
+.sleuth .smoke circle:nth-child(3) { animation-delay: 1s; }
+.sleuth .handle { stroke: #5a3a22; stroke-width: 4; stroke-linecap: round; }
+.sleuth .lens { fill: rgba(170, 210, 255, .22); stroke: #c9a227; stroke-width: 2.4; }
+.sleuth .magnifier.sweep { transform-origin: 84px 136px; animation: sweep 3s ease-in-out infinite; }
+.sleuth .stamp { fill: none; stroke-width: 3; stroke-linecap: round; }
+.sleuth .stamp circle { fill: var(--panel); }
+.sleuth .stamp.pass { stroke: var(--ok, #16a34a); }
+.sleuth .stamp.fail { stroke: var(--bad, #dc2626); }
+@keyframes ember { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes sweep { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
+.detective .persona { font-size: 13.5px; }
+.detective .model-id { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+.detective .bubble[data-quip='true'] { font-style: italic; color: var(--text-2); }
+@media (prefers-reduced-motion: reduce) {
+  .sleuth .ember, .sleuth .magnifier.sweep { animation: none; }
+}
