@@ -16,7 +16,7 @@ export function dittoMcpHeaders(): Record<string, string> {
 }
 
 /**
- * Ditto groups saves into "sessions" (threads). Sent with these headers, a BitBob chat's
+ * Ditto groups saves into "sessions" (threads). Sent with these headers, a BitBull chat's
  * archive lands in one Ditto thread named like the chat, instead of Ditto's time-based
  * grouping that lumps unrelated chats together. The name header goes out once per thread.
  */
@@ -69,7 +69,7 @@ async function getClient(thread?: DittoThread): Promise<Client> {
   const inflight = connecting.get(key);
   if (inflight) return inflight;
   const p = (async () => {
-    const c = new Client({ name: "bitbob", version: "0.1.0" });
+    const c = new Client({ name: "bitbull", version: "0.1.0" });
     const headers: Record<string, string> = { ...dittoMcpHeaders() };
     if (thread) {
       headers[DITTO_SESSION_HEADER] = thread.id;
@@ -156,7 +156,7 @@ export async function archiveTurn(t: {
 }) {
   if (config.ditto.archive === "off") return;
   const content = [
-    `Conversation "${t.sessionTitle}"${t.project ? ` in project "${t.project}"` : ""} (BitBob, ${t.engine} / ${t.model})`,
+    `Conversation "${t.sessionTitle}"${t.project ? ` in project "${t.project}"` : ""} (BitBull, ${t.engine} / ${t.model})`,
     "",
     `${config.ownerName}: ${t.user}`,
     "",
@@ -174,7 +174,7 @@ export async function archiveTurn(t: {
       metadata: { sessionId: t.sessionId, engine: t.engine, model: t.model, project: t.project ?? null, kind: "chat-turn" },
     },
     undefined,
-    // one Ditto thread per BitBob chat, titled like it (project first so threads sort together)
+    // one Ditto thread per BitBull chat, titled like it (project first so threads sort together)
     { id: t.sessionId, title: t.project ? `${t.project} · ${t.sessionTitle}` : t.sessionTitle },
   );
 }
@@ -195,9 +195,9 @@ export async function indexFile(f: {
   if (!dittoEnabled()) return;
   const mb = f.size / 1024 / 1024;
   const content = [
-    `File "${f.name}"${f.project ? ` in project "${f.project}"` : ""} (BitBob)`,
+    `File "${f.name}"${f.project ? ` in project "${f.project}"` : ""} (BitBull)`,
     "",
-    `Stored on Hippius at hippius:${f.bucket}/${f.key} (encrypted; restore it through BitBob).`,
+    `Stored on Hippius at hippius:${f.bucket}/${f.key} (encrypted; restore it through BitBull).`,
     `In the workspace at ${f.relPath}. ${mb < 0.1 ? `${f.size} bytes` : `${mb.toFixed(1)} MB`}, sha256 ${f.sha256}.`,
   ].join("\n");
   await dittoCall("save_memory", {
@@ -213,7 +213,7 @@ export async function indexFile(f: {
 /** Back up a skill file to Ditto (idempotent by skill name + content hash). */
 export async function backupSkill(name: string, markdown: string, hash: string) {
   await dittoCall("save_memory", {
-    content: `BitBob skill "${name}":\n\n${markdown}`.slice(0, 20000),
+    content: `BitBull skill "${name}":\n\n${markdown}`.slice(0, 20000),
     source: config.ditto.source,
     sourceContext: `skill:${name}`,
     vendorId: `skill:${name}:${hash}`,
@@ -237,7 +237,7 @@ export async function listDittoTools(): Promise<string[]> {
 export async function probeDitto() {
   if (!dittoEnabled()) return { enabled: false };
   try {
-    const c = new Client({ name: "bitbob-probe", version: "0.1.0" });
+    const c = new Client({ name: "bitbull-probe", version: "0.1.0" });
     const transport = new StreamableHTTPClientTransport(new URL(config.ditto.mcpUrl), {
       requestInit: { headers: dittoMcpHeaders() },
     });

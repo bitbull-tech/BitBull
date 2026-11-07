@@ -5,7 +5,7 @@ import { headerSafe } from "./ditto.js";
 test("headerSafe: chat titles survive as HTTP header values", () => {
   // the bug: auto-titles end in U+2026 and HTTP headers are ByteStrings (<= 0xFF)
   assert.equal(headerSafe("Review this git repo and add it to this proje…"), "Review this git repo and add it to this proje...");
-  assert.equal(headerSafe("BitBob Coding Agent · QA swarm"), "BitBob Coding Agent - QA swarm");
+  assert.equal(headerSafe("BitBull Coding Agent · QA swarm"), "BitBull Coding Agent - QA swarm");
   assert.equal(headerSafe("Tom’s “plan”"), "Tom's \"plan\"");
   assert.equal(headerSafe("émoji 🎉 and 日本語"), "moji and");
   assert.equal(headerSafe("line\r\nbreak\ttab"), "line break tab");

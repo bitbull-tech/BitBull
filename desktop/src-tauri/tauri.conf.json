@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BitBob",
+  "productName": "BitBull",
   "version": "0.1.0",
-  "identifier": "io.bitbob.desktop",
+  "identifier": "io.bitbull.desktop",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "BitBob — launcher",
+        "title": "BitBull — launcher",
         "width": 820,
         "height": 760,
         "minWidth": 560,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bring a Claude.ai account export into BitBob: projects (name, instructions, docs, Claude's
+ * Bring a Claude.ai account export into BitBull: projects (name, instructions, docs, Claude's
  * memory files for the project), conversations (as chats, with their original dates), the
  * account-level memory, and artifacts.
  *
@@ -16,7 +16,7 @@
  * matched by name, conversations by their Claude id, files are not overwritten.
  *
  * Where things go:
- *   projects/*.json      → BitBob projects (description + instructions); each doc to
+ *   projects/*.json      → BitBull projects (description + instructions); each doc to
  *                          uploads/claude-import/docs/ in that project's workspace
  *   memories/*.json      → Claude's memory: per-project files and the project memory summary to
  *                          that project's uploads/claude-import/memory/; account-level files and the
@@ -27,7 +27,7 @@
  *   Attachments' extracted text is kept with the message; images are named only.
  *
  * The token is read from --token, GM_APP_TOKEN, or APP_TOKEN in the repo's .env (never printed).
- * Nothing is sent anywhere except the BitBob URL. Needs Node 20+.
+ * Nothing is sent anywhere except the BitBull URL. Needs Node 20+.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -161,7 +161,7 @@ const when = (s) => {
   return Number.isFinite(t) ? t : Date.now();
 };
 
-/** One Claude message → BitBob {role, content}. Text parts joined; attachments' text kept. */
+/** One Claude message → BitBull {role, content}. Text parts joined; attachments' text kept. */
 function shapeMessage(m) {
   const role = m.sender === "human" ? "user" : m.sender === "assistant" ? "assistant" : null;
   if (!role) return null;
@@ -203,7 +203,7 @@ function shapeConversation(c) {
   };
 }
 
-// ---------- talking to BitBob ----------
+// ---------- talking to BitBull ----------
 
 async function api(method, route, body, isForm = false) {
   const res = await fetch(`${GM}${route}`, {
@@ -331,7 +331,7 @@ async function api(method, route, body, isForm = false) {
     let forcedId = null;
     if (forced && !DRY) {
       const p = byName.get(forced.trim().toLowerCase());
-      if (!p) throw new Error(`--project "${forced}" is not a BitBob project (create it first, or let the projects import make it)`);
+      if (!p) throw new Error(`--project "${forced}" is not a BitBull project (create it first, or let the projects import make it)`);
       forcedId = p.id;
     }
     const shaped = convsIn.map(shapeConversation).filter((c) => c.id && c.messages.length && c.updatedAt >= SINCE);
@@ -360,9 +360,9 @@ async function api(method, route, body, isForm = false) {
       console.log();
     }
   }
-  console.log(`\nDone.${DRY ? "" : " Open BitBob: imported chats are in the sidebar under their dates; a chat's next message gives the agent the whole history as context."}`);
+  console.log(`\nDone.${DRY ? "" : " Open BitBull: imported chats are in the sidebar under their dates; a chat's next message gives the agent the whole history as context."}`);
   if (!flag("projects-only") && !flag("conversations-only")) {
-    console.log(`To seed Ditto, open a project in BitBob and send: "Read uploads/claude-import/memory/ and uploads/claude-import/docs/ and save every durable fact, decision and preference to Ditto with save_memory (source bitbob, Project: <name>), merging with related memories rather than duplicating." Do the same in an unfiled chat for the account-level memory.`);
+    console.log(`To seed Ditto, open a project in BitBull and send: "Read uploads/claude-import/memory/ and uploads/claude-import/docs/ and save every durable fact, decision and preference to Ditto with save_memory (source bitbull, Project: <name>), merging with related memories rather than duplicating." Do the same in an unfiled chat for the account-level memory.`);
   }
 })().catch((e) => {
   console.error(`\nImport failed: ${e.message}`);

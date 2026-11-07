@@ -1,6 +1,6 @@
-# BitBob in a sandbox.
+# BitBull in a sandbox.
 #   docker compose up -d             → pulls the published images, UI + API on http://localhost:8787
-#   docker compose logs -f bitbob-agent  → server output (also in data/logs/server.log)
+#   docker compose logs -f bitbull-agent  → server output (also in data/logs/server.log)
 #   docker compose logs -f egress    → every outbound request, allowed or refused
 #
 # This file PULLS the images that CI publishes; nothing is built on the machine that runs it.
@@ -9,21 +9,21 @@
 # or set COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml once, which is what
 # deploy.ps1, setup.ps1 and test-stack.ps1 do.
 #
-# BITBOB_IMAGE / BITBOB_EGRESS_IMAGE point somewhere else (a fork, a private mirror);
-# BITBOB_TAG picks the version. See docs/CLIENTS.md "Phase 5".
+# BITBULL_IMAGE / BITBULL_EGRESS_IMAGE point somewhere else (a fork, a private mirror);
+# BITBULL_TAG picks the version. See docs/CLIENTS.md "Phase 5".
 #
 #
-# The agent's shell, files and tools run inside bitbob-agent as an unprivileged user.
+# The agent's shell, files and tools run inside bitbull-agent as an unprivileged user.
 # It can read and write only the data folder (mounted at /data). Its network is
 # internal: no internet and no route to your home network or Windows. The only way
 # out is the egress proxy, which allows just the domains in egress/allowlist.txt.
 #
-#   browser ──127.0.0.1:8787──▶ gateway ──▶ bitbob-agent ──▶ egress ──allowlist──▶ internet
+#   browser ──127.0.0.1:8787──▶ gateway ──▶ bitbull-agent ──▶ egress ──allowlist──▶ internet
 #                                           (sandbox network, internal)
 
-# A second, isolated copy can run alongside the live one: BITBOB_SUFFIX renames the containers,
-# BITBOB_TAG its images, BITBOB_PORT its port and BITBOB_DATA_DIR its data. All default to the live
-# stack's values, so nothing changes unless you set them. See scripts/bitbob-wsl/test-stack.ps1.
+# A second, isolated copy can run alongside the live one: BITBULL_SUFFIX renames the containers,
+# BITBULL_TAG its images, BITBULL_PORT its port and BITBULL_DATA_DIR its data. All default to the live
+# stack's values, so nothing changes unless you set them. See scripts/bitbull-wsl/test-stack.ps1.
 
 x-hardening: &hardening
   read_only: true
@@ -34,16 +34,16 @@ x-hardening: &hardening
   restart: unless-stopped
 
 services:
-  bitbob-agent:
+  bitbull-agent:
     <<: *hardening
-    image: ${BITBOB_IMAGE:-ghcr.io/tommyhgunz14/bitbob}:${BITBOB_TAG:-latest}
-    container_name: bitbob-agent${BITBOB_SUFFIX:-}
+    image: ${BITBULL_IMAGE:-ghcr.io/tommyhgunz14/bitbull}:${BITBULL_TAG:-latest}
+    container_name: bitbull-agent${BITBULL_SUFFIX:-}
     env_file: .env
     environment:
       DATA_DIR: /data
-      # Shown in the Files view so you can find the same folder on the host (inside the bitbob distro
+      # Shown in the Files view so you can find the same folder on the host (inside the bitbull distro
       # on Windows). Set by deploy.ps1 / test-stack.ps1; empty in plain docker compose.
-      BITBOB_HOST_DATA_DIR: ${BITBOB_HOST_DATA_DIR:-}
+      BITBULL_HOST_DATA_DIR: ${BITBULL_HOST_DATA_DIR:-}
       HOST: 0.0.0.0
       # Bind mounts on Docker Desktop don't support SQLite's WAL shared memory reliably
       SQLITE_JOURNAL: DELETE
@@ -56,10 +56,10 @@ services:
       no_proxy: localhost,127.0.0.1,::1
       NODE_USE_ENV_PROXY: "1"
     volumes:
-      - ${BITBOB_DATA_DIR:-./data}:/data
-      # Folders you linked read-only (scripts/bitbob-wsl/link.ps1). Each one is already mounted
-      # ro,noexec in the bitbob distro; :ro here again. Only you can add one, from Windows.
-      - ${BITBOB_LINKS_DIR:-./links}:/links:ro
+      - ${BITBULL_DATA_DIR:-./data}:/data
+      # Folders you linked read-only (scripts/bitbull-wsl/link.ps1). Each one is already mounted
+      # ro,noexec in the bitbull distro; :ro here again. Only you can add one, from Windows.
+      - ${BITBULL_LINKS_DIR:-./links}:/links:ro
     networks: [sandbox]
     # Not just "egress exists": the agent's only route out is squid, and a container that is
     # running but not yet listening gives connect timeouts rather than a clean refusal, which
@@ -70,13 +70,13 @@ services:
     tmpfs:
       - /tmp:size=1g
     pids_limit: 512
-    mem_limit: ${BITBOB_MEMORY:-6g}
-    cpus: ${BITBOB_CPUS:-4}
+    mem_limit: ${BITBULL_MEMORY:-6g}
+    cpus: ${BITBULL_CPUS:-4}
 
   egress:
     <<: *hardening
-    image: ${BITBOB_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbob-egress}:${BITBOB_TAG:-latest}
-    container_name: bitbob-egress${BITBOB_SUFFIX:-}
+    image: ${BITBULL_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbull-egress}:${BITBULL_TAG:-latest}
+    container_name: bitbull-egress${BITBULL_SUFFIX:-}
     volumes:
       - ./egress/allowlist.txt:/etc/squid/allowlist.txt:ro
     tmpfs:
@@ -98,12 +98,12 @@ services:
 
   gateway:
     <<: *hardening
-    image: ${BITBOB_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbob-egress}:${BITBOB_TAG:-latest}
-    container_name: bitbob-gateway${BITBOB_SUFFIX:-}
-    command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:bitbob-agent:8787"]
+    image: ${BITBULL_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbull-egress}:${BITBULL_TAG:-latest}
+    container_name: bitbull-gateway${BITBULL_SUFFIX:-}
+    command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:bitbull-agent:8787"]
     # Only reachable from this computer. Put a reverse proxy with HTTPS in front to expose it.
     ports:
-      - "127.0.0.1:${BITBOB_PORT:-8787}:8787"
+      - "127.0.0.1:${BITBULL_PORT:-8787}:8787"
     networks: [sandbox, outside]
     # egress must be LISTENING (the agent's only route out). The agent only has to exist: making
     # the gateway wait for it to be *healthy* fails the whole `up` whenever a first start is slow,
@@ -111,7 +111,7 @@ services:
     depends_on:
       egress:
         condition: service_healthy
-      bitbob-agent:
+      bitbull-agent:
         condition: service_started
     pids_limit: 128
     mem_limit: 128m

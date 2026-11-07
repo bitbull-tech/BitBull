@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-const DATA = mkdtempSync(path.join(tmpdir(), "bitbob-storage-"));
+const DATA = mkdtempSync(path.join(tmpdir(), "bitbull-storage-"));
 process.env.DATA_DIR = DATA;
 process.env.APP_TOKEN = "test-token";
 process.env.DITTO_ARCHIVE = "off";
@@ -103,7 +103,7 @@ test("tampered or truncated data is refused, not silently returned", async () =>
   await assert.rejects(storage.__test.decryptBuffer(truncated, out), /./);
 
   const notOurs = Buffer.concat([Buffer.from("XXXX"), sent.body.subarray(4)]);
-  await assert.rejects(storage.__test.decryptBuffer(notOurs, out), /not a BitBob-encrypted file/);
+  await assert.rejects(storage.__test.decryptBuffer(notOurs, out), /not a BitBull-encrypted file/);
 });
 
 test("a different key cannot read it", async () => {
@@ -156,7 +156,7 @@ test("nothing is mirrored while storage is switched off", () => {
 test("stored paths from the database can't leave the workspace", async () => {
   const { insideWorkspace } = await import("./storage.js");
   const { symlinkSync } = await import("node:fs");
-  const ws = mkdtempSync(path.join(tmpdir(), "bitbob-ws-"));
+  const ws = mkdtempSync(path.join(tmpdir(), "bitbull-ws-"));
   mkdirSync(path.join(ws, "uploads"));
   assert.equal(insideWorkspace(ws, "uploads/a.txt"), path.join(ws, "uploads", "a.txt"));
   assert.equal(insideWorkspace(ws, "new/dir/b.txt"), path.join(ws, "new", "dir", "b.txt"));

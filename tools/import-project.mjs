@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Move a Claude.ai project into BitBob.
+ * Move a Claude.ai project into BitBull.
  *
- *   node tools/import-project.mjs <export folder> [--bitbob http://localhost:8787] [--token <APP_TOKEN>]
+ *   node tools/import-project.mjs <export folder> [--bitbull http://localhost:8787] [--token <APP_TOKEN>]
  *                                                 [--dry-run] [--overwrite]
  *
- * The export folder is the layout Claude writes when asked to "export this project for BitBob":
+ * The export folder is the layout Claude writes when asked to "export this project for BitBull":
  *
  *   project.json      name, description, instructions, color, integrations, docs notes
  *   docs/*.md         project docs (uploaded to uploads/claude-import/docs/)
@@ -13,12 +13,12 @@
  *   README.md         for humans
  *
  * What it does, in order: creates the project (or reuses one with the same name), uploads the
- * files through BitBob's own API so they land in the project's workspace and get mirrored like any
+ * files through BitBull's own API so they land in the project's workspace and get mirrored like any
  * other upload, writes uploads/claude-import/INDEX.md, and prints the chat message that asks
- * BitBob to seed Ditto from the memory files. Nothing is sent anywhere but the BitBob URL given.
+ * BitBull to seed Ditto from the memory files. Nothing is sent anywhere but the BitBull URL given.
  *
- * The token is read from --token, BITBOB_APP_TOKEN, or the APP_TOKEN line of a .env file next to
- * this repo (never printed). Runs on the PC that runs BitBob; needs Node 20+.
+ * The token is read from --token, BITBULL_APP_TOKEN, or the APP_TOKEN line of a .env file next to
+ * this repo (never printed). Runs on the PC that runs BitBull; needs Node 20+.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -29,17 +29,17 @@ const one = (n, d) => {
   const i = args.indexOf(`--${n}`);
   return i >= 0 && args[i + 1] ? args[i + 1] : d;
 };
-const VALUED = new Set(["--bitbob", "--token"]);
+const VALUED = new Set(["--bitbull", "--token"]);
 const folder = args.find((a, i) => !a.startsWith("--") && !VALUED.has(args[i - 1] ?? ""));
 if (!folder || flag("help")) {
-  console.log("usage: node tools/import-project.mjs <export folder> [--bitbob url] [--token t] [--dry-run] [--overwrite]");
+  console.log("usage: node tools/import-project.mjs <export folder> [--bitbull url] [--token t] [--dry-run] [--overwrite]");
   process.exit(folder ? 0 : 2);
 }
-const BitBob = (one("bitbob", process.env.BITBOB_URL ?? "http://localhost:8787")).replace(/\/+$/, "");
+const BitBull = (one("bitbull", process.env.BITBULL_URL ?? "http://localhost:8787")).replace(/\/+$/, "");
 const DRY = flag("dry-run");
 
 function readToken() {
-  const t = one("token", process.env.BITBOB_APP_TOKEN);
+  const t = one("token", process.env.BITBULL_APP_TOKEN);
   if (t) return t;
   const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
   for (const env of [path.join(here, "..", ".env"), path.join(process.cwd(), ".env")]) {
@@ -51,7 +51,7 @@ function readToken() {
 }
 const TOKEN = readToken();
 if (!TOKEN && !DRY) {
-  console.error("No token: pass --token, set BITBOB_APP_TOKEN, or run from the repo (reads APP_TOKEN from .env).");
+  console.error("No token: pass --token, set BITBULL_APP_TOKEN, or run from the repo (reads APP_TOKEN from .env).");
   process.exit(2);
 }
 
@@ -82,7 +82,7 @@ const docs = collect("docs");
 const memory = collect("memory");
 
 async function api(method, route, body, isForm = false) {
-  const res = await fetch(`${BitBob}${route}`, {
+  const res = await fetch(`${BitBull}${route}`, {
     method,
     headers: { Authorization: `Bearer ${TOKEN}`, ...(isForm ? {} : { "content-type": "application/json" }) },
     body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
@@ -104,7 +104,7 @@ function indexMd(project) {
   return [
     `# Imported from Claude.ai: ${meta.name}`,
     "",
-    `Imported ${new Date().toISOString().slice(0, 10)} into BitBob project **${project.name}** (${project.id}).`,
+    `Imported ${new Date().toISOString().slice(0, 10)} into BitBull project **${project.name}** (${project.id}).`,
     meta.exportedFrom ? `Source: ${meta.exportedFrom}, exported ${meta.exportedAt ?? "(date unknown)"}.` : "",
     "",
     "## Docs",
@@ -129,13 +129,13 @@ function indexMd(project) {
 const seedPrompt = (project) =>
   [
     `This project was just imported from Claude.ai. Read uploads/claude-import/INDEX.md, then each file in uploads/claude-import/memory/.`,
-    `For every durable fact, decision, preference or lesson in them, save one concise memory to Ditto with save_memory (source "bitbob", include "Project: ${project.name}"),`,
+    `For every durable fact, decision, preference or lesson in them, save one concise memory to Ditto with save_memory (source "bitbull", include "Project: ${project.name}"),`,
     `merging with any related memory Ditto already returns rather than duplicating. Keep the [stated] distinction: say "Tom said" for tagged lines and "Claude found/did" for untagged ones.`,
     `Don't save secrets, keys or anything that looks like one. When done, list what you saved as a table (memory, source file) and what you skipped as duplicates.`,
   ].join(" ");
 
 (async () => {
-  console.log(`Import "${meta.name}" -> ${BitBob}${DRY ? " (dry run)" : ""}`);
+  console.log(`Import "${meta.name}" -> ${BitBull}${DRY ? " (dry run)" : ""}`);
   console.log(`  ${docs.length} doc(s), ${memory.length} memory file(s), integrations: ${integrations.join(", ") || "none"}`);
   if (DRY) {
     for (const f of [...docs, ...memory]) console.log(`  would upload ${f.rel} (${f.bytes} bytes)`);
@@ -193,7 +193,7 @@ const seedPrompt = (project) =>
   await api("POST", `/api/projects/${project.id}/files`, idx, true);
   console.log(`  uploaded ${saved} file(s) to ${target}/ (+ INDEX.md)${skipped.length ? `, ${skipped.length} already there (use --overwrite to replace)` : ""}`);
 
-  console.log(`\nDone. Open the project "${project.name}" in BitBob and send this in a new chat to seed Ditto:\n`);
+  console.log(`\nDone. Open the project "${project.name}" in BitBull and send this in a new chat to seed Ditto:\n`);
   console.log(seedPrompt(project));
 })().catch((e) => {
   console.error(`\nImport failed: ${e.message}`);

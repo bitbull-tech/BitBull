@@ -1,6 +1,6 @@
-# BitBob — architecture & engine proposal
+# BitBull — architecture & engine proposal
 
-> Visual version with diagrams: **BitBob Platform Blueprint** (claude.ai artifact, Oct 2026).
+> Visual version with diagrams: **BitBull Platform Blueprint** (claude.ai artifact, Oct 2026).
 
 ## End goal
 
@@ -20,7 +20,7 @@ Ditto memory, under the grounding rule from the WW2 Heritage Framework decision 
 
 ```
  Browser UI (React)  ─┐                         ┌─► SayGM  /v1/chat/completions  (OpenAI-compatible)
- curl / scripts      ─┼─► BitBob server (Hono, Node)│
+ curl / scripts      ─┼─► BitBull server (Hono, Node)│
  other agents        ─┘   │  bearer APP_TOKEN    └─► SayGM  /v1/messages          (Anthropic-compatible)
                           │
                           ├─ AgentEngine interface
@@ -152,7 +152,7 @@ MCP endpoint and a live probe. Projects opt in; engines receive only the enabled
 
 Engine-provided: read/write/edit/apply_patch/glob/grep, bash, subagents (`task`), todo list,
 webfetch/websearch, AGENTS.md/CLAUDE.md, compaction. Added in this pass: plan mode
-(read-only `bitbob-plan` agent / Agent SDK plan mode), todo checklist in the UI, ten skills
+(read-only `bitbull-plan` agent / Agent SDK plan mode), todo checklist in the UI, ten skills
 (`coding-workflow`, `git-workflow`, `verify-changes`, `code-review`, `debug-systematically`,
 `repo-onboarding`, `project-recall`, `archive-ingest`, `heritage-experience`, `atlas-studio`).
 Gaps: per-action approvals (the `question` tool is disabled because nothing can answer it),

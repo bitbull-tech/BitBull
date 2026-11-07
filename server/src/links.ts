@@ -4,11 +4,11 @@ import path from "node:path";
 /**
  * Read-only links: folders on the user's computer that the agent may read but never change.
  *
- * They are mounted at /links/<name> by the user, from Windows (scripts/bitbob-wsl/link.ps1):
- * read-only and no-exec in the bitbob distro, and read-only again into this container. BitBob only
+ * They are mounted at /links/<name> by the user, from Windows (scripts/bitbull-wsl/link.ps1):
+ * read-only and no-exec in the bitbull distro, and read-only again into this container. BitBull only
  * lists them; nothing here (or in the UI) can add, remove or widen one.
  */
-export const LINKS_ROOT = process.env.BITBOB_LINKS_PATH || "/links";
+export const LINKS_ROOT = process.env.BITBULL_LINKS_PATH || "/links";
 
 export interface LinkedFolder {
   name: string;

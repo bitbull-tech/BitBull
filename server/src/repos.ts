@@ -20,7 +20,7 @@ const run = promisify(execFile);
  * fires on `git status`, and a `filter.<x>.clean` referenced from the repo's `.gitattributes`
  * fires too — which would run as this server process. Three layers, because no single one holds:
  *
- *  1. a scrubbed environment: nothing git spawns ever sees BitBob's secrets;
+ *  1. a scrubbed environment: nothing git spawns ever sees BitBull's secrets;
  *  2. `-c` overrides for every exec knob that can be named up front;
  *  3. a refusal when the repo's own config defines any exec-capable key, which is the only way
  *     to cover `filter.*.clean` / `diff.*.textconv`, whose driver names are arbitrary.
@@ -59,7 +59,7 @@ const GIT_SAFE_FLAGS = [
 const EXEC_KEY = /^(core\.(fsmonitor|hookspath|sshcommand|pager|editor|gitproxy|askpass)|diff\.external|credential\.(helper|.*\.helper)|uploadpack\.packobjectshook|gpg\..*program|sequence\.editor|.*\.textconv|filter\..*\.(clean|smudge|process)|alias\..*|ssh\.variant|init\.templatedir)$/i;
 
 /**
- * Environment for git: no BitBob secrets, no user config, no interactive prompts.
+ * Environment for git: no BitBull secrets, no user config, no interactive prompts.
  * The null device (never a plantable path) stands in for the global config on both platforms;
  * Windows needs a handful of ambient variables to start a process at all, and none are secrets.
  */

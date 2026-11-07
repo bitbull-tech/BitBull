@@ -18,9 +18,9 @@ import { Settings } from './Settings'
 import { useTheme } from './theme'
 import { NetworkPrompt } from './network'
 
-const MODEL_KEY = 'bitbob-model'
-const EXPANDED_KEY = 'bitbob-expanded'
-const DEFAULT_SEEN_KEY = 'bitbob-default-model-seen'
+const MODEL_KEY = 'bitbull-model'
+const EXPANDED_KEY = 'bitbull-expanded'
+const DEFAULT_SEEN_KEY = 'bitbull-default-model-seen'
 const lsGet = (k: string) => {
   try {
     return localStorage.getItem(k)
@@ -50,7 +50,7 @@ export default function App() {
       if (e instanceof Unauthorized) setAuthed(false)
       else {
         setAuthed(false)
-        setError('Cannot reach the BitBob server. Is `npm run dev` running?')
+        setError('Cannot reach the BitBull server. Is `npm run dev` running?')
       }
     }
   }, [])
@@ -126,7 +126,7 @@ function groupBy(list: Session[], label: (ts: number) => string): Array<[string,
   return out
 }
 
-const SIDE_W_KEY = 'bitbob-side-width'
+const SIDE_W_KEY = 'bitbull-side-width'
 /** Drag handle on the sidebar's right edge; the width is a CSS variable on .shell, remembered per browser. */
 function useSidebarWidth() {
   const [w, setW] = useState(() => {
@@ -185,7 +185,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [projects, setProjects] = useState<Project[]>([])
   const [models, setModels] = useState<Model[]>([])
   // The model picker asks for this by event rather than a prop, so every picker gets it
-  // without threading a callback through each one (same pattern as bitbob:compose).
+  // without threading a callback through each one (same pattern as bitbull:compose).
   const [browsingModels, setBrowsingModels] = useState(false)
   const [theatre, setTheatre] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -237,8 +237,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const { unseen } = useActivity()
   useEffect(() => {
     const close = () => setActivityOpen(false)
-    window.addEventListener('bitbob:compose', close)
-    return () => window.removeEventListener('bitbob:compose', close)
+    window.addEventListener('bitbull:compose', close)
+    return () => window.removeEventListener('bitbull:compose', close)
   }, [])
 
   const setModel = (id: string) => {
@@ -301,8 +301,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const modelInfo = models.find((m) => m.id === model)
   useEffect(() => {
     const open = () => setBrowsingModels(true)
-    window.addEventListener('bitbob:browse-models', open)
-    return () => window.removeEventListener('bitbob:browse-models', open)
+    window.addEventListener('bitbull:browse-models', open)
+    return () => window.removeEventListener('bitbull:browse-models', open)
   }, [])
 
   const newChat = (projectId: string | null = null) => {
@@ -638,7 +638,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               swarm={swarm}
               onOpen={() => setTheatre(true)}
               onUpdate={setSwarm}
-              onFinalTurn={(sessionId, turnId) => window.dispatchEvent(new CustomEvent('bitbob:turn-started', { detail: { sessionId, turnId } }))}
+              onFinalTurn={(sessionId, turnId) => window.dispatchEvent(new CustomEvent('bitbull:turn-started', { detail: { sessionId, turnId } }))}
             />
           ) : (
             <button

@@ -12,19 +12,19 @@ import { execCapableConfig } from "./repos.js";
 import { record } from "./activity.js";
 
 /**
- * BitBob's own MCP server, attached to both engines as "bitbob": tools that need the user or the
+ * BitBull's own MCP server, attached to both engines as "bitbull": tools that need the user or the
  * server rather than the sandbox: request_network_access, and ditto_review (Ditto's own review
  * service on a repo in the workspace: the CLI runs here with the Ditto key, never in the agent's shell).
  *
  * Served by the main listener (the engines reach it at 127.0.0.1) and guarded by a token
  * minted at startup, never written anywhere. The token is not a boundary against the agent
- * itself (it is in its engine's config); it stops anything else from calling in. x-bitbob-session
+ * itself (it is in its engine's config); it stops anything else from calling in. x-bitbull-session
  * is a hint for attribution, not an identity. The tools only ever *ask* the user.
  */
 
-export const MCP_PATH = "/mcp/bitbob";
+export const MCP_PATH = "/mcp/bitbull";
 const TOKEN = randomBytes(24).toString("hex");
-export const BITBOB_MCP_HEADER = "x-bitbob-internal";
+export const BITBULL_MCP_HEADER = "x-bitbull-internal";
 
 /** Chats with a turn running right now (to say which chat a request came from). */
 let runningSessions: () => string[] = () => [];
@@ -32,14 +32,14 @@ export function setRunningSessions(fn: () => string[]) {
   runningSessions = fn;
 }
 
-export const bitbobMcpEnabled = () => proxied();
+export const bitbullMcpEnabled = () => proxied();
 
 /** Connection details for the engines; sessionId is added when the engine runs per chat. */
-export function bitbobMcpServer(sessionId?: string): { url: string; headers: Record<string, string> } | null {
-  if (!bitbobMcpEnabled()) return null;
+export function bitbullMcpServer(sessionId?: string): { url: string; headers: Record<string, string> } | null {
+  if (!bitbullMcpEnabled()) return null;
   return {
     url: `http://127.0.0.1:${config.port}${MCP_PATH}`,
-    headers: { [BITBOB_MCP_HEADER]: TOKEN, ...(sessionId ? { "x-bitbob-session": sessionId } : {}) },
+    headers: { [BITBULL_MCP_HEADER]: TOKEN, ...(sessionId ? { "x-bitbull-session": sessionId } : {}) },
   };
 }
 
@@ -51,7 +51,7 @@ export function mcpTokenOk(given: string | undefined) {
 }
 
 function build(sessionHint: string | undefined) {
-  const server = new McpServer({ name: "bitbob", version: "1.0.0" });
+  const server = new McpServer({ name: "bitbull", version: "1.0.0" });
   server.registerTool(
     "request_network_access",
     {
@@ -85,7 +85,7 @@ function build(sessionHint: string | undefined) {
         "Prerequisites the owner controls: the repo's GitHub origin must be set up for Ditto Review in their Ditto workspace, and the Ditto key must have review access; " +
         "otherwise the tool returns the service's refusal, which you report rather than work around. preview=true is offline and only shows what would be sent.",
       inputSchema: {
-        repo: z.string().describe("Workspace-relative path of the git clone, e.g. BitBob or my-repo ('.' for the workspace root if it is a clone)"),
+        repo: z.string().describe("Workspace-relative path of the git clone, e.g. BitBull or my-repo ('.' for the workspace root if it is a clone)"),
         mode: z.enum(["working", "staged", "base"]).default("working").describe("working = staged+unstaged+untracked; staged = index only; base = everything since the merge base with `base`"),
         base: z.string().optional().describe("Branch or ref for mode=base, e.g. main"),
         profile: z.enum(["quick", "standard", "deep"]).default("quick"),
@@ -135,7 +135,7 @@ function build(sessionHint: string | undefined) {
               PATH: process.env.PATH ?? "",
               // Its own HOME, and no user/system git config at all: $HOME is writable by the
               // agent (it shares this uid), so a planted ~/.gitconfig must not steer the git
-              // the CLI runs. Nothing else of BitBob's environment is passed on.
+              // the CLI runs. Nothing else of BitBull's environment is passed on.
               HOME: cliHome,
               GIT_CONFIG_NOSYSTEM: "1",
               GIT_CONFIG_GLOBAL: "/dev/null",
@@ -170,7 +170,7 @@ function build(sessionHint: string | undefined) {
 /** Stateless Streamable HTTP: a fresh server per request (tools keep their state in egress.ts). */
 export async function handleMcp(req: Request): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  const server = build(req.headers.get("x-bitbob-session") ?? undefined);
+  const server = build(req.headers.get("x-bitbull-session") ?? undefined);
   await server.connect(transport);
   try {
     return await transport.handleRequest(req);

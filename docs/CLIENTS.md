@@ -9,7 +9,7 @@ Decisions taken:
 | Question | Decision |
 |---|---|
 | Desktop shell | **Tauri 2** (Rust + the existing React bundle; same codebase can build iOS later) |
-| What the desktop app does | **Manages the local Docker stack and connects to remote BitBobs** |
+| What the desktop app does | **Manages the local Docker stack and connects to remote BitBulls** |
 | iOS | **PWA first** (no Mac, no Apple account); native revisited after real use |
 | Auth | **Per-device tokens before anything leaves localhost** |
 
@@ -17,7 +17,7 @@ Decisions taken:
 
 The server API is the only contract (`README.md` → API table). Clients stay thin: no
 business logic, no model routing, no engine knowledge. Everything the agent does keeps
-happening inside the sandbox; clients only ever talk to `bitbob-gateway`, so **no sandbox wall
+happening inside the sandbox; clients only ever talk to `bitbull-gateway`, so **no sandbox wall
 moves for any of this** and `egress/allowlist.txt` gains nothing.
 
 ## Phase 0 — make the server client-ready
@@ -99,13 +99,13 @@ re-keying everything.
 `desktop/` in this repo (see its README). It loads the UI from the local server rather than
 bundling `web/dist`, so the UI is identical to the browser and never out of step with the
 server. Done: machine checks with a "next step" line, the five scripts as buttons with live
-output, BitBob in its own IPC-less window signed in from `.env`, tray. Not yet: remote profiles,
+output, BitBull in its own IPC-less window signed in from `.env`, tray. Not yet: remote profiles,
 notifications, native drag-and-drop, keychain, Linux/macOS packaging. Original table:
 
 | Capability | Notes |
 |---|---|
 | Connection profiles | "Local (managed)" or "Remote URL + token"; several saved, switchable |
-| Local stack control | start / stop / status / logs / update. Windows: drives the existing `scripts/bitbob-wsl/*.ps1`. Linux/macOS: `docker compose` directly |
+| Local stack control | start / stop / status / logs / update. Windows: drives the existing `scripts/bitbull-wsl/*.ps1`. Linux/macOS: `docker compose` directly |
 | First-run setup | Checks for WSL/Docker, offers to run `setup.ps1`, collects `.env` values |
 | Tray + notifications | Turn finished, turn failed, server unreachable (needs 0.1) |
 | Native drag-and-drop | Real OS file and folder drops into the existing upload API |
@@ -116,7 +116,7 @@ The Rust side only supervises processes and the OS integration; it never holds m
 and never talks to SayGM.
 
 The app as built assumes a checkout: its **Repository and stack** setting points at
-`D:\github\BitBob` and it runs that folder's own scripts, so the app and the scripts can
+`D:\github\BitBull` and it runs that folder's own scripts, so the app and the scripts can
 never drift apart. That is right for development and wrong for everyone else — Phase 5
 below keeps it as the `--dev` path and replaces the default.
 
@@ -129,7 +129,7 @@ below keeps it as the `--dev` path and replaces the default.
   enable-linger` so it survives logout.
 - `scripts/linux/update.sh` mirroring `deploy.ps1`'s semantics: rebuild, `squid -k
   reconfigure` (never a proxy restart mid-flight), and never touch the data directory.
-- Data stays outside the repo (`~/bitbob-data` by default, `BITBOB_DATA_DIR` to move it).
+- Data stays outside the repo (`~/bitbull-data` by default, `BITBULL_DATA_DIR` to move it).
 
 ## Phase 4 — iOS
 
@@ -147,7 +147,7 @@ below keeps it as the `--dev` path and replaces the default.
 ### B. Native (weeks, only if the PWA proves the use)
 
 Tauri 2 iOS reuses the whole web codebase and `client-core`; SwiftUI would be a rewrite of
-the UI for the same features. Adds share-sheet ingest ("send this photo to BitBob"), background
+the UI for the same features. Adds share-sheet ingest ("send this photo to BitBull"), background
 and resumable uploads for large media, and real APNs.
 
 **Requires a Mac** (or macOS CI) with Xcode plus an Apple Developer account (~$99/yr) for
@@ -158,21 +158,21 @@ signing is a separate certificate. None of this is needed for 0–4A.
 
 Agreed with Tom on 5 Nov 2026, after the Windows desktop app was built and installed.
 
-Everything above assumes the person running BitBob also builds it. For an open-source
-release that assumption breaks: most people will use BitBob **on** their projects, not work
-on BitBob itself. The symptom is visible in the launcher today — its most prominent control
-is **Repository and stack**, a path to BitBob's own checkout. Two different things are
-called "the repo" (BitBob's source, and the user's projects), and the only one the user
+Everything above assumes the person running BitBull also builds it. For an open-source
+release that assumption breaks: most people will use BitBull **on** their projects, not work
+on BitBull itself. The symptom is visible in the launcher today — its most prominent control
+is **Repository and stack**, a path to BitBull's own checkout. Two different things are
+called "the repo" (BitBull's source, and the user's projects), and the only one the user
 cares about is the one that isn't shown. The fix is not to redesign that control but to
 delete it from the normal path.
 
-Five pieces. 5.1 and 5.2 are blockers — without them a new user cannot install BitBob at
+Five pieces. 5.1 and 5.2 are blockers — without them a new user cannot install BitBull at
 all. 5.3–5.5 are what make it feel like a product.
 
 ### 5.1 Published images, not a build on the user's machine — **done (5 Nov 2026)**
 
-`docker-compose.yml` now references `ghcr.io/tommyhgunz14/bitbob` and `…/bitbob-egress`
-(overridable with `BITBOB_IMAGE` / `BITBOB_EGRESS_IMAGE`, versioned with `BITBOB_TAG`), and
+`docker-compose.yml` now references `ghcr.io/tommyhgunz14/bitbull` and `…/bitbull-egress`
+(overridable with `BITBULL_IMAGE` / `BITBULL_EGRESS_IMAGE`, versioned with `BITBULL_TAG`), and
 builds nothing. The `build:` keys moved to `docker-compose.dev.yml`, which `deploy.ps1`,
 `setup.ps1` and `test-stack.ps1` select through `COMPOSE_FILE`, so the development loop is
 unchanged. CI's `docker` job publishes **both** images from a matrix, tagging every push with
@@ -197,8 +197,8 @@ The original plan:
 plus two Docker builds inside the distro: minutes, and it requires the whole source tree to
 be present and a toolchain to work.
 
-- CI builds and pushes `ghcr.io/tommyhgunz14/bitbob:<version>` and
-  `ghcr.io/tommyhgunz14/bitbob-egress:<version>` on tag.
+- CI builds and pushes `ghcr.io/tommyhgunz14/bitbull:<version>` and
+  `ghcr.io/tommyhgunz14/bitbull-egress:<version>` on tag.
 - The compose file gets plain `image:` keys; the `build:` keys move behind a `dev` profile,
   so `docker compose --profile dev up --build` stays exactly today's inner loop.
 - First run becomes `docker compose pull` — seconds, and the source tree stops being needed
@@ -208,7 +208,7 @@ The security argument is stronger than the convenience one. Today every user run
 npm resolved on their machine that morning, inside a container that an agent has a shell in.
 Pinned, reproducible images built by CI — ideally with provenance attestation and an SBOM —
 are a far better story for a project whose selling point is the sandbox. This is also what
-makes `BITBOB_TAG` in the compose file mean something: today it defaults to `local`.
+makes `BITBULL_TAG` in the compose file mean something: today it defaults to `local`.
 
 ### 5.2 Bootstrap the distro from a downloaded rootfs — **written 5 Nov 2026, untested**
 
@@ -236,25 +236,25 @@ throwaway `-Distro` name with the live stack stopped, since both would bind 127.
 The original plan:
 
 
-`scripts/bitbob-wsl/setup.ps1` takes `-Source Ubuntu` and exports a clean `ubuntu:24.04`
+`scripts/bitbull-wsl/setup.ps1` takes `-Source Ubuntu` and exports a clean `ubuntu:24.04`
 image **out of an existing distro that already has Docker**. No new user clears that: they
 would need Ubuntu and Docker installed before they can install the thing that installs
 Docker. It is a chicken-and-egg bootstrap that only works because Tom's machine already had
 both.
 
 - Fetch Canonical's published Ubuntu 24.04 WSL rootfs, verify it against a checksum pinned
-  in the installer, and `wsl --import bitbob <dir> <tarball>`.
+  in the installer, and `wsl --import bitbull <dir> <tarball>`.
 - The only remaining prerequisite is WSL2 itself, which the wizard installs with
   `wsl --install --no-distribution` (plus a reboot prompt, and a clear message when
   virtualization is off in firmware — that one needs the user's BIOS, not a script).
 - `provision.sh` is unchanged: it already installs Docker Engine **inside** the distro via
   `get.docker.com`, with userns remapping. Keep that. Requiring Docker Desktop would be a
-  licensing and install burden most competitors carry and BitBob does not.
+  licensing and install burden most competitors carry and BitBull does not.
 
 ### 5.3 A versioned runtime payload the app owns
 
-`docker-compose.yml`, `egress/allowlist.txt`, `provision.sh` and `scripts/bitbob-wsl/*.ps1`
-ship inside the installer and unpack to `%LOCALAPPDATA%\BitBob\runtime\<version>\`.
+`docker-compose.yml`, `egress/allowlist.txt`, `provision.sh` and `scripts/bitbull-wsl/*.ps1`
+ship inside the installer and unpack to `%LOCALAPPDATA%\BitBull\runtime\<version>\`.
 
 - The app then knows which runtime version it is on, instead of pointing at a folder the
   user may have edited. "Deploy after a code change" — a developer's verb — becomes
@@ -267,14 +267,14 @@ ship inside the installer and unpack to `%LOCALAPPDATA%\BitBob\runtime\<version>
 
 First run, once, in this order: check Windows build and virtualization → install WSL2 →
 import the distro → `compose pull` → make the vault key (existing `link-helper.ps1`
-`/vault-key`) → enter a SayGM key → open BitBob.
+`/vault-key`) → enter a SayGM key → open BitBull.
 
 After that the launcher's single folder control reads **Projects folder**, wired to what
-`scripts/bitbob-wsl/link.ps1` already mounts read-only at `/links`. That is the folder a
+`scripts/bitbull-wsl/link.ps1` already mounts read-only at `/links`. That is the folder a
 user actually wants to point at, and the plumbing for it exists.
 
 Repo, distro and port collapse into an **Advanced** section, collapsed by default. A
-`--dev <path>` flag (or a `BITBOB_DEV_REPO` setting) restores today's behaviour exactly:
+`--dev <path>` flag (or a `BITBULL_DEV_REPO` setting) restores today's behaviour exactly:
 point at a checkout, build from source, Deploy. Tom's workflow is unchanged; a user never
 sees it.
 
@@ -308,7 +308,7 @@ for free because they load the same bundle. See [BRANDING.md](BRANDING.md).
 3. **Phase 1 device tokens** — before any client leaves localhost.
 4. ~~**Phase 2 desktop app**~~ — Windows built 4 Nov 2026; remote profiles and keychain outstanding.
 5. **Phase 5.1–5.2 published images + rootfs bootstrap** — these gate the open-source
-   release; until they are done a new user cannot install BitBob at all.
+   release; until they are done a new user cannot install BitBull at all.
 6. **Phase 5.5 code signing** — in parallel with 5.1–5.2; it has lead time.
 7. **Phase 5.3–5.4 runtime payload + first-run wizard** — makes it a product rather than a
    checkout with a launcher.
@@ -323,13 +323,13 @@ for free because they load the same bundle. See [BRANDING.md](BRANDING.md).
   with tests, and keep the streaming route working until clients have moved.
 - **Tauri's webview differs per OS** (WKWebView on macOS, WebKitGTK on Linux). The UI is
   standard React, so the risk is low, but the Linux webview needs a real test pass.
-- **A tunnel makes BitBob reachable from the internet.** Phase 1 is not optional; add Cloudflare
+- **A tunnel makes BitBull reachable from the internet.** Phase 1 is not optional; add Cloudflare
   Access if the phone is used outside the house.
 - **Supervising WSL from Tauri** inherits the PowerShell quoting traps already recorded in
   `docs/HANDOFF.md` — call the existing scripts rather than reimplementing them in Rust.
 - **Uploads of large media** over a phone connection need resume; the current upload route
   is one-shot. Only Phase 4 needs it.
-- **Publishing images makes BitBob a supply chain** (5.1). A pushed tag runs on other
+- **Publishing images makes BitBull a supply chain** (5.1). A pushed tag runs on other
   people's machines with an agent inside it, so the registry credentials and the release
   workflow become security-critical: pinned action SHAs, least-privilege `GITHUB_TOKEN`,
   no secrets reachable from a PR build, and tags that are never moved once published.

@@ -5,7 +5,7 @@ import { IconSearch, IconX } from './icons'
 /**
  * Everything SayGM publishes about a model, without going to SayGM: one sortable table of
  * the whole catalogue, and the gateway's own record for whichever row you select.
- * Opened from the model picker ("See all models") via a bitbob:browse-models event.
+ * Opened from the model picker ("See all models") via a bitbull:browse-models event.
  */
 
 const money = (n?: number) => (typeof n === 'number' ? (n >= 10 ? `$${n.toFixed(0)}` : `$${n.toFixed(2)}`) : '—')

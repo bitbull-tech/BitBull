@@ -1,6 +1,6 @@
 /**
  * Read-only subagents, checked against OpenCode itself rather than our own reading of its
- * config: BitBob's generated config is handed to the real `opencode` binary, and its resolved
+ * config: BitBull's generated config is handed to the real `opencode` binary, and its resolved
  * agent ("opencode debug agent <name>") must have no shell, no edits and no delegation.
  * Skipped when the binary isn't installed for this platform.
  */
@@ -14,10 +14,10 @@ import { test } from "node:test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bin = path.join(here, "..", "node_modules", ".bin", process.platform === "win32" ? "opencode.cmd" : "opencode");
-const dir = mkdtempSync(path.join(tmpdir(), "bitbob-oc-"));
+const dir = mkdtempSync(path.join(tmpdir(), "bitbull-oc-"));
 process.env.DATA_DIR = path.join(dir, "data");
 process.env.SAYGM_API_KEY = "test";
-process.env.BITBOB_SANDBOX = "docker"; // shell on, as in the container: read agents must still get none
+process.env.BITBULL_SANDBOX = "docker"; // shell on, as in the container: read agents must still get none
 const { buildConfig } = await import("./engines/opencode.js");
 
 function resolved(agent: string) {

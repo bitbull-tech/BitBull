@@ -7,7 +7,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     return { error }
   }
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
-    console.error('[BitBob] UI crashed:', error, info.componentStack)
+    console.error('[BitBull] UI crashed:', error, info.componentStack)
   }
   render() {
     if (!this.state.error) return this.props.children

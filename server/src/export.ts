@@ -7,7 +7,7 @@ import { listSubagents } from "./subagents.js";
 /**
  * Export a chat in a form you can paste into another agent (Claude, ChatGPT, Codex…) for a
  * second opinion or debugging: transcript, tool calls, the chat's activity log and a short
- * description of how BitBob is set up. Secrets are redacted throughout.
+ * description of how BitBull is set up. Secrets are redacted throughout.
  */
 type Tool = { id: string; name: string; input?: unknown; output?: string; isError?: boolean; parent?: string };
 
@@ -39,7 +39,7 @@ export function exportJson(sessionId: string) {
   const p = projects.get(s.project_id);
   return {
     exportedAt: new Date().toISOString(),
-    app: "BitBob",
+    app: "BitBull",
     session: { id: s.id, title: s.title, engine: s.engine, model: s.model, project: p?.name ?? null, createdAt: iso(s.created_at) },
     environment: environment(p?.name),
     messages: messages.list(sessionId).map((m) => ({
@@ -111,10 +111,10 @@ export function exportMarkdown(sessionId: string, opts: ExportOptions = {}) {
     return redact(out.join("\n"));
   }
 
-  out.push(opts.exchange ? `# BitBob: one exchange from "${s.title}"` : `# BitBob chat: ${s.title}`);
+  out.push(opts.exchange ? `# BitBull: one exchange from "${s.title}"` : `# BitBull chat: ${s.title}`);
   out.push("");
   out.push(
-    `> Exported from **BitBob**, a self-hosted AI agent on the SayGM model gateway. It runs agent engines (OpenCode or the Claude Agent SDK) in a Docker sandbox whose only internet access is an allowlist proxy, with Ditto as long-term memory. Credentials have been replaced with \`[REDACTED]\`. Below: the setup, ${
+    `> Exported from **BitBull**, a self-hosted AI agent on the SayGM model gateway. It runs agent engines (OpenCode or the Claude Agent SDK) in a Docker sandbox whose only internet access is an allowlist proxy, with Ditto as long-term memory. Credentials have been replaced with \`[REDACTED]\`. Below: the setup, ${
       opts.exchange ? "one request and the agent's reply" : "the full transcript"
     } with tool calls, and the activity log${opts.exchange ? " for that exchange" : ""}.`,
   );

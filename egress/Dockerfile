@@ -8,9 +8,9 @@ FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d
 RUN apt-get update && apt-get install -y --no-install-recommends squid socat curl \
     && rm -rf /var/lib/apt/lists/*
 COPY squid.conf /etc/squid/squid.conf
-# Asks BitBob about hosts that aren't on the allowlist (approvals made in the UI)
-COPY bitbob-approved.sh /usr/local/bin/bitbob-approved
-RUN chmod 755 /usr/local/bin/bitbob-approved
+# Asks BitBull about hosts that aren't on the allowlist (approvals made in the UI)
+COPY bitbull-approved.sh /usr/local/bin/bitbull-approved
+RUN chmod 755 /usr/local/bin/bitbull-approved
 USER proxy
 EXPOSE 3128
 CMD ["squid", "-N", "-f", "/etc/squid/squid.conf"]

@@ -42,7 +42,7 @@ const secrets = () =>
     config.storage.secretKey,
     config.storage.encryptionKey,
   ]
-    // same floor as the sandbox guard plugin (bitbob-guard.js), and longest first: if one secret
+    // same floor as the sandbox guard plugin (bitbull-guard.js), and longest first: if one secret
     // contains another, replacing the short one first would leave the long one half-visible
     .filter((s) => s && s.length >= 8)
     .sort((a, b) => b.length - a.length);

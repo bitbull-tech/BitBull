@@ -252,7 +252,7 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
             )
           })}
           <p className="muted small">
-            <b>These are the agent's working copies</b>, inside BitBob's sandbox — not the code BitBob itself is running, and not the folder on
+            <b>These are the agent's working copies</b>, inside BitBull's sandbox — not the code BitBull itself is running, and not the folder on
             your PC. They are what the agent reads, edits and reviews, and what a QA swarm looks at. "Sync from origin" fetches and
             fast-forwards a copy; every other button puts a request in the chat so the agent does the work where you can see it.
           </p>

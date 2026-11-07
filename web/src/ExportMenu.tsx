@@ -6,7 +6,7 @@ import { IconCopy } from './icons'
 /**
  * Export the open chat: transcript, tool calls and its activity log, with secrets redacted.
  * "Copy for another agent" puts Markdown on the clipboard, ready to paste into Claude, ChatGPT,
- * Codex or another BitBob chat for a second opinion or debugging.
+ * Codex or another BitBull chat for a second opinion or debugging.
  */
 export function ExportMenu({ session }: { session: Session }) {
   const [open, setOpen] = useState(false)
@@ -24,7 +24,7 @@ export function ExportMenu({ session }: { session: Session }) {
     setTimeout(() => setNote(null), 2500)
   }
   const fileName = (ext: string) =>
-    `bitbob-chat-${session.title.replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || session.id.slice(0, 8)}.${ext}`
+    `bitbull-chat-${session.title.replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || session.id.slice(0, 8)}.${ext}`
   const download = (text: string, ext: string, type: string) => {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([text], { type }))

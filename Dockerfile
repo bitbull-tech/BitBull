@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg libimage-exiftool-perl poppler-utils tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
-    BITBOB_SANDBOX=docker \
+    BITBULL_SANDBOX=docker \
     DATA_DIR=/data \
     PORT=8787 \
     HOST=0.0.0.0 \
@@ -37,7 +37,7 @@ COPY agent agent
 COPY skills skills
 COPY subagents subagents
 COPY tools tools
-# Read by agents working inside BitBob (the system prompt points at it)
+# Read by agents working inside BitBull (the system prompt points at it)
 COPY agent-readme.md agent-readme.md
 # The proxy's static allowlist, so Settings -> Network can show it (the proxy has its own copy)
 COPY egress/allowlist.txt egress/allowlist.txt

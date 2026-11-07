@@ -31,8 +31,8 @@ export interface RunInput {
   cwd: string;
   /** Integration MCP servers enabled for this chat's project */
   mcp: Record<string, { url: string; headers: Record<string, string> }>;
-  /** BitBob's chat id (lets BitBob's own MCP tools say which chat asked) */
-  bitbobSessionId?: string;
+  /** BitBull's chat id (lets BitBull's own MCP tools say which chat asked) */
+  bitbullSessionId?: string;
   /** Read-only planning turn: investigate and propose, change nothing */
   plan?: boolean;
 }

@@ -144,7 +144,7 @@ export function Chat({
         ta.scrollTop = ta.scrollHeight
       }, 0)
     }
-    window.addEventListener('bitbob:compose', onCompose)
+    window.addEventListener('bitbull:compose', onCompose)
     // A turn the server started in this chat on its own (a QA swarm's verdict): join it
     const onTurn = (e: Event) => {
       const d = (e as CustomEvent<{ sessionId: string; turnId: string }>).detail
@@ -157,10 +157,10 @@ export function Chat({
         })
       }
     }
-    window.addEventListener('bitbob:turn-started', onTurn)
+    window.addEventListener('bitbull:turn-started', onTurn)
     return () => {
-      window.removeEventListener('bitbob:compose', onCompose)
-      window.removeEventListener('bitbob:turn-started', onTurn)
+      window.removeEventListener('bitbull:compose', onCompose)
+      window.removeEventListener('bitbull:turn-started', onTurn)
     }
   }, [])
 
@@ -547,7 +547,7 @@ function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: str
   const running = plainTools(m.tools).filter((t) => !t.done).length
   return (
     <div className="msg assistant">
-      <div className="avatar">BitBob</div>
+      <div className="avatar">BitBull</div>
       <div className="msg-body">
         <div className="msg-meta">
           <span className="model-chip">{m.model}</span>

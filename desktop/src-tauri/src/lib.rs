@@ -1,9 +1,9 @@
-//! BitBob desktop: a small Windows wrapper around the sandboxed Docker stack. It checks the
+//! BitBull desktop: a small Windows wrapper around the sandboxed Docker stack. It checks the
 //! machine, runs the repo's own PowerShell scripts (setup / start / stop / deploy / backup),
-//! shows their output, and once BitBob answers it opens the normal web UI in a second window.
+//! shows their output, and once BitBull answers it opens the normal web UI in a second window.
 //!
 //! Two windows on purpose: `main` is the launcher (local HTML, has IPC to these commands);
-//! `bitbob` shows http://localhost:8787 and has **no** IPC capability, so nothing served by BitBob,
+//! `bitbull` shows http://localhost:8787 and has **no** IPC capability, so nothing served by BitBull,
 //! and nothing an agent writes into a page, can reach the commands below.
 
 mod stack;
@@ -35,6 +35,29 @@ struct Done {
     code: i32,
 }
 
+/// The app identifier was io.bitbob.desktop until the BitBob -> BitBull rename (7 Nov 2026),
+/// which moves the config folder. Copy the old settings (repo path, distro, port, checkboxes) the
+/// first time the new folder has none, so the launcher doesn't come up asking where the repo is.
+/// The repo path inside may still name the old folder; the usual repo check then guesses again.
+fn carry_over_legacy_settings(file: &std::path::Path) {
+    if file.exists() {
+        return;
+    }
+    let Some(legacy) = file
+        .parent()
+        .and_then(|d| d.parent())
+        .map(|root| root.join("io.bitbob.desktop").join("bitbob-desktop.json"))
+    else {
+        return;
+    };
+    if legacy.is_file() {
+        if let Some(dir) = file.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::copy(&legacy, file);
+    }
+}
+
 #[tauri::command]
 fn get_settings(state: State<AppState>) -> Settings {
     state.settings.lock().unwrap().clone()
@@ -51,7 +74,7 @@ fn set_settings(state: State<AppState>, settings: Settings) -> Result<Settings, 
     let mut s = settings;
     if let Some(r) = &s.repo {
         if !stack::is_repo(r) {
-            return Err(format!("{} does not contain scripts\\bitbob-wsl\\start.ps1 and docker-compose.yml", r.display()));
+            return Err(format!("{} does not contain scripts\\bitbull-wsl\\start.ps1 and docker-compose.yml", r.display()));
         }
     }
     if s.repo.is_none() {
@@ -66,7 +89,7 @@ fn set_settings(state: State<AppState>, settings: Settings) -> Result<Settings, 
 #[tauri::command]
 async fn pick_repo(app: AppHandle) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
-    let picked = app.dialog().file().set_title("Choose the BitBob folder").blocking_pick_folder()?;
+    let picked = app.dialog().file().set_title("Choose the BitBull folder").blocking_pick_folder()?;
     let p = picked.into_path().ok()?;
     Some(p.display().to_string())
 }
@@ -88,7 +111,7 @@ fn start_action(app: &AppHandle, action: Action, source: Option<&str>) -> Result
     let app = app.clone();
     let state = app.state::<AppState>();
     let s = state.settings.lock().unwrap().clone();
-    let repo = s.repo.clone().ok_or("Choose the BitBob folder first")?;
+    let repo = s.repo.clone().ok_or("Choose the BitBull folder first")?;
     let (program, args) = stack::command_for(action, &repo, &s.distro, source)?;
     let mut guard = state.child.lock().unwrap();
     if let Some(c) = guard.as_mut() {
@@ -102,7 +125,7 @@ fn start_action(app: &AppHandle, action: Action, source: Option<&str>) -> Result
         *n
     };
     let mut child = stack::spawnable(&program, &args, &repo).spawn().map_err(|e| format!("{program}: {e}"))?;
-    let _ = app.emit_to("main", "bitbob-log", LogLine { run, line: format!("> {} ({})", action.label(), program) });
+    let _ = app.emit_to("main", "bitbull-log", LogLine { run, line: format!("> {} ({})", action.label(), program) });
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     for (stream, tag) in [(stdout.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), ""), (stderr.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "! ")] {
@@ -118,7 +141,7 @@ fn start_action(app: &AppHandle, action: Action, source: Option<&str>) -> Result
                     Ok(_) => {
                         let line = stack::decode(&buf).trim_end().to_string();
                         if !line.is_empty() {
-                            let _ = app2.emit_to("main", "bitbob-log", LogLine { run, line: format!("{tag}{line}") });
+                            let _ = app2.emit_to("main", "bitbull-log", LogLine { run, line: format!("{tag}{line}") });
                         }
                     }
                 }
@@ -143,7 +166,7 @@ fn start_action(app: &AppHandle, action: Action, source: Option<&str>) -> Result
             drop(g);
             std::thread::sleep(std::time::Duration::from_millis(150));
         };
-        let _ = app3.emit_to("main", "bitbob-done", Done { run, code });
+        let _ = app3.emit_to("main", "bitbull-done", Done { run, code });
     });
     Ok(run)
 }
@@ -161,7 +184,7 @@ fn cancel_action(state: State<AppState>) -> bool {
     }
 }
 
-/// Tray "Stop BitBob and quit": shut the containers and the distro down, then close the app.
+/// Tray "Stop BitBull and quit": shut the containers and the distro down, then close the app.
 /// The counterpart to plain Quit, which leaves the stack running. Everything here happens off the
 /// main thread: `blocking_show` must never block it, and the stop script takes a while.
 fn stop_and_quit(app: &AppHandle) {
@@ -171,11 +194,11 @@ fn stop_and_quit(app: &AppHandle) {
         let confirmed = app
             .dialog()
             .message(
-                "This stops the BitBob containers and shuts the distro down, then closes this app. \
-                 Anything running inside BitBob is interrupted.\n\n\
-                 To close the app and leave BitBob running, use Quit instead.",
+                "This stops the BitBull containers and shuts the distro down, then closes this app. \
+                 Anything running inside BitBull is interrupted.\n\n\
+                 To close the app and leave BitBull running, use Quit instead.",
             )
-            .title("Stop BitBob and quit?")
+            .title("Stop BitBull and quit?")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom("Stop and quit".into(), "Cancel".into()))
             .blocking_show();
@@ -185,7 +208,7 @@ fn stop_and_quit(app: &AppHandle) {
         // the launcher shows the script's output, so put it in front before the stop starts
         show_launcher(app.clone());
         if let Err(e) = start_action(&app, Action::Stop, None) {
-            let _ = app.emit_to("main", "bitbob-log", LogLine { run: 0, line: format!("! {e}") });
+            let _ = app.emit_to("main", "bitbull-log", LogLine { run: 0, line: format!("! {e}") });
             return;
         }
         // let start.ps1 -Stop finish before this process goes away (it is what brings the stack down)
@@ -200,7 +223,7 @@ fn stop_and_quit(app: &AppHandle) {
     });
 }
 
-/// Show BitBob's own UI in its own (IPC-less) window. Async on purpose: a window must not be
+/// Show BitBull's own UI in its own (IPC-less) window. Async on purpose: a window must not be
 /// created from a sync command (that runs on the main thread, and window creation on Windows
 /// waits for that same thread, so the app freezes with a blank window).
 #[tauri::command]
@@ -229,25 +252,25 @@ fn show_launcher(app: AppHandle) {
 
 fn show_gm(app: &AppHandle) -> Result<(), String> {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
-    if let Some(w) = app.get_webview_window("bitbob") {
+    if let Some(w) = app.get_webview_window("bitbull") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
         return Ok(());
     }
-    let url: tauri::Url = s.bitbob_url().parse().map_err(|e| format!("{e}"))?;
-    let w = WebviewWindowBuilder::new(app, "bitbob", WebviewUrl::External(url))
-        .title("BitBob")
+    let url: tauri::Url = s.bitbull_url().parse().map_err(|e| format!("{e}"))?;
+    let w = WebviewWindowBuilder::new(app, "bitbull", WebviewUrl::External(url))
+        .title("BitBull")
         .inner_size(1360.0, 900.0)
         .min_inner_size(720.0, 480.0)
         .build()
         .map_err(|e| e.to_string())?;
     let app2 = app.clone();
     w.on_window_event(move |e| {
-        // closing the BitBob window just hides it (the stack keeps running); Quit is in the tray
+        // closing the BitBull window just hides it (the stack keeps running); Quit is in the tray
         if let tauri::WindowEvent::CloseRequested { api, .. } = e {
             api.prevent_close();
-            if let Some(w) = app2.get_webview_window("bitbob") {
+            if let Some(w) = app2.get_webview_window("bitbull") {
                 let _ = w.hide();
             }
         }
@@ -255,12 +278,12 @@ fn show_gm(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// After the BitBob page loads, sign it in with APP_TOKEN from the repo's .env (only when the
+/// After the BitBull page loads, sign it in with APP_TOKEN from the repo's .env (only when the
 /// page is the configured local origin; the token goes into that origin's localStorage, the
 /// same place the web UI keeps it when you paste it).
 fn sign_in_if_local(app: &AppHandle, webview: &tauri::Webview, url: &tauri::Url) {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
-    if !s.auto_token || webview.label() != "bitbob" {
+    if !s.auto_token || webview.label() != "bitbull" {
         return;
     }
     let local = url.scheme() == "http" && matches!(url.host_str(), Some("localhost") | Some("127.0.0.1")) && url.port_or_known_default() == Some(s.port);
@@ -270,7 +293,7 @@ fn sign_in_if_local(app: &AppHandle, webview: &tauri::Webview, url: &tauri::Url)
     let Some(repo) = s.repo else { return };
     let Some(token) = stack::app_token(&repo) else { return };
     let js = format!(
-        "try{{var k='bitbob-token',v={};if(localStorage.getItem(k)!==v){{localStorage.setItem(k,v);location.reload();}}}}catch(e){{}}",
+        "try{{var k='bitbull-token',v={};if(localStorage.getItem(k)!==v){{localStorage.setItem(k,v);location.reload();}}}}catch(e){{}}",
         serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into())
     );
     let _ = webview.eval(&js);
@@ -280,7 +303,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let file = app.path().app_config_dir().map(|d| d.join("bitbob-desktop.json")).unwrap_or_else(|_| PathBuf::from("bitbob-desktop.json"));
+            let file = app.path().app_config_dir().map(|d| d.join("bitbull-desktop.json")).unwrap_or_else(|_| PathBuf::from("bitbull-desktop.json"));
+            carry_over_legacy_settings(&file);
             let mut settings = Settings::load(&file);
             if settings.repo.as_deref().map(stack::is_repo) != Some(true) {
                 settings.repo = stack::guess_repo(std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())).as_deref());
@@ -288,14 +312,14 @@ pub fn run() {
             app.manage(AppState { settings: Mutex::new(settings), file, child: Mutex::new(None), run_seq: Mutex::new(0) });
 
             // tray: the app lives here; closing windows never stops the stack
-            let open = MenuItem::with_id(app, "open", "Open BitBob", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open BitBull", true, None::<&str>)?;
             let launcher = MenuItem::with_id(app, "launcher", "Launcher / status", true, None::<&str>)?;
-            let stop = MenuItem::with_id(app, "stop", "Stop BitBob and quit", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit (BitBob keeps running)", true, None::<&str>)?;
+            let stop = MenuItem::with_id(app, "stop", "Stop BitBull and quit", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit (BitBull keeps running)", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &launcher, &PredefinedMenuItem::separator(app)?, &stop, &quit])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().expect("icon"))
-                .tooltip("BitBob")
+                .tooltip("BitBull")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -332,7 +356,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![get_settings, set_settings, pick_repo, get_status, run_action, cancel_action, open_gm, show_launcher])
         .build(tauri::generate_context!())
-        .expect("error while building BitBob desktop")
+        .expect("error while building BitBull desktop")
         .run(|_app, event| {
             // keep running in the tray when every window is hidden/closed
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {

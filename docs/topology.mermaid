@@ -1,23 +1,23 @@
 flowchart TB
   subgraph WIN["Windows — your PC"]
     direction TB
-    REPO["<b>D:\github\BitBob</b><br/>the git clone — source of truth<br/>you edit and commit here"]
-    EXE["<b>C:\Program Files\BitBob\BitBob.exe</b><br/>launcher only, ~10 MB<br/>no server, no BitBob code"]
-    CFG["%APPDATA%\io.bitbob.desktop\<br/>bitbob-desktop.json<br/>repo path · distro · port"]
-    VKEY["%LOCALAPPDATA%\BitBob\vault.key<br/>DPAPI-protected"]
+    REPO["<b>D:\github\BitBull</b><br/>the git clone — source of truth<br/>you edit and commit here"]
+    EXE["<b>C:\Program Files\BitBull\BitBull.exe</b><br/>launcher only, ~10 MB<br/>no server, no BitBull code"]
+    CFG["%APPDATA%\io.bitbull.desktop\<br/>bitbull-desktop.json<br/>repo path · distro · port"]
+    VKEY["%LOCALAPPDATA%\BitBull\vault.key<br/>DPAPI-protected"]
     HELP["link-helper.ps1<br/>127.0.0.1:8790<br/><i>run from the repo</i>"]
   end
 
-  subgraph WSL["WSL2 distro 'bitbob' — locked down, no C:/D: mounts"]
+  subgraph WSL["WSL2 distro 'bitbull' — locked down, no C:/D: mounts"]
     direction TB
-    CODE["<b>~/BitBob</b><br/>a <i>copy</i> of the repo<br/>replaced wholesale on deploy"]
-    DATA["<b>~/bitbob-data</b><br/>chats · uploads · workspaces<br/>settings.local.json · vault.json<br/><b>never touched by deploy</b>"]
+    CODE["<b>~/BitBull</b><br/>a <i>copy</i> of the repo<br/>replaced wholesale on deploy"]
+    DATA["<b>~/bitbull-data</b><br/>chats · uploads · workspaces<br/>settings.local.json · vault.json<br/><b>never touched by deploy</b>"]
     subgraph DK["Docker Engine — userns-remapped"]
       direction TB
-      IMG["image bitbob:local<br/>built from ~/BitBob<br/>npm ci + apt + heyditto CLI"]
-      AG["bitbob-agent<br/>network: sandbox (internal)<br/>no DNS, no route out"]
-      EG["bitbob-egress<br/>squid allowlist"]
-      GW["bitbob-gateway<br/>socat → 127.0.0.1:8787"]
+      IMG["image bitbull:local<br/>built from ~/BitBull<br/>npm ci + apt + heyditto CLI"]
+      AG["bitbull-agent<br/>network: sandbox (internal)<br/>no DNS, no route out"]
+      EG["bitbull-egress<br/>squid allowlist"]
+      GW["bitbull-gateway<br/>socat → 127.0.0.1:8787"]
     end
   end
 

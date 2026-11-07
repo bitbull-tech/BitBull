@@ -5,7 +5,7 @@ import path from "node:path";
 import { createOpencode, type OpencodeClient } from "@opencode-ai/sdk";
 import { config, configVersion, paths, ROOT, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
-import { bitbobMcpServer } from "../mcp.js";
+import { bitbullMcpServer } from "../mcp.js";
 import { LINKS_ROOT, linksAvailable } from "../links.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
 import { listModels, type ModelApi, type ModelInfo } from "../models.js";
@@ -36,7 +36,7 @@ if (config.agent.webSearch) process.env.OPENCODE_ENABLE_EXA = "1";
 if (config.agent.lsp) process.env.OPENCODE_EXPERIMENTAL_LSP_TOOL = "true";
 
 /** Read-only planning agent (OpenCode's built-in "plan" agent asks for approvals, which this UI can't answer). */
-const PLAN_AGENT = "bitbob-plan";
+const PLAN_AGENT = "bitbull-plan";
 const PLAN_PROMPT = [
   "You are in PLAN MODE. Investigate with read-only tools (read, grep, glob, webfetch) and produce a plan. Memory and other connected services are switched off in this mode.",
   "Do not edit files, write files or run commands that change anything.",
@@ -85,8 +85,8 @@ export function buildConfig(models: ModelInfo[]) {
   return {
     $schema: "https://opencode.ai/config.json",
     autoupdate: false,
-    // Keeps BitBob's credentials out of the agent's shell and out of tool output (agent/opencode-plugin)
-    plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "bitbob-guard.js")).href],
+    // Keeps BitBull's credentials out of the agent's shell and out of tool output (agent/opencode-plugin)
+    plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "bitbull-guard.js")).href],
     share: "disabled" as const,
     model: def ? `${providerFor(def)}/${def.id}` : undefined,
     small_model: small ? `${providerFor(small)}/${small.id}` : undefined,
@@ -96,9 +96,9 @@ export function buildConfig(models: ModelInfo[]) {
       ...(config.ditto.apiKey
         ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
         : {}),
-      // BitBob's own tools (network access requests); waits for the user, hence the long timeout
-      ...(bitbobMcpServer()
-        ? { bitbob: { type: "remote" as const, url: bitbobMcpServer()!.url, headers: bitbobMcpServer()!.headers, oauth: false as const, timeout: 660000 } }
+      // BitBull's own tools (network access requests); waits for the user, hence the long timeout
+      ...(bitbullMcpServer()
+        ? { bitbull: { type: "remote" as const, url: bitbullMcpServer()!.url, headers: bitbullMcpServer()!.headers, oauth: false as const, timeout: 660000 } }
         : {}),
       // Integration MCPs are registered once here and switched on/off per prompt by project
       ...Object.fromEntries(
@@ -491,12 +491,12 @@ export const opencodeEngine: AgentEngine = {
             ...Object.fromEntries(integrations().filter((i) => !input.mcp[i.id]).map((i) => [`${i.id}_*`, false])),
             // ...and no MCP tools at all. Denying edit and bash fences the filesystem, but MCP
             // tools reach OUT: ditto_save_memory writes into long-term memory that every later
-            // chat trusts, and bitbob_request_network_access puts a consent card in front of the
+            // chat trusts, and bitbull_request_network_access puts a consent card in front of the
             // owner worded by whatever the agent just read. Plan mode is where agents read hostile
             // things — swarm reviewers on contributor branches — so it gets none of them.
             // (2026-11 swarm, confirmed by both reviewers; was residual R-list item since the merge.)
             ...(input.plan
-              ? { "ditto_*": false, "bitbob_*": false, ...Object.fromEntries(integrations().map((i) => [`${i.id}_*`, false])) }
+              ? { "ditto_*": false, "bitbull_*": false, ...Object.fromEntries(integrations().map((i) => [`${i.id}_*`, false])) }
               : {}),
           },
           parts: [{ type: "text", text: input.prompt }],

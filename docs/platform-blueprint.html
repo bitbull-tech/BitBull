@@ -1,4 +1,4 @@
-<title>BitBob Platform Blueprint</title>
+<title>BitBull Platform Blueprint</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
@@ -105,11 +105,11 @@ a { color: var(--accent); }
 
 <div class="page">
   <header class="top">
-    <span class="eyebrow">BitBob · architecture review · 8 Oct 2026</span>
-    <h1>BitBob Platform Blueprint</h1>
-    <p class="lede">How the BitBob agent is put together today, how a family archive becomes a cinematic or playable experience, and the decisions that need your sign-off before it grows into the heritage platform.</p>
+    <span class="eyebrow">BitBull · architecture review · 8 Oct 2026</span>
+    <h1>BitBull Platform Blueprint</h1>
+    <p class="lede">How the BitBull agent is put together today, how a family archive becomes a cinematic or playable experience, and the decisions that need your sign-off before it grows into the heritage platform.</p>
     <div class="meta">
-      <span>Repo <b>tommyhgunz14/BitBob</b></span>
+      <span>Repo <b>tommyhgunz14/BitBull</b></span>
       <span>Models <b>SayGM · 61 chat models</b></span>
       <span>Memory <b>Ditto MCP</b></span>
       <span>Media <b>Atlas · 404.xyz slot</b></span>
@@ -125,7 +125,7 @@ a { color: var(--accent); }
     </div>
     <figure>
       <div class="fig-scroll">
-        <svg viewBox="0 0 1130 580" role="img" aria-label="System map: the web UI and scripts call the BitBob server; its turn runner starts OpenCode or the Claude Agent SDK in the chat's project workspace; engines call SayGM for models, Ditto and Atlas over MCP; the server separately archives every turn to Ditto; a helper script runs Atlas workflow APIs from the workspace; 404.xyz is a reserved slot.">
+        <svg viewBox="0 0 1130 580" role="img" aria-label="System map: the web UI and scripts call the BitBull server; its turn runner starts OpenCode or the Claude Agent SDK in the chat's project workspace; engines call SayGM for models, Ditto and Atlas over MCP; the server separately archives every turn to Ditto; a helper script runs Atlas workflow APIs from the workspace; 404.xyz is a reserved slot.">
           <defs>
             <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
             <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head accent"/></marker>
@@ -133,7 +133,7 @@ a { color: var(--accent); }
 
           <!-- column labels -->
           <text x="16" y="34" class="m">CLIENTS</text>
-          <text x="262" y="30" class="m">BitBob SERVER · NODE · HONO</text>
+          <text x="262" y="30" class="m">BitBull SERVER · NODE · HONO</text>
           <text x="592" y="30" class="m">AGENT ENGINES</text>
           <text x="882" y="30" class="m">EXTERNAL SERVICES</text>
 
@@ -297,7 +297,7 @@ a { color: var(--accent); }
   <section>
     <div class="sec-head">
       <span class="eyebrow">3 · Agentic coding parity</span>
-      <h2>What BitBob already does like Claude Code, and what it doesn't</h2>
+      <h2>What BitBull already does like Claude Code, and what it doesn't</h2>
       <p>Checked against OpenCode's tool list and the request the model actually receives. "Engine" means it comes with OpenCode or the Agent SDK; "New" means it was added in this pass.</p>
     </div>
     <div class="table-wrap">
@@ -308,7 +308,7 @@ a { color: var(--accent); }
           <tr><td>Shell and git</td><td><span class="st ok">Engine</span></td><td><code>bash</code>; git and PR conventions in the <code>git-workflow</code> skill. PRs need <code>gh</code> logged in on the host</td></tr>
           <tr><td>Subagents</td><td><span class="st ok">Engine</span></td><td><code>task</code> with general, explore and scout agents (OpenCode); Task tool (Agent SDK)</td></tr>
           <tr><td>To-do tracking</td><td><span class="st new">New</span></td><td><code>todowrite</code> was already there; the UI now draws it as a live checklist</td></tr>
-          <tr><td>Plan mode</td><td><span class="st new">New</span></td><td>Plan toggle in the composer: read-only <code>bitbob-plan</code> agent (OpenCode) or Claude Code's own plan mode</td></tr>
+          <tr><td>Plan mode</td><td><span class="st new">New</span></td><td>Plan toggle in the composer: read-only <code>bitbull-plan</code> agent (OpenCode) or Claude Code's own plan mode</td></tr>
           <tr><td>Skills</td><td><span class="st new">New</span></td><td>10 skills, mirrored into every project, backed up to Ditto: coding workflow, git, verify, review, debug, onboarding, recall, ingest, heritage, Atlas</td></tr>
           <tr><td>Web fetch and search</td><td><span class="st ok">Engine</span></td><td><code>webfetch</code>; <code>websearch</code> via Exa now switched on (<code>ENABLE_WEB_SEARCH</code>)</td></tr>
           <tr><td>Project memory files</td><td><span class="st ok">Engine</span></td><td>Engines read <code>AGENTS.md</code>/<code>CLAUDE.md</code>; <code>repo-onboarding</code> writes them</td></tr>
@@ -418,5 +418,5 @@ a { color: var(--accent); }
     </ol>
   </section>
 
-  <p class="foot">Sources: Atlas release 0.38.0 notes and MCP / API-node docs (docs.atlas.design), 404.xyz plugin page, OpenCode tools and agents docs, the WW2 Heritage Framework decision record (Rev 3, 11 Sep 2026), and the BitBob code as of this pass.</p>
+  <p class="foot">Sources: Atlas release 0.38.0 notes and MCP / API-node docs (docs.atlas.design), 404.xyz plugin page, OpenCode tools and agents docs, the WW2 Heritage Framework decision record (Rev 3, 11 Sep 2026), and the BitBull code as of this pass.</p>
 </div>

@@ -122,7 +122,7 @@ async function probeGithub() {
   if (!t) return { id: "github" as const, ok: false, configured: false, detail: "Not configured: set GITHUB_TOKEN in .env" };
   try {
     const res = await fetch("https://api.github.com/user", {
-      headers: { Authorization: `Bearer ${t}`, Accept: "application/vnd.github+json", "User-Agent": "bitbob-agent" },
+      headers: { Authorization: `Bearer ${t}`, Accept: "application/vnd.github+json", "User-Agent": "bitbull-agent" },
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return { id: "github" as const, ok: false, configured: true, detail: `GitHub said ${res.status}: token invalid or expired` };
@@ -142,7 +142,7 @@ export async function probeIntegrations() {
       if (i.id === "github") return probeGithub();
       if (!i.mcp) return { id: i.id, ok: false, configured: i.configured, detail: i.configured ? "Configured (no MCP endpoint)" : "Not configured" };
       try {
-        const c = new Client({ name: "bitbob-agent-probe", version: "0.1.0" });
+        const c = new Client({ name: "bitbull-agent-probe", version: "0.1.0" });
         await c.connect(new StreamableHTTPClientTransport(new URL(i.mcp.url), { requestInit: { headers: i.mcp.headers } }));
         const { tools } = await c.listTools();
         await c.close();

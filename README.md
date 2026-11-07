@@ -1,4 +1,4 @@
-# BitBob — The Bittensor Builder
+# BitBull — The Bittensor Builder
 
 _(Formerly "GM Agent" / repo SayGMAgent; renamed 4 Nov 2026.)_
 
@@ -17,7 +17,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - `POST /api/v1/chat` for scripts and other agents
 
 New here (or a new agent session)? Start with [CLAUDE.md](CLAUDE.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
-Agents *using* BitBob (rather than changing it) read [agent-readme.md](agent-readme.md).
+Agents *using* BitBull (rather than changing it) read [agent-readme.md](agent-readme.md).
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the
 OpenCode-vs-Agent-SDK proposal.
 
@@ -26,8 +26,8 @@ OpenCode-vs-Agent-SDK proposal.
 Requires Node 22.13+ (uses Node's built-in SQLite, so nothing needs compiling).
 
 ```bash
-git clone https://github.com/tommyhgunz14/BitBob.git
-cd BitBob
+git clone https://github.com/tommyhgunz14/BitBull.git
+cd BitBull
 cp .env.example .env          # fill in APP_TOKEN, SAYGM_API_KEY, DITTO_API_KEY
 npm run setup                 # installs server + web deps
 npm run dev                   # API on :8787, UI on http://localhost:5173
@@ -53,14 +53,14 @@ shell is switched off (set `ALLOW_HOST_SHELL=true` only if you accept the risk).
 
 ```bash
 docker compose up -d              # UI + API on http://localhost:8787 (this computer only)
-docker compose logs -f bitbob-agent   # or the Activity panel in the UI
+docker compose logs -f bitbull-agent   # or the Activity panel in the UI
 docker compose logs -f egress     # every outbound request, allowed or refused
 docker compose exec egress squid -k reconfigure   # after editing egress/allowlist.txt (no dropped connections)
 docker compose down               # stop
 ```
 
-Optional limits in `.env`: `BITBOB_CPUS` (default 4), `BITBOB_MEMORY` (default 6g), `BITBOB_PORT`
-(default 8787), `BITBOB_DATA_DIR` (default `./data`).
+Optional limits in `.env`: `BITBULL_CPUS` (default 4), `BITBULL_MEMORY` (default 6g), `BITBULL_PORT`
+(default 8787), `BITBULL_DATA_DIR` (default `./data`).
 
 On Windows, use the locked-down WSL distro (below) rather than your everyday Ubuntu.
 `npm run dev` still works for UI development, with the agent's shell disabled.
@@ -70,53 +70,53 @@ On Windows, use the locked-down WSL distro (below) rather than your everyday Ubu
 Three layers, from the outside in. Each only sees what the layer outside hands it.
 
 ```
-Windows  ── D:\github\BitBob (source, .env, git)      ── deploy.ps1 copies code + .env in ──┐
+Windows  ── D:\github\BitBull (source, .env, git)      ── deploy.ps1 copies code + .env in ──┐
                                                                                                  ▼
-WSL distro "bitbob" (no Windows drives, no Windows programs, Docker with userns-remap)
-   ~/BitBob   code copy, replaced on every deploy
-   ~/bitbob-data      ALL live data (chats, workspaces, uploads, logs)  ── mounted as /data ──┐
+WSL distro "bitbull" (no Windows drives, no Windows programs, Docker with userns-remap)
+   ~/BitBull   code copy, replaced on every deploy
+   ~/bitbull-data      ALL live data (chats, workspaces, uploads, logs)  ── mounted as /data ──┐
                                                                                          ▼
 Docker (network "sandbox" is internal: no internet, no LAN, no host)
-   bitbob-gateway  socat: 127.0.0.1:8787 on your PC → bitbob-agent:8787 (the only way in)
-   bitbob-agent    server + UI + agent engines; runs as uid 1000, read-only filesystem
-   bitbob-egress   squid allowlist proxy (the only way out)
+   bitbull-gateway  socat: 127.0.0.1:8787 on your PC → bitbull-agent:8787 (the only way in)
+   bitbull-agent    server + UI + agent engines; runs as uid 1000, read-only filesystem
+   bitbull-egress   squid allowlist proxy (the only way out)
 ```
 
 ### Outside Docker: Windows
 
 | What | Where | Notes |
 |---|---|---|
-| Source code, git history | `D:\github\BitBob` | You edit and commit here. BitBob never sees this folder. |
-| Secrets and settings | `D:\github\BitBob\.env` | Never committed (`.gitignore`). Copied into `bitbob` by `deploy.ps1`. |
-| Scripts | `scripts\bitbob-wsl\setup.ps1`, `deploy.ps1`, `start.ps1` | One-time setup, ship changes, keep running. |
-| Start at login | Startup folder shortcut "BitBob" | Created by `start.ps1 -InstallAtLogin`. |
-| The `bitbob` distro's disk | `%LOCALAPPDATA%\BitBob-WSL\disk` | A virtual disk holding everything in the next table. |
-| Old data from before the sandbox | `D:\github\BitBob\data` | Copied into `bitbob` once at setup; no longer used. |
+| Source code, git history | `D:\github\BitBull` | You edit and commit here. BitBull never sees this folder. |
+| Secrets and settings | `D:\github\BitBull\.env` | Never committed (`.gitignore`). Copied into `bitbull` by `deploy.ps1`. |
+| Scripts | `scripts\bitbull-wsl\setup.ps1`, `deploy.ps1`, `start.ps1` | One-time setup, ship changes, keep running. |
+| Start at login | Startup folder shortcut "BitBull" | Created by `start.ps1 -InstallAtLogin`. |
+| The `bitbull` distro's disk | `%LOCALAPPDATA%\BitBull-WSL\disk` | A virtual disk holding everything in the next table. |
+| Old data from before the sandbox | `D:\github\BitBull\data` | Copied into `bitbull` once at setup; no longer used. |
 
-### Outside Docker: inside the `bitbob` WSL distro
+### Outside Docker: inside the `bitbull` WSL distro
 
 | What | Where | Notes |
 |---|---|---|
 | Lockdown | `/etc/wsl.conf` | No drive mounts, no Windows interop, Docker started at boot. |
 | Docker Engine | `/etc/docker/daemon.json` | `userns-remap`: container users map to unprivileged IDs here. |
-| Deployed code + `.env` | `~/BitBob` | Replaced on each deploy; don't edit here. |
-| **Live data** | `~/bitbob-data` | Owned by the remapped container user (mode 700). Read it as root: `wsl -d bitbob -u root`, or `\\wsl.localhost\bitbob\home\<you>\bitbob-data` from an admin tool. |
+| Deployed code + `.env` | `~/BitBull` | Replaced on each deploy; don't edit here. |
+| **Live data** | `~/bitbull-data` | Owned by the remapped container user (mode 700). Read it as root: `wsl -d bitbull -u root`, or `\\wsl.localhost\bitbull\home\<you>\bitbull-data` from an admin tool. |
 
 ### Inside Docker
 
 | Container | Image contents | Can write | Network |
 |---|---|---|---|
-| `bitbob-agent` | Node 22, built server + web UI, OpenCode, Claude Agent SDK, `agent/`, `skills/`, `subagents/`, `tools/`; git, gh, ripgrep, Python, ffmpeg, exiftool, poppler, tesseract | `/data` (= `~/bitbob-data`) and a 1 GB `/tmp` | `sandbox` only; HTTP(S) via `egress` |
-| `bitbob-egress` | squid; `egress/allowlist.txt` mounted read-only | nothing persistent | `sandbox` + `outside` |
-| `bitbob-gateway` | socat | nothing | `sandbox` + `outside`; publishes 127.0.0.1:8787 |
+| `bitbull-agent` | Node 22, built server + web UI, OpenCode, Claude Agent SDK, `agent/`, `skills/`, `subagents/`, `tools/`; git, gh, ripgrep, Python, ffmpeg, exiftool, poppler, tesseract | `/data` (= `~/bitbull-data`) and a 1 GB `/tmp` | `sandbox` only; HTTP(S) via `egress` |
+| `bitbull-egress` | squid; `egress/allowlist.txt` mounted read-only | nothing persistent | `sandbox` + `outside` |
+| `bitbull-gateway` | socat | nothing | `sandbox` + `outside`; publishes 127.0.0.1:8787 |
 
-`bitbob-agent` gets every variable in `.env` plus `HTTPS_PROXY=http://egress:3128`. Inside it,
+`bitbull-agent` gets every variable in `.env` plus `HTTPS_PROXY=http://egress:3128`. Inside it,
 `HOME`, caches and both engines' state live under `/data`, because the rest of the
 filesystem is read-only.
 
 ## Where your data goes
 
-Everything BitBob stores is under `/data` in the container (`~/bitbob-data` in the `bitbob` distro):
+Everything BitBull stores is under `/data` in the container (`~/bitbull-data` in the `bitbull` distro):
 
 ```
 /data
@@ -153,30 +153,30 @@ What leaves the machine, and what doesn't:
 - **Hippius** receives everything you upload, encrypted on this machine first (AES-256-GCM)
   and indexed in Ditto. Set it up in Settings → Configuration → Hippius storage, or in
   `.env`; see [docs/STORAGE.md](docs/STORAGE.md). With `STORAGE_MIRROR=off`, nothing is sent.
-  Still back up `~/bitbob-data` for the database and workspaces (for example
-  `wsl -d bitbob -u root -- tar -czf - -C /home/<you> bitbob-data > bitbob-data.tgz`): Hippius holds the
+  Still back up `~/bitbull-data` for the database and workspaces (for example
+  `wsl -d bitbull -u root -- tar -czf - -C /home/<you> bitbull-data > bitbull-data.tgz`): Hippius holds the
   files you uploaded, not the chats.
 
 ## On Windows: the locked-down WSL distro
 
 A normal WSL distro mounts every Windows drive and can launch Windows programs, so it is a
-thin wall. `scripts/bitbob-wsl/` creates a separate distro, `bitbob`, with both switched off and
+thin wall. `scripts/bitbull-wsl/` creates a separate distro, `bitbull`, with both switched off and
 Docker running with user-namespace remapping (a container escape lands as an unprivileged
 user that can't mount drives).
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\setup.ps1                 # once (uses Docker in your Ubuntu distro to get a clean image)
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\deploy.ps1                # ship code and .env changes, rebuild
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\start.ps1 -InstallAtLogin  # keep BitBob running; start at login
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\start.ps1 -Stop
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\setup.ps1                 # once (uses Docker in your Ubuntu distro to get a clean image)
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\deploy.ps1                # ship code and .env changes, rebuild
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\start.ps1 -InstallAtLogin  # keep BitBull running; start at login
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\start.ps1 -Stop
 ```
 
 ### The desktop app (no PowerShell, no browser tab)
 
 `desktop/` is a small Windows app (Tauri 2) that does the same with buttons: it checks WSL,
-the `bitbob` distro, Docker and the containers, runs these scripts with a click and shows their
-output, then opens BitBob's UI in its own window once the stack answers, signed in with
-`APP_TOKEN` from `.env`. It lives in the tray; closing it leaves BitBob running. Build it once
+the `bitbull` distro, Docker and the containers, runs these scripts with a click and shows their
+output, then opens BitBull's UI in its own window once the stack answers, signed in with
+`APP_TOKEN` from `.env`. It lives in the tray; closing it leaves BitBull running. Build it once
 on the PC (`cd desktop && npm install && npm run tauri build`, needs rustup + VS Build
 Tools); see [desktop/README.md](desktop/README.md).
 
@@ -186,8 +186,8 @@ Hippius mirrors uploads only. To keep everything else (chats in `agent.db`, proj
 settings), back up the data folder to a file on Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\backup.ps1            # to Documents\BitBob backups
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\backup.ps1 -Keep 10   # and keep only the newest 10
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\backup.ps1            # to Documents\BitBull backups
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\backup.ps1 -Keep 10   # and keep only the newest 10
 ```
 
 The file includes any keys you saved in the UI, so keep it private. The script header shows
@@ -195,37 +195,37 @@ how to restore.
 
 ### Trying a branch before you merge it
 
-A second, isolated BitBob on another port, with its own containers and its own empty data
+A second, isolated BitBull on another port, with its own containers and its own empty data
 folder, built from whatever is in your checkout right now. The live stack on 8787 is never
 touched.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\test-stack.ps1            # start on http://localhost:8788
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\test-stack.ps1 -Logs      # follow its log
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\test-stack.ps1 -Down      # stop, keep its data
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\test-stack.ps1 -Destroy   # stop and delete its data
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\test-stack.ps1            # start on http://localhost:8788
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\test-stack.ps1 -Logs      # follow its log
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\test-stack.ps1 -Down      # stop, keep its data
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\test-stack.ps1 -Destroy   # stop and delete its data
 ```
 
 It uses the same `.env`, so the same access token unlocks it, but its chats, workspaces and
-settings are entirely separate (`~/bitbob-data-test` in the distro). `-Port` and `-Name` let you
+settings are entirely separate (`~/bitbull-data-test` in the distro). `-Port` and `-Name` let you
 run more than one.
 
 ## Run with Docker (any server)
 
 ```bash
 cp .env.example .env   # fill it in
-docker compose up -d   # pulls ghcr.io/tommyhgunz14/bitbob and ...-egress; nothing is built here
+docker compose up -d   # pulls ghcr.io/tommyhgunz14/bitbull and ...-egress; nothing is built here
 ```
 
-Pick a version with `BITBOB_TAG` (a published release, e.g. `1.2.3`); the default is `latest`,
+Pick a version with `BITBULL_TAG` (a published release, e.g. `1.2.3`); the default is `latest`,
 which follows `main`. To build the images from this checkout instead — what you want when you
-are changing BitBob itself — add the development override:
+are changing BitBull itself — add the development override:
 
 ```bash
 COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml docker compose up -d --build
 ```
 
-State lives in `./data` (or `BITBOB_DATA_DIR`). Put it behind HTTPS (Caddy, nginx or a
+State lives in `./data` (or `BITBULL_DATA_DIR`). Put it behind HTTPS (Caddy, nginx or a
 Cloudflare Tunnel) before exposing it: the agent can run shell commands in its workspace.
 
 ## Keys and settings: `.env` or the UI
@@ -237,30 +237,30 @@ can also be set from the UI. They're saved on the server in `data/settings.local
 **Use .env** removes an override. Each value shows where it comes from: `.env`,
 `set here` or `default`.
 
-Access and sandbox settings (`APP_TOKEN`, `ALLOW_*`, `BITBOB_SANDBOX`, permissions, ports,
+Access and sandbox settings (`APP_TOKEN`, `ALLOW_*`, `BITBULL_SANDBOX`, permissions, ports,
 paths, proxy) and every service URL can only be changed in `.env` plus a deploy, so a browser
 session can't lower the walls or redirect a key to another host. `settings.local.json` lives
-in the data folder, which the agent's shell can write, so BitBob reads only the UI-editable keys
+in the data folder, which the agent's shell can write, so BitBull reads only the UI-editable keys
 from it and ignores (and reports) anything else. The UI can't write your Windows `.env` (the
 container can't see Windows, by design); copy a value there yourself if you want it to be the
 long-term default.
 
-BitBob's own credentials (SayGM, Ditto, Atlas, 404, Hippius, `APP_TOKEN`) are blanked in every
+BitBull's own credentials (SayGM, Ditto, Atlas, 404, Hippius, `APP_TOKEN`) are blanked in every
 shell the **OpenCode** engine starts, and any known key that turns up in a tool's output, a
 reply, an export or the Ditto archive is replaced with `[REDACTED]`
-([`agent/opencode-plugin/bitbob-guard.js`](agent/opencode-plugin/bitbob-guard.js) for OpenCode; the
+([`agent/opencode-plugin/bitbull-guard.js`](agent/opencode-plugin/bitbull-guard.js) for OpenCode; the
 server redacts again for both engines). Keys meant for the agent (`GITHUB_TOKEN`,
 `TAOSTATS_API_KEY`) stay available to it but are masked in output. The **Claude Agent SDK**
-engine has no equivalent of bitbob-guard: its shell inherits the SayGM key, and only the server's
+engine has no equivalent of bitbull-guard: its shell inherits the SayGM key, and only the server's
 redaction stands between it and the chat. This all prevents accidental leaks; it isn't a hard
-wall, because the shell runs as the same user as BitBob and can read the server's environment,
-`APP_TOKEN` included, and with the token it can call BitBob's own API (approve its own domains,
+wall, because the shell runs as the same user as BitBull and can read the server's environment,
+`APP_TOKEN` included, and with the token it can call BitBull's own API (approve its own domains,
 change UI settings, read chats). That is GAPS.md item 11, the next structural fix: a separate
-tool container with no secrets. Until then, treat BitBob as safe against a careless agent, not a
+tool container with no secrets. Until then, treat BitBull as safe against a careless agent, not a
 determined one, and use scoped keys where the service offers them.
 
 The page itself is not a way round the proxy: a Content-Security-Policy lets the browser load
-images, media and scripts only from BitBob, so a reply or brand file that points at
+images, media and scripts only from BitBull, so a reply or brand file that points at
 `https://evil/?<data>` is never fetched. Images in replies are shown as links.
 
 ## Activity and errors
@@ -288,8 +288,8 @@ Appearance shows what is in force.
 ## Export a chat
 
 One click: **Copy last** in the top bar copies your latest request and the agent's reply,
-with its tool calls, that turn's activity log and a short description of how BitBob is set up,
-as Markdown ready to paste into Claude, ChatGPT, Codex or another BitBob chat. **Copy for agent**
+with its tool calls, that turn's activity log and a short description of how BitBull is set up,
+as Markdown ready to paste into Claude, ChatGPT, Codex or another BitBull chat. **Copy for agent**
 under any reply does the same for that exchange.
 
 Under each reply, **Copy for agent: full · prompt + reply** copies that exchange either
@@ -312,15 +312,15 @@ a different model for a second opinion, e.g. `SUBAGENT_MODEL_REVIEWER=gpt-5.5`.
 The static list in `egress/allowlist.txt` is always allowed. For anything else:
 
 - **The agent asks.** When the proxy refuses a host, the agent calls `request_network_access`
-  (BitBob's own MCP tool, `bitbob`) with the host and one sentence of why. A card appears bottom-right:
+  (BitBull's own MCP tool, `bitbull`) with the host and one sentence of why. A card appears bottom-right:
   **Allow** that host, **Allow all of** its domain (every subdomain), or **Deny**. The agent's
   tool call waits for your answer (5 minutes, `NETWORK_REQUEST_TIMEOUT_S`); a denied host isn't
   asked about again for 10 minutes.
-- **You allow it yourself** in Settings → Network, which also lists every host refused since BitBob
+- **You allow it yourself** in Settings → Network, which also lists every host refused since BitBull
   started (one click to allow) and what you've approved (one click to remove).
-- Approvals apply within seconds and need no redeploy: squid asks BitBob about any host not on the
-  static list (`egress/bitbob-approved.sh` → `/internal/egress/check`, answered only for the egress
-  container), caching a yes for 15 s. They last until BitBob restarts and are deliberately never
+- Approvals apply within seconds and need no redeploy: squid asks BitBull about any host not on the
+  static list (`egress/bitbull-approved.sh` → `/internal/egress/check`, answered only for the egress
+  container), caching a yes for 15 s. They last until BitBull restarts and are deliberately never
   saved: everything in `/data` is writable by the agent's shell, so a saved list could have a
   domain planted in it. Domains you always need go in `egress/allowlist.txt`.
 - Private and local addresses stay refused whatever is approved. Anything you allow is
@@ -331,7 +331,7 @@ The static list in `egress/allowlist.txt` is always allowed. For anything else:
 
 **Files** (top bar, or the folder icon on a project) browses a project's workspace, sortable by
 name, kind, size or modified time, and shows the folder's real path inside the container and on
-the host (copy buttons) so you can open the same place with `wsl -d bitbob`. It adds
+the host (copy buttons) so you can open the same place with `wsl -d bitbull`. It adds
 local files or whole folders, keeping their structure and skipping `node_modules`, `.git`
 and build output. In the chat, the paperclip attaches files and the folder button offers
 **Upload a copy** or one of your **linked folders**.
@@ -344,37 +344,37 @@ and build output. In the chat, the paperclip attaches files and the folder butto
 | What the agent gets | its own copy in the workspace (read-write) | your folder in place at `/links/<name>`, **read-only, no-exec** |
 | Your original | never touched | can't be changed, deleted or encrypted (the kernel refuses writes) |
 | How | folder button → Upload a copy, drag and drop, or `copy-in.ps1` for big folders | folder button → **Link a folder from this PC…** (or Settings → Folders): a Windows folder picker opens on the PC and you choose there. Also `link.ps1` |
-| Who can see it | that workspace's chats | **every chat in this BitBob**; attaching it tells a chat to use it |
+| Who can see it | that workspace's chats | **every chat in this BitBull**; attaching it tells a chat to use it |
 
 ```powershell
 # copy a big folder in, fast (no browser); -Project "<name>" for a project's workspace
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\copy-in.ps1 -Path "D:\code\roadwolf" -Project "Game Development"
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\copy-in.ps1 -Path "D:\code\roadwolf" -Project "Game Development"
 
 # link a folder read-only: pick it in a dialog, or give the path
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -Add "D:\Photos\Horner"
-# once: "Link to BitBob (read-only)" on Explorer's right-click menu for folders (-UninstallMenu removes it)
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -InstallMenu
-# a folder with secrets: a read-only copy without them (BitBob's own repo always links this way)
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -Add "D:\github\BitBob" -Hide
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -Refresh bitbob
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\Photos\Horner"
+# once: "Link to BitBull (read-only)" on Explorer's right-click menu for folders (-UninstallMenu removes it)
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -InstallMenu
+# a folder with secrets: a read-only copy without them (BitBull's own repo always links this way)
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\github\BitBull" -Hide
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Refresh bitbull
 # list links (also re-mounts missing ones), remove one
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -List
-powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\link.ps1 -Remove horner
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -List
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Remove horner
 ```
 
 **Linking with the mouse.** The page can't see your disks and never sends a path. It asks the
-**link helper** (`scripts/bitbob-wsl/link-helper.ps1`, started hidden by `start.ps1`, listening on
+**link helper** (`scripts/bitbull-wsl/link-helper.ps1`, started hidden by `start.ps1`, listening on
 `http://localhost:8790` only), which opens a Windows folder picker on the PC. Nothing is linked
 unless you pick a folder there; if the folder holds keys, `.env` files or wallets, a Windows box
 asks how to link it (below). The helper then runs `link.ps1`, so every check below applies. It only
-answers BitBob's own page (Origin `http://localhost:8787`/`8788`), and the agent can't reach it at all
-(its proxy refuses local addresses). Linking therefore works from the PC BitBob runs on, not from a
+answers BitBull's own page (Origin `http://localhost:8787`/`8788`), and the agent can't reach it at all
+(its proxy refuses local addresses). Linking therefore works from the PC BitBull runs on, not from a
 phone or another computer.
 
-**Folders that hold secrets** (BitBob's own repo, any project with a `.env`) are linked as a
+**Folders that hold secrets** (BitBull's own repo, any project with a `.env`) are linked as a
 **filtered copy**: a read-only copy that leaves out `.env` (templates like `.env.example` stay),
-keys, wallets, browser login stores, `node_modules`/caches and, for BitBob's repo, `data\` too. The
+keys, wallets, browser login stores, `node_modules`/caches and, for BitBull's repo, `data\` too. The
 agent never sees those files, because they aren't there. Hiding files inside a live Windows
 mount isn't reliable (Windows names are case-insensitive and have 8.3 short aliases, so a hidden
 `.env` could still be opened as `.ENV` or `ENV~1`), which is why it's a copy: the folder is
@@ -385,21 +385,21 @@ linked repo is included, so a secret that was ever committed is still in `.git`.
 
 How a link is held shut, layer by layer:
 
-1. The `bitbob` distro sees no Windows drives (automount off). `link.ps1` mounts just that folder at
-   `/srv/bitbob-links/<name>` with `ro,noexec,nosuid,nodev`, checks that a write fails, and only
+1. The `bitbull` distro sees no Windows drives (automount off). `link.ps1` mounts just that folder at
+   `/srv/bitbull-links/<name>` with `ro,noexec,nosuid,nodev`, checks that a write fails, and only
    then records it. Only root in the distro can mount, and only you reach root there (from
-   Windows). Links come back at boot from `/etc/bitbob-links`.
-2. `bitbob-agent` gets `/srv/bitbob-links` at `/links` read-only. Its users are remapped to nobodies in
+   Windows). Links come back at boot from `/etc/bitbull-links`.
+2. `bitbull-agent` gets `/srv/bitbull-links` at `/links` read-only. Its users are remapped to nobodies in
    the distro, it has no capabilities and can't mount or remount anything.
-3. BitBob reads each link's mount flags from `/proc/self/mountinfo` and never hands a chat a link
+3. BitBull reads each link's mount flags from `/proc/self/mountinfo` and never hands a chat a link
    that isn't read-only.
 4. Symlinks and junctions inside a linked folder resolve inside the container, so they can't
    lead anywhere else on Windows.
-5. Adding or removing a link restarts every BitBob container that mounts them (about 10 s), so a
+5. Adding or removing a link restarts every BitBull container that mounts them (about 10 s), so a
    removed link is really gone.
 
 Both scripts refuse whole drives, network paths, Windows/program/app-data folders, your profile
-root and BitBob's own repo (its `.env` holds BitBob's keys), and stop if the folder holds anything that
+root and BitBull's own repo (its `.env` holds BitBull's keys), and stop if the folder holds anything that
 looks like keys, passwords or wallets (`.env`, `.ssh`, `*.pem`, `id_*`, `*.kdbx`, wallet and
 seed files, browser login stores…; `-AllowSecrets` overrides). The check runs once, so don't
 save secrets into a linked folder later. `copy-in.ps1` unpacks as the container's unprivileged
@@ -411,16 +411,16 @@ Docker, WSL or the kernel, so keep Windows and WSL updated. To confirm the conta
 to Windows' file server directly (Docker's default seccomp profile blocks `AF_VSOCK`):
 
 ```powershell
-wsl -d bitbob --exec docker exec bitbob-agent python3 -c "import socket; socket.socket(40, socket.SOCK_STREAM)"
+wsl -d bitbull --exec docker exec bitbull-agent python3 -c "import socket; socket.socket(40, socket.SOCK_STREAM)"
 # expected: PermissionError / Operation not permitted
 ```
 
 ## Capturing documents, photos and books
 
 Phones scan (Microsoft Lens / Adobe Scan / vFlat), a shared cloud folder collects, the PC
-syncs it, and it's linked read-only into BitBob; in a project chat, "ingest /links/bitbob-capture"
+syncs it, and it's linked read-only into BitBull; in a project chat, "ingest /links/bitbull-capture"
 runs `tools/ingest.mjs`, which copies new scans into `archive/items/`, de-duplicates, reads
-dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The phone-to-BitBob
+dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The phone-to-BitBull
 route (per-device upload-only tokens, tunnel, capture page) is planned in
 [docs/CAPTURE.md](docs/CAPTURE.md).
 
@@ -438,7 +438,7 @@ node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\claude-export" -
 node tools\import-claude-export.mjs "$env:USERPROFILE\Downloads\claude-export"
 ```
 
-Every project becomes a BitBob project (description, instructions, its docs under
+Every project becomes a BitBull project (description, instructions, its docs under
 `uploads/claude-import/docs/`, and Claude's memory of the project under
 `uploads/claude-import/memory/`); the account-level memory files and your artifacts go to the
 general workspace's `uploads/claude-import/`; every conversation becomes a chat with its original
@@ -449,29 +449,29 @@ extracted text; images are named only. Imported chats have no engine session yet
 message you send in one hands the whole history to the agent as context.
 
 **One project, with Claude's memory files**: ask Claude, in that project, to "export this
-project for BitBob". It writes a folder with `project.json`, `docs/` and `memory/` (Claude's
+project for BitBull". It writes a folder with `project.json`, `docs/` and `memory/` (Claude's
 memory files for the project, verbatim), and on the PC:
 
 ```powershell
 node tools\import-project.mjs claude-export\game-development      # token read from .env
 ```
 
-It creates the BitBob project (or reuses one with that name), uploads everything to
+It creates the BitBull project (or reuses one with that name), uploads everything to
 `uploads/claude-import/` with an `INDEX.md`, and prints the chat message that asks the agent
 to seed Ditto from the memory files. Exports hold personal notes: keep them out of git
 (`claude-export/` is ignored).
 
 ## Ditto: identity, threads, review
 
-**Identity.** Give BitBob its own Ditto agent account instead of your personal key: once, on
-your PC, `npx -y --package @heyditto/cli heyditto init --name BitBob --json`, open the
+**Identity.** Give BitBull its own Ditto agent account instead of your personal key: once, on
+your PC, `npx -y --package @heyditto/cli heyditto init --name BitBull --json`, open the
 `claimURL` it prints and claim the account as yourself, then put the key it stored
 (`~/.config/heyditto/cli/config.json`, or `%APPDATA%\heyditto\cli` on Windows) into `.env` as
-`DITTO_API_KEY` (or into the vault via Settings). From then on everything BitBob saves shows in
-your graph as the **BitBob** agent thread, labelled as such, and the key in BitBob's config is
-BitBob's: revoke it without touching your own. The name is fixed at `init`, so pick it then.
+`DITTO_API_KEY` (or into the vault via Settings). From then on everything BitBull saves shows in
+your graph as the **BitBull** agent thread, labelled as such, and the key in BitBull's config is
+BitBull's: revoke it without touching your own. The name is fixed at `init`, so pick it then.
 
-**Threads.** Each BitBob chat is archived into its own Ditto session thread, titled like the chat
+**Threads.** Each BitBull chat is archived into its own Ditto session thread, titled like the chat
 (`<project> · <chat title>`), via the `X-Ditto-Session-Id` / `-Name` headers, instead of Ditto's
 time-based grouping. The agent's own `save_memory` calls still go through the engine's MCP
 connection and are grouped by Ditto; the archive is the per-chat record.
@@ -479,7 +479,7 @@ connection and are grouped by Ditto; the archive is the per-chat record.
 **Main Agent.** The agent is told to ask your Ditto Main Agent (`send_message_to_agent`) for
 questions that need judgement across your whole memory rather than one fact.
 
-**Ditto Review.** The `ditto_review` tool on BitBob's own MCP runs Ditto's CLI *on the server*
+**Ditto Review.** The `ditto_review` tool on BitBull's own MCP runs Ditto's CLI *on the server*
 (with the Ditto key, which the agent's shell never sees) against a clone in the workspace:
 working, staged or since-base changes, quick/standard/deep profile, findings back as JSON.
 The repo's GitHub origin has to be enabled for Ditto Review in your Ditto workspace and the key
@@ -490,9 +490,9 @@ needs review access; until then the tool returns the service's refusal. `verify-
 
 `.env` is what the stack boots on; it never leaves the PC and is copied into the distro by
 `deploy.ps1`. Keys you add later in **Settings → Config** go into the **vault**:
-`vault.json` in BitBob's data folder, AES-256-GCM, encrypted with a key BitBob never stores.
-The key is made once by the link helper on this PC and kept under `%LOCALAPPDATA%\BitBob\vault.key`,
-protected with Windows DPAPI for your Windows user. When you open BitBob on this PC and click
+`vault.json` in BitBull's data folder, AES-256-GCM, encrypted with a key BitBull never stores.
+The key is made once by the link helper on this PC and kept under `%LOCALAPPDATA%\BitBull\vault.key`,
+protected with Windows DPAPI for your Windows user. When you open BitBull on this PC and click
 **Unlock**, a Windows box from the link helper asks for your OK (any program on the PC can fake
 a browser header, so handing the key out needs you present) and the page unlocks the vault on
 the server (memory only); from a phone or another machine the vault stays locked and `.env`
@@ -506,9 +506,9 @@ server and agent share a uid, so `/proc` is not a hard wall (see docs/THREAT-MOD
 
 ## Opening folders in Explorer
 
-The Files view shows each folder's path inside the container and inside the `bitbob` distro;
-**Open in Explorer** opens it on Windows (`\\wsl.localhost\bitbob\…`) through the link helper,
-which only opens folders under `bitbob-data`. `start.ps1` makes the data folder traversable for
+The Files view shows each folder's path inside the container and inside the `bitbull` distro;
+**Open in Explorer** opens it on Windows (`\\wsl.localhost\bitbull\…`) through the link helper,
+which only opens folders under `bitbull-data`. `start.ps1` makes the data folder traversable for
 this; `settings.local.json` and `vault.json` stay owner-only.
 
 ## Ditto sync per project
@@ -560,9 +560,9 @@ Every `/api/*` route needs `Authorization: Bearer $APP_TOKEN`, except `GET /api/
 `GET /api/brand` (+ `/api/brand/asset/:file`), which the login screen needs before there is a
 token. Only the two live streams (`GET /api/activity/stream`, `GET /api/sessions/:id/stream`)
 also accept the token as `?token=`, because EventSource can't send headers; every other route
-refuses it there. That is fine on localhost and is due to move to a header or cookie before BitBob is
+refuses it there. That is fine on localhost and is due to move to a header or cookie before BitBull is
 put behind a tunnel (docs/CLIENTS.md 0.3). `/internal/egress/check` answers only the egress
-container, and `/mcp/bitbob` only the engines (a token minted at startup).
+container, and `/mcp/bitbull` only the engines (a token minted at startup).
 
 | Method | Path | |
 |---|---|---|
@@ -606,7 +606,7 @@ container, and `/mcp/bitbob` only the engines (a token minted at startup).
 | `GET` | `/api/activity/stream` | Live activity (SSE; `?token=` for EventSource) |
 
 ```bash
-curl -s https://bitbob.example.com/api/v1/chat \
+curl -s https://bitbull.example.com/api/v1/chat \
   -H "Authorization: Bearer $APP_TOKEN" -H 'content-type: application/json' \
   -d '{"message":"What did I decide about the Roadwolf boss fight?","model":"gpt-5"}'
 ```
@@ -627,7 +627,7 @@ server/src/
   subagents.ts         subagent definitions for both engines
 subagents/<name>.md    subagents (reviewer, challenger, debugger, …)
 egress/                allowlist proxy for the sandbox
-scripts/bitbob-wsl/        Windows: locked-down WSL distro setup, deploy, start
+scripts/bitbull-wsl/        Windows: locked-down WSL distro setup, deploy, start
 web/src/               React UI
 ```
 
@@ -645,7 +645,7 @@ switched on — the default on a clean Windows 11 install — the installer is b
 with no override. Do not turn Smart App Control off: it cannot be switched back on without
 reinstalling Windows, and you do not need the installer.
 
-BitBob itself is the Docker stack, and the desktop app is only a launcher for it. Everything
+BitBull itself is the Docker stack, and the desktop app is only a launcher for it. Everything
 works without the installer:
 
 ```bash
@@ -660,10 +660,10 @@ around.
 
 ## Licence
 
-BitBob is free software under the **GNU Affero General Public License v3.0** — see
+BitBull is free software under the **GNU Affero General Public License v3.0** — see
 [LICENSE](LICENSE). Copyright © 2026 BitBob Ltd.
 
-The AGPL is chosen deliberately: BitBob is server software, and the AGPL is the licence that
+The AGPL is chosen deliberately: BitBull is server software, and the AGPL is the licence that
 asks anyone who runs a modified version as a service to publish their modifications, not only
-those who distribute a copy. If you run BitBob privately, change it and never offer it to
+those who distribute a copy. If you run BitBull privately, change it and never offer it to
 anyone else, the AGPL asks nothing of you.

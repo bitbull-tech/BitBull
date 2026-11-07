@@ -33,7 +33,7 @@ import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused } from "./egress.js";
-import { handleMcp, MCP_PATH, BITBOB_MCP_HEADER, mcpTokenOk } from "./mcp.js";
+import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { listRepos, repoDiffStat, syncRepo } from "./repos.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
@@ -162,9 +162,9 @@ app.get("/internal/egress/check", async (c) => {
   return c.text(proxyCheck(c.req.query("host") ?? "") ? "OK" : "ERR");
 });
 
-// BitBob's own MCP server for the engines (loopback + startup token; see mcp.ts)
+// BitBull's own MCP server for the engines (loopback + startup token; see mcp.ts)
 app.all(MCP_PATH, async (c) => {
-  if (!mcpTokenOk(c.req.header(BITBOB_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
+  if (!mcpTokenOk(c.req.header(BITBULL_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
   return handleMcp(c.req.raw);
 });
 
@@ -360,7 +360,7 @@ function dittoSyncPrompt(name: string) {
     `Ditto sync for project "${name}". Bring Ditto up to date with this project's record.`,
     `1. Search Ditto for what it already holds about "${name}" (search_memories, and search_subjects for the project) so you merge rather than duplicate.`,
     `2. Read, if present: uploads/claude-import/memory/ (Claude's memory files: lines tagged [stated] are things the owner said, untagged lines are what Claude found or did; keep that distinction as "Tom said" vs "Claude found"), uploads/claude-import/docs/, uploads/claude-import/INDEX.md, and any README or docs in the workspace.`,
-    `3. For every durable fact, decision, preference, lesson, person, open question or current status, save one concise, self-contained memory with save_memory (source "bitbob", include "Project: ${name}"), using update_memory when a related memory already covers it. Skip chatter, secrets, keys and anything that looks like one.`,
+    `3. For every durable fact, decision, preference, lesson, person, open question or current status, save one concise, self-contained memory with save_memory (source "bitbull", include "Project: ${name}"), using update_memory when a related memory already covers it. Skip chatter, secrets, keys and anything that looks like one.`,
     `4. Finish with a table of what you saved (memory, source file) and what you skipped as duplicates, and one line on what in this project Ditto still knows nothing about.`,
   ].join("\n");
 }
@@ -773,10 +773,10 @@ app.get("/api/projects/:id/files", (c) => {
   } catch {
     return c.json({ dir: rel, entries: [], container: abs, host: null });
   }
-  // Where this folder really is, for anyone who wants to open it outside BitBob: inside the
-  // container, and (when BitBob's data is a mounted host folder) the host's path to the same place.
+  // Where this folder really is, for anyone who wants to open it outside BitBull: inside the
+  // container, and (when BitBull's data is a mounted host folder) the host's path to the same place.
   const container = abs;
-  const hostData = process.env.BITBOB_HOST_DATA_DIR || "";
+  const hostData = process.env.BITBULL_HOST_DATA_DIR || "";
   const host = hostData && abs.startsWith(config.dataDir) ? hostData.replace(/[\\/]+$/, "") + abs.slice(config.dataDir.length) : null;
   if (!existsSync(abs)) return c.json({ dir: rel, entries: [], container, host });
   const entries = readdirSync(abs, { withFileTypes: true })
@@ -981,7 +981,7 @@ app.post("/api/v1/chat", async (c) => {
 if (existsSync(config.webDist)) {
   // The browser must not become a way round the egress proxy: a reply or brand.json the agent
   // controls could otherwise make the browser fetch https://evil/?<data>. Images and media may
-  // only come from BitBob itself (or data: URIs); scripts only from BitBob; connections to BitBob and the
+  // only come from BitBull itself (or data: URIs); scripts only from BitBull; connections to BitBull and the
   // link helper on this PC; fonts from Google as index.html does.
   const CSP = [
     "default-src 'self'",
@@ -1009,7 +1009,7 @@ if (existsSync(config.webDist)) {
   app.use("/*", serveStatic({ root: path.relative(process.cwd(), config.webDist) }));
   app.get("*", page);
 } else {
-  app.get("/", (c) => c.text("BitBob API is running. Build the UI with `npm run build` to serve it here."));
+  app.get("/", (c) => c.text("BitBull API is running. Build the UI with `npm run build` to serve it here."));
 }
 
 // ---------- boot ----------
@@ -1017,7 +1017,7 @@ resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
-  console.log(`[server] BitBob listening on http://${info.address}:${info.port}`);
+  console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

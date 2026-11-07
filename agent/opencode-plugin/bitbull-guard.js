@@ -1,14 +1,14 @@
 /**
- * BitBob guard — an OpenCode plugin loaded by BitBob.
+ * BitBull guard — an OpenCode plugin loaded by BitBull.
  *
- * 1. shell.env: blanks BitBob's own credentials in every shell the agent starts, so `env`,
+ * 1. shell.env: blanks BitBull's own credentials in every shell the agent starts, so `env`,
  *    `printenv` or a crash dump can't print them. (Keys meant for the agent, like
  *    GITHUB_TOKEN for git, stay.)
  * 2. tool.execute.after: replaces any known secret value in tool output with [REDACTED]
  *    before the model (and the chat history) ever sees it — however the value was obtained.
  *
  * This stops accidental leaks. It is not a hard wall: the shell runs as the same user as
- * BitBob, so a determined agent could still find keys on disk. Separating the tool runner from
+ * BitBull, so a determined agent could still find keys on disk. Separating the tool runner from
  * the server is the real fix (docs/GAPS.md item 11).
  */
 
@@ -44,7 +44,7 @@ function secretValues() {
   return [...vals].sort((a, b) => b.length - a.length);
 }
 
-export const BitBobGuard = async () => {
+export const BitBullGuard = async () => {
   const secrets = secretValues();
   const redact = (s) => (typeof s === "string" ? secrets.reduce((acc, v) => acc.split(v).join("[REDACTED]"), s) : s);
   const scrub = (o, depth = 0) => {

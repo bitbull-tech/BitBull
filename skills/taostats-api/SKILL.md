@@ -11,7 +11,7 @@ Source: https://taostats.io/blog/api-migration-guide.md (published 2026-10-08). 
 
 - **Host** `https://api.taostats.io`. **Paths start with `/v1/`.** Never write new code against `/api/...`; it stops responding on **9 November 2026**. When you find `/api/` calls in existing code, migrate them with reference.md.
 - **Auth**: header `Authorization: $TAOSTATS_API_KEY` — the raw key, **no `Bearer`**. Same key for old and new APIs. Never print or commit the key.
-- **User-Agent**: Python `urllib` gets 403 with its default UA; set one (`bitbob-agent/1.0`). `requests`, `curl`, `fetch` are fine.
+- **User-Agent**: Python `urllib` gets 403 with its default UA; set one (`bitbull-agent/1.0`). `requests`, `curl`, `fetch` are fine.
 - **Network** param: `finney` (default), `nakamoto`, `kusanagi`. `testnet` → 400.
 
 ## Requests
@@ -63,7 +63,7 @@ curl -s -H "Authorization: $TAOSTATS_API_KEY" \
 ```python
 import os, requests
 from decimal import Decimal
-H = {"Authorization": os.environ["TAOSTATS_API_KEY"], "User-Agent": "bitbob-agent/1.0"}
+H = {"Authorization": os.environ["TAOSTATS_API_KEY"], "User-Agent": "bitbull-agent/1.0"}
 def fetch_all(path, **params):
     params.setdefault("limit", 200); page = 1
     while page:

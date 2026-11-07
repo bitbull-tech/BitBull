@@ -1,8 +1,8 @@
 <#
-  Copy a folder from this PC into a BitBob workspace, fast (no browser upload). The agent then
+  Copy a folder from this PC into a BitBull workspace, fast (no browser upload). The agent then
   works on the copy and can change it freely; your original is never touched.
 
-      powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\copy-in.ps1 -Path "D:\code\roadwolf"
+      powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\copy-in.ps1 -Path "D:\code\roadwolf"
       ... -Project "Game Development"     into that project's workspace (default: the general one)
       ... -Into src                       a folder inside the workspace (default: uploads)
       ... -IncludeBuild                   also copy node_modules, .git, build output
@@ -19,7 +19,7 @@ param(
   [switch]$IncludeBuild,
   [switch]$AllowSecrets,
   [switch]$Overwrite,
-  [string]$Distro = "bitbob"
+  [string]$Distro = "bitbull"
 )
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
@@ -27,13 +27,13 @@ $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 
 # Every call into the distro passes an argument list (no shell, no string building), and
 # every value in it has been checked against a strict pattern first. Directory names inside
-# BitBob's data folder are written by the agent's own user, so they are never trusted as-is.
+# BitBull's data folder are written by the agent's own user, so they are never trusted as-is.
 function Root([string[]]$argv) {
   $out = & wsl.exe -d $Distro -u root --exec @argv
   if ($LASTEXITCODE -ne 0) { throw "step failed in the $Distro distro ($LASTEXITCODE)" }
   return $out
 }
-function As-BitBob([string[]]$argv) {
+function As-BitBull([string[]]$argv) {
   Root (@("setpriv", "--reuid=$uid", "--regid=$uid", "--clear-groups") + $argv)
 }
 
@@ -45,11 +45,11 @@ if ($full.StartsWith('\\')) { throw "Network (UNC) paths aren't supported. Copy 
 # The copy runs through cmd.exe, which expands %VARS% and treats & | ^ < > specially. Only
 # plain path characters are let through; anything else goes through the browser upload.
 if ($full -cnotmatch '^[A-Za-z]:\\[A-Za-z0-9 _.,()+\-\\]*$') {
-  throw "The path has characters this script won't pass to cmd.exe (only letters, digits, space and _ . , ( ) + - are allowed). Rename the folder, or use the folder button in BitBob instead."
+  throw "The path has characters this script won't pass to cmd.exe (only letters, digits, space and _ . , ( ) + - are allowed). Rename the folder, or use the folder button in BitBull instead."
 }
 $repoLower = $Repo.TrimEnd('\').ToLower()
 if ($full.ToLower() -eq $repoLower -or $repoLower.StartsWith("$($full.ToLower())\")) {
-  throw "Refusing to copy BitBob's own repo or a folder containing it: its .env holds BitBob's keys."
+  throw "Refusing to copy BitBull's own repo or a folder containing it: its .env holds BitBull's keys."
 }
 $leaf = $item.Name
 if ($Into -cnotmatch '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$' -or $Into -match '(^|/)\.\.(/|$)') { throw "-Into must be a simple relative folder, e.g. uploads or src/import" }
@@ -77,11 +77,11 @@ if ($found -and -not $AllowSecrets) {
 $bytes = ($files | Measure-Object -Property Length -Sum).Sum
 Write-Host ("    {0} files, {1:N1} MB" -f @($files).Count, ($bytes / 1MB))
 
-# Where BitBob keeps its data, and the uid the container's user appears as in the distro
+# Where BitBull keeps its data, and the uid the container's user appears as in the distro
 $userHome = (& wsl.exe -d $Distro --exec sh -c 'printf %s "$HOME"')
 if (-not $userHome) { throw "could not read the default user's home in the $Distro distro" }
 if ($userHome -notmatch '^/[A-Za-z0-9/_.-]+$') { throw "unexpected home folder in the $Distro distro: $userHome" }
-$data = "$userHome/bitbob-data"
+$data = "$userHome/bitbull-data"
 $sub = @(Root @("grep", "^dockremap:", "/etc/subuid")) | Select-Object -First 1
 if ("$sub" -notmatch '^dockremap:(\d+):') { throw "could not find the container uid (dockremap) in the $Distro distro" }
 $uid = [int64]$Matches[1] + 1000
@@ -93,13 +93,13 @@ if ($Project) {
   if (-not $slug) { $slug = "project" }
   # Project folders are <slug>-<6 hex>. Anything else in there is ignored, never used.
   & wsl.exe -d $Distro -u root --exec test -d "$data/projects"
-  if ($LASTEXITCODE -ne 0) { throw "BitBob has no projects yet. Leave out -Project to copy into the general workspace." }
+  if ($LASTEXITCODE -ne 0) { throw "BitBull has no projects yet. Leave out -Project to copy into the general workspace." }
   $dirs = @(Root @("ls", "-1", "$data/projects")) | Where-Object { $_ -cmatch '^[a-z0-9-]{1,40}-[0-9a-f]{6}$' }
   $match = @($dirs | Where-Object { $_.StartsWith("$slug-") -and $_.Length -eq $slug.Length + 7 })
   if ($match.Count -ne 1) {
-    Write-Host "Project folders in BitBob:" -ForegroundColor Yellow
+    Write-Host "Project folders in BitBull:" -ForegroundColor Yellow
     $dirs | ForEach-Object { Write-Host "  $_" }
-    throw "No single project matches '$Project'. Use the project's name as shown in BitBob."
+    throw "No single project matches '$Project'. Use the project's name as shown in BitBull."
   }
   $base = "$data/projects/$($match[0])"
 } else {
@@ -109,24 +109,24 @@ $destParent = "$base/$Into"
 $dest = "$destParent/$leaf"
 
 & wsl.exe -d $Distro -u root --exec test -e $dest
-if ($LASTEXITCODE -eq 0 -and -not $Overwrite) { throw "$dest already exists in BitBob. Use -Overwrite to copy over it, or -Into another folder." }
-# Create the target as the container's user (never root-owned files in BitBob's data)
-As-BitBob @("mkdir", "-p", $destParent) | Out-Null
+if ($LASTEXITCODE -eq 0 -and -not $Overwrite) { throw "$dest already exists in BitBull. Use -Overwrite to copy over it, or -Into another folder." }
+# Create the target as the container's user (never root-owned files in BitBull's data)
+As-BitBull @("mkdir", "-p", $destParent) | Out-Null
 # The workspace is the agent's own: if it made any part of the path a symlink, stop
-$real = ("$(As-BitBob @('realpath', '-e', $destParent))").Trim()
-if ($real -cne $destParent) { throw "$destParent resolves to $real (a symlink inside BitBob's data). Not copying; check that folder." }
+$real = ("$(As-BitBull @('realpath', '-e', $destParent))").Trim()
+if ($real -cne $destParent) { throw "$destParent resolves to $real (a symlink inside BitBull's data). Not copying; check that folder." }
 
-Write-Host "==> Copying into BitBob: $dest" -ForegroundColor Cyan
+Write-Host "==> Copying into BitBull: $dest" -ForegroundColor Cyan
 $excl = if ($IncludeBuild) { "" } else { ($skip | ForEach-Object { "--exclude=$_" }) -join " " }
 $parent = Split-Path -Parent $full
 # cmd's pipe keeps the tar stream binary-safe (Windows PowerShell's doesn't). Unpacked as the
 # unprivileged container uid, without owners or permissions from the archive.
-$cmdFile = Join-Path $env:TEMP "bitbob-copy-in.cmd"
+$cmdFile = Join-Path $env:TEMP "bitbull-copy-in.cmd"
 Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar.exe -cf - $excl -C `"$parent`" `"$leaf`" | wsl.exe -d $Distro -u root --exec setpriv --reuid=$uid --regid=$uid --clear-groups tar -xf - --no-same-owner --no-same-permissions -C `"$destParent`""
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
 
 $count = @(Root @("find", $dest, "-type", "f")).Count
 Write-Host ""
-Write-Host "Copied $("$count".Trim()) files. In BitBob: $Into/$leaf in the $(if ($Project) { "'$Project' project" } else { 'general' }) workspace (Files button)." -ForegroundColor Green
+Write-Host "Copied $("$count".Trim()) files. In BitBull: $Into/$leaf in the $(if ($Project) { "'$Project' project" } else { 'general' }) workspace (Files button)." -ForegroundColor Green
 Write-Host "Your original folder was not changed." -ForegroundColor DarkGray

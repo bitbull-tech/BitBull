@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 export type ThemePref = 'system' | 'light' | 'dark'
-const KEY = 'bitbob-theme'
+const KEY = 'bitbull-theme'
 
 const read = (): ThemePref => {
   try {

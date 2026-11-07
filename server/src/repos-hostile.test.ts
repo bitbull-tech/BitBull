@@ -12,7 +12,7 @@ import { execCapableConfig, inspectRepo, repoDiffStat } from "./repos.js";
  * Confirmed live before the fix: core.fsmonitor on `git status`, and filter.<x>.clean reached
  * through the repo's own .gitattributes.
  */
-const ws = mkdtempSync(path.join(tmpdir(), "bitbob-hostile-"));
+const ws = mkdtempSync(path.join(tmpdir(), "bitbull-hostile-"));
 const marks = path.join(ws, "marks");
 mkdirSync(marks);
 const env = { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@x" };

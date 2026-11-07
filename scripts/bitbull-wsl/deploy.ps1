@@ -1,9 +1,9 @@
 <#
-  Ship the code from this Windows checkout into the bitbob distro and rebuild.
-  Your chats and files (~/bitbob-data inside bitbob) are not touched.
-      powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\deploy.ps1
+  Ship the code from this Windows checkout into the bitbull distro and rebuild.
+  Your chats and files (~/bitbull-data inside bitbull) are not touched.
+      powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\deploy.ps1
 #>
-param([string]$Distro = "bitbob")
+param([string]$Distro = "bitbull")
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
 if ($Distro -notmatch '^[A-Za-z0-9._-]{1,40}$') { throw "bad distro name" }
@@ -23,9 +23,9 @@ $quotedItems = ($items | ForEach-Object { '"{0}"' -f $_ }) -join ' '
 
 Write-Host "==> Copying code into $Distro" -ForegroundColor Cyan
 # cmd's pipe keeps the tar stream binary-safe (Windows PowerShell's doesn't)
-$unpack = "rm -rf ~/BitBob.new && mkdir ~/BitBob.new && tar -xf - -C ~/BitBob.new && sed -i 's/\r`$//' ~/BitBob.new/.env ~/BitBob.new/egress/* && rm -rf ~/BitBob && mv ~/BitBob.new ~/BitBob"
+$unpack = "rm -rf ~/BitBull.new && mkdir ~/BitBull.new && tar -xf - -C ~/BitBull.new && sed -i 's/\r`$//' ~/BitBull.new/.env ~/BitBull.new/egress/* && rm -rf ~/BitBull && mv ~/BitBull.new ~/BitBull"
 # A .cmd file sidesteps PowerShell's native-argument quoting differences between 5.1 and 7
-$cmdFile = Join-Path $env:TEMP "bitbob-deploy.cmd"
+$cmdFile = Join-Path $env:TEMP "bitbull-deploy.cmd"
 Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=node_modules --exclude=dist -C `"$Repo`" -- $quotedItems | wsl.exe -d $Distro --exec sh -c `"$unpack`""
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
@@ -45,10 +45,10 @@ $info = [ordered]@{
   dirty     = $dirty
   deployedAt = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json -Compress
-$infoFile = Join-Path $env:TEMP "bitbob-build-info.json"
+$infoFile = Join-Path $env:TEMP "bitbull-build-info.json"
 [System.IO.File]::WriteAllText($infoFile, $info)
-$infoCmd = Join-Path $env:TEMP "bitbob-build-info.cmd"
-Set-Content -LiteralPath $infoCmd -Encoding ASCII -Value "@type `"$infoFile`" | wsl.exe -d $Distro --exec sh -c `"cat > ~/BitBob/build-info.json`""
+$infoCmd = Join-Path $env:TEMP "bitbull-build-info.cmd"
+Set-Content -LiteralPath $infoCmd -Encoding ASCII -Value "@type `"$infoFile`" | wsl.exe -d $Distro --exec sh -c `"cat > ~/BitBull/build-info.json`""
 & cmd.exe /c $infoCmd
 if ($LASTEXITCODE -ne 0) { throw "could not write build-info.json ($LASTEXITCODE)" }
 Write-Host ("  building from {0} on {1}{2}" -f $sha, $branch, $(if ($dirty) { " (uncommitted changes)" } else { "" }))
@@ -66,7 +66,7 @@ $rebuild = @'
 set -e
 # build from this checkout rather than pulling the published images
 export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
-export BITBOB_DATA_DIR=$HOME/bitbob-data BITBOB_HOST_DATA_DIR=$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links
+export BITBULL_DATA_DIR=$HOME/bitbull-data BITBULL_HOST_DATA_DIR=$HOME/bitbull-data BITBULL_LINKS_DIR=/srv/bitbull-links
 docker compose up -d --build --remove-orphans
 if docker compose exec -T egress cat /etc/squid/allowlist.txt 2>/dev/null | diff -q - egress/allowlist.txt >/dev/null 2>&1; then
   docker compose exec -T egress squid -k reconfigure -f /etc/squid/squid.conf 2>/dev/null || docker compose restart egress
@@ -76,10 +76,10 @@ else
 fi
 docker compose ps
 '@ -replace "`r`n", "`n"
-$shFile = Join-Path $env:TEMP "bitbob-rebuild.sh"
+$shFile = Join-Path $env:TEMP "bitbull-rebuild.sh"
 [System.IO.File]::WriteAllText($shFile, $rebuild)
-$runFile = Join-Path $env:TEMP "bitbob-rebuild.cmd"
-Set-Content -LiteralPath $runFile -Encoding ASCII -Value "@type `"$shFile`" | wsl.exe -d $Distro --cd ~/BitBob --exec sh"
+$runFile = Join-Path $env:TEMP "bitbull-rebuild.cmd"
+Set-Content -LiteralPath $runFile -Encoding ASCII -Value "@type `"$shFile`" | wsl.exe -d $Distro --cd ~/BitBull --exec sh"
 & cmd.exe /c $runFile
 if ($LASTEXITCODE -ne 0) { throw "docker compose failed ($LASTEXITCODE)" }
 Write-Host "Deployed. http://localhost:8787" -ForegroundColor Green

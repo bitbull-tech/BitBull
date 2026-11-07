@@ -2,7 +2,7 @@ import { CLAUDE_READ_ONLY_DISALLOWED, listSubagents } from "../subagents.js";
 import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { config, paths, shellAllowed } from "../config.js";
 import { dittoMcpHeaders } from "../ditto.js";
-import { bitbobMcpServer } from "../mcp.js";
+import { bitbullMcpServer } from "../mcp.js";
 import { LINKS_ROOT, linksAvailable } from "../links.js";
 import type { AgentEngine, AgentEvent, RunInput } from "./types.js";
 import { listModels } from "../models.js";
@@ -17,7 +17,7 @@ function cleanEnv(): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue;
     if (/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$|CLAUDECODE$|CLAUDE_AGENT_)/.test(k)) continue;
-    // BitBob's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
+    // BitBull's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
     if (/^(SAYGM_API_KEY|DITTO_API_KEY|APP_TOKEN|ATLAS_API_KEY|FOUR04_API_KEY|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
     out[k] = v;
   }
@@ -67,7 +67,7 @@ export const claudeEngine: AgentEngine = {
       }),
     );
 
-    const bitbobMcp = bitbobMcpServer(input.bitbobSessionId);
+    const bitbullMcp = bitbullMcpServer(input.bitbullSessionId);
     const options: Options = {
       agents,
       model: input.model,
@@ -91,8 +91,8 @@ export const claudeEngine: AgentEngine = {
       mcpServers: input.plan ? {} : {
         ...(config.ditto.apiKey ? { ditto: { type: "http" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders() } } : {}),
         ...Object.fromEntries(Object.entries(input.mcp).map(([k, v]) => [k, { type: "http" as const, ...v }])),
-        // BitBob's own tools (network access requests); tagged with this chat
-        ...(bitbobMcp ? { bitbob: { type: "http" as const, ...bitbobMcp } } : {}),
+        // BitBull's own tools (network access requests); tagged with this chat
+        ...(bitbullMcp ? { bitbull: { type: "http" as const, ...bitbullMcp } } : {}),
       },
       env: {
         ...cleanEnv(),

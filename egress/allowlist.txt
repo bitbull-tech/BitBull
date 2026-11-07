@@ -1,4 +1,4 @@
-# Domains the BitBob sandbox may reach. One per line; a leading dot also allows
+# Domains the BitBull sandbox may reach. One per line; a leading dot also allows
 # subdomains (.saygm.com = saygm.com + api.saygm.com). Apply changes with:
 #   docker compose exec egress squid -k reconfigure
 # Every domain here is somewhere a prompt-injected agent could send data, so keep it short.

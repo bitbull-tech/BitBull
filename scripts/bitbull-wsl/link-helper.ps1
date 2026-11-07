@@ -1,32 +1,32 @@
 <#
-  Link helper: lets BitBob's web page link and unlink read-only folders with mouse clicks, while
+  Link helper: lets BitBull's web page link and unlink read-only folders with mouse clicks, while
   the choice of folder stays with you, on this PC.
 
   Runs on Windows (start.ps1 starts it, hidden), listening on http://localhost:8790 only.
-  When you press "Link a folder..." in BitBob:
-    1. BitBob's page (in your browser, on this PC) asks this helper.
+  When you press "Link a folder..." in BitBull:
+    1. BitBull's page (in your browser, on this PC) asks this helper.
     2. The helper opens a Windows folder picker on this PC. Nothing is linked unless you pick
-       a folder there. BitBob never sends a path; it can't, and it isn't asked.
+       a folder there. BitBull never sends a path; it can't, and it isn't asked.
     3. If the folder holds keys, .env files or wallets, a Windows box asks you: link a read-only
-       COPY without them (the agent never sees them), link it as it is, or cancel. BitBob's own repo
+       COPY without them (the agent never sees them), link it as it is, or cancel. BitBull's own repo
        is only ever linked as such a copy.
-    4. It runs link.ps1 (all the usual checks: read-only mount, verified, BitBob restarted).
-  It also opens BitBob's data folders in Explorer (/open: path validated, nothing changed) and
+    4. It runs link.ps1 (all the usual checks: read-only mount, verified, BitBull restarted).
+  It also opens BitBull's data folders in Explorer (/open: path validated, nothing changed) and
   keeps the vault key (/vault-key: DPAPI-protected file for this Windows user, see server/src/vault.ts).
 
   Who can reach it: only programs on this PC. The agent can't: its container has no route
   here (the egress proxy refuses private and local addresses). Other web pages can't either:
-  requests must come from BitBob's own page (Origin http://localhost:8787 / 8788). Another program
+  requests must come from BitBull's own page (Origin http://localhost:8787 / 8788). Another program
   on this PC could fake that header, but every action still needs you in a Windows dialog:
   linking needs you to pick the folder, removing needs you to press OK. Refresh only re-copies
   a filtered link after a fresh scan for secrets.
 
-      powershell -ExecutionPolicy Bypass -STA -File scripts\bitbob-wsl\link-helper.ps1
+      powershell -ExecutionPolicy Bypass -STA -File scripts\bitbull-wsl\link-helper.ps1
 #>
 param(
   [int]$Port = 8790,
-  [int[]]$BitBobPorts = @(8787, 8788),
-  [string]$Distro = "bitbob"
+  [int[]]$BitBullPorts = @(8787, 8788),
+  [string]$Distro = "bitbull"
 )
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
@@ -34,7 +34,7 @@ $linkScript = Join-Path $PSScriptRoot "link.ps1"
 Add-Type -AssemblyName System.Windows.Forms
 
 $origins = @()
-foreach ($p in $BitBobPorts) { $origins += "http://localhost:$p"; $origins += "http://127.0.0.1:$p" }
+foreach ($p in $BitBullPorts) { $origins += "http://localhost:$p"; $origins += "http://127.0.0.1:$p" }
 
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$Port/")
@@ -81,7 +81,7 @@ function Invoke-Link([string[]]$argv) {
 }
 
 function Get-Links {
-  $rows = @(& wsl.exe -d $Distro -u root --exec /usr/local/sbin/bitbob-links list 2>$null)
+  $rows = @(& wsl.exe -d $Distro -u root --exec /usr/local/sbin/bitbull-links list 2>$null)
   $list = @()
   foreach ($r in $rows) {
     if ($r -match '^(\S+)\s+(mounted|missing)\s+(live|filtered)\s+(.+)$') { $list += @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim() } }
@@ -93,7 +93,7 @@ function Do-Link {
   $owner = New-Owner
   try {
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = "BitBob: choose a folder for the agent to READ (it can't change anything in it). Cancel to link nothing."
+    $dlg.Description = "BitBull: choose a folder for the agent to READ (it can't change anything in it). Cancel to link nothing."
     $dlg.ShowNewFolderButton = $false
     if ($dlg.ShowDialog($owner) -ne [System.Windows.Forms.DialogResult]::OK -or -not $dlg.SelectedPath) {
       return @{ ok = $false; cancelled = $true; message = "No folder chosen." }
@@ -102,27 +102,27 @@ function Do-Link {
     $r = Invoke-Link @("-Add", $path)
     $found = ($r.out -split "`n" | Where-Object { $_ -match '^\s{2}\S' } | Select-Object -First 12 | Out-String)
     if ($r.code -eq 4) {
-      # BitBob's own repo: only ever as a copy without its secrets
+      # BitBull's own repo: only ever as a copy without its secrets
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
-        "This is BitBob's own repo. It can be linked as a read-only COPY that leaves out its .env, data folder and anything else that looks secret:`n`n" +
-        $found + "`nThe agent never sees those files. The copy is refreshed when you press Refresh in BitBob (Settings > Folders).`n`nLink it this way?",
-        "BitBob: link this folder?", "OKCancel", "Information", "Button1")
+        "This is BitBull's own repo. It can be linked as a read-only COPY that leaves out its .env, data folder and anything else that looks secret:`n`n" +
+        $found + "`nThe agent never sees those files. The copy is refreshed when you press Refresh in BitBull (Settings > Folders).`n`nLink it this way?",
+        "BitBull: link this folder?", "OKCancel", "Information", "Button1")
       if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not linked." } }
       $r = Invoke-Link @("-Add", $path, "-Hide")
     } elseif ($r.code -eq 3) {
       # keys, wallets or unreadable parts found: you decide, here, in Windows
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
         "This folder holds files that look like keys, passwords or wallets (or couldn't be checked):`n`n" + $found +
-        "`nYes (recommended): link a read-only COPY without these files. The agent never sees them; press Refresh in BitBob to update the copy.`n" +
+        "`nYes (recommended): link a read-only COPY without these files. The agent never sees them; press Refresh in BitBull to update the copy.`n" +
         "No: link the folder as it is, including them. The agent could read them and send them to its model.`n" +
         "Cancel: link nothing.",
-        "BitBob: link this folder?", "YesNoCancel", "Warning", "Button1")
+        "BitBull: link this folder?", "YesNoCancel", "Warning", "Button1")
       if ($q -eq [System.Windows.Forms.DialogResult]::Yes) { $r = Invoke-Link @("-Add", $path, "-Hide") }
       elseif ($q -eq [System.Windows.Forms.DialogResult]::No) { $r = Invoke-Link @("-Add", $path, "-AllowSecrets") }
       else { return @{ ok = $false; cancelled = $true; message = "Not linked." } }
     }
     if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 3) -join " " } }
-    $name = if ($r.out -match 'BITBOB-LINK-NAME: ([a-z0-9-]+)') { $Matches[1] } else { $null }
+    $name = if ($r.out -match 'BITBULL-LINK-NAME: ([a-z0-9-]+)') { $Matches[1] } else { $null }
     return @{ ok = $true; name = $name; path = $path; message = "Linked $path" }
   } finally {
     $owner.Close()
@@ -141,8 +141,8 @@ function Do-Unlink([string]$name) {
   # Asked here, in Windows: the Origin check stops web pages, not other programs on this PC
   $owner = New-Owner
   try {
-    $q = [System.Windows.Forms.MessageBox]::Show($owner, "Remove the BitBob link '$name'? BitBob restarts and can no longer read it. Your folder isn't touched.",
-      "BitBob: remove link?", "OKCancel", "Question", "Button2")
+    $q = [System.Windows.Forms.MessageBox]::Show($owner, "Remove the BitBull link '$name'? BitBull restarts and can no longer read it. Your folder isn't touched.",
+      "BitBull: remove link?", "OKCancel", "Question", "Button2")
   } finally { $owner.Close() }
   if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not removed." } }
   $r = Invoke-Link @("-Remove", $name)
@@ -150,12 +150,12 @@ function Do-Unlink([string]$name) {
   return @{ ok = $true; message = "Removed $name" }
 }
 
-# Open a folder of BitBob's data in Explorer. The page sends the path as the distro sees it
-# (/home/<user>/bitbob-data/...); it is validated, mapped to \\wsl.localhost\<distro>\... and must
+# Open a folder of BitBull's data in Explorer. The page sends the path as the distro sees it
+# (/home/<user>/bitbull-data/...); it is validated, mapped to \\wsl.localhost\<distro>\... and must
 # exist. Nothing is changed, so no dialog. explorer.exe gets the path as one argument.
 function Do-Open([string]$p) {
-  if ($p -notmatch '^/home/[a-z_][a-z0-9_-]{0,31}/bitbob-data(/[A-Za-z0-9 _.@+-]+)*/?$' -or $p -match '(^|/)\.\.(/|$)') {
-    return @{ ok = $false; message = "That path can't be opened from here (only folders under bitbob-data)." }
+  if ($p -notmatch '^/home/[a-z_][a-z0-9_-]{0,31}/bitbull-data(/[A-Za-z0-9 _.@+-]+)*/?$' -or $p -match '(^|/)\.\.(/|$)') {
+    return @{ ok = $false; message = "That path can't be opened from here (only folders under bitbull-data)." }
   }
   $rel = ($p.TrimEnd('/') -replace '/', '\')
   $unc = "\\wsl.localhost\$Distro$rel"
@@ -190,14 +190,24 @@ Add-Type -Namespace Win32 -Name Native -MemberDefinition @'
 '@
 
 
-# The vault key: 32 random bytes made once, kept under %LOCALAPPDATA%\BitBob\vault.key protected
-# with Windows DPAPI for this user only. BitBob's page fetches it to unlock the vault on the
-# server; the server never stores it. Only answered to BitBob's own page (Origin) AND only with
+# The vault key: 32 random bytes made once, kept under %LOCALAPPDATA%\BitBull\vault.key protected
+# with Windows DPAPI for this user only. BitBull's page fetches it to unlock the vault on the
+# server; the server never stores it. Only answered to BitBull's own page (Origin) AND only with
 # you present: the Origin header is a browser boundary, not a local one — any process on this PC
 # can fake it, so handing the key out needs your OK in a Windows box, like every other action here.
 Add-Type -AssemblyName System.Security
-$vaultDir = Join-Path $env:LOCALAPPDATA "BitBob"
+$vaultDir = Join-Path $env:LOCALAPPDATA "BitBull"
 $vaultKeyFile = Join-Path $vaultDir "vault.key"
+# The product was called BitBob until 7 Nov 2026 and the key lived under %LOCALAPPDATA%\BitBob.
+# Carry it across BEFORE anything below can decide there is no key: minting a fresh one would
+# leave the existing vault permanently undecryptable, every stored key with it. DPAPI ties the
+# blob to this Windows user, not to its path, so a copy is all it takes. The old file is left
+# where it was, so a rollback to the old build still finds it.
+$legacyVaultKey = Join-Path (Join-Path $env:LOCALAPPDATA "BitBob") "vault.key"
+if (-not (Test-Path -LiteralPath $vaultKeyFile) -and (Test-Path -LiteralPath $legacyVaultKey)) {
+  New-Item -ItemType Directory -Force -Path $vaultDir | Out-Null
+  Copy-Item -LiteralPath $legacyVaultKey -Destination $vaultKeyFile
+}
 function Get-VaultKey {
   if (Test-Path -LiteralPath $vaultKeyFile) {
     $blob = [System.IO.File]::ReadAllBytes($vaultKeyFile)
@@ -217,8 +227,8 @@ function Do-VaultKey {
   $owner = New-Owner
   try {
     $q = [System.Windows.Forms.MessageBox]::Show($owner,
-      "BitBob wants the vault key to unlock your stored keys.`n`nOnly press OK if you just clicked Unlock in BitBob. This key decrypts every stored key, so nothing else should ever ask for it.",
-      "BitBob: unlock the vault?", "OKCancel", "Warning", "Button2")
+      "BitBull wants the vault key to unlock your stored keys.`n`nOnly press OK if you just clicked Unlock in BitBull. This key decrypts every stored key, so nothing else should ever ask for it.",
+      "BitBull: unlock the vault?", "OKCancel", "Warning", "Button2")
   } finally { $owner.Close() }
   if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not unlocked." } }
   return @{ ok = $true; key = (Get-VaultKey) }
@@ -229,16 +239,16 @@ while ($listener.IsListening) {
   try {
     $req = $ctx.Request
     $origin = $req.Headers["Origin"]
-    # Only BitBob's own page (or a plain local tool with no Origin, for GET) is answered
+    # Only BitBull's own page (or a plain local tool with no Origin, for GET) is answered
     if ($origin -and -not ($origins -contains $origin)) { Send $ctx 403 @{ ok = $false; message = "origin not allowed" }; continue }
     if ($req.HttpMethod -eq "OPTIONS") { Send $ctx 204 @{}; continue }
     $path = $req.Url.AbsolutePath
     if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links) }; continue }
     if ($req.HttpMethod -eq "GET" -and $path -eq "/vault-key") {
-      if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBob's page only" }; continue }
+      if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBull's page only" }; continue }
       Send $ctx 200 (Do-VaultKey); continue
     }
-    if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from BitBob's page only" }; continue }
+    if ($req.HttpMethod -ne "POST" -or -not $origin) { Send $ctx 405 @{ ok = $false; message = "POST from BitBull's page only" }; continue }
     if ($path -eq "/link") { Send $ctx 200 (Do-Link); continue }
     if ($path -eq "/refresh") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json

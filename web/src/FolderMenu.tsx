@@ -3,7 +3,7 @@ import { api, type LinkedFolder } from './api'
 import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus, IconRefresh } from './icons'
 import { helperStatus, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
 
-const HELPER_CMD = 'powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbob-wsl\\link-helper.ps1'
+const HELPER_CMD = 'powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
 
 /**
  * The composer's folder button: upload a copy (the agent may change it), attach a folder you
@@ -105,7 +105,7 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
           {!state ? (
             <p className="fm-note">Loading…</p>
           ) : !state.available ? (
-            <p className="fm-note">Links work in the sandboxed BitBob (Docker) only.</p>
+            <p className="fm-note">Links work in the sandboxed BitBull (Docker) only.</p>
           ) : (
             <>
               {state.links.map((l) =>
@@ -148,7 +148,7 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                   </div>
                 ) : (
                   <p className="fm-note bad" key={l.name}>
-                    {l.name} is not read-only, so BitBob won't use it. Remove it in Settings → Folders and link it again.
+                    {l.name} is not read-only, so BitBull won't use it. Remove it in Settings → Folders and link it again.
                   </p>
                 ),
               )}
@@ -158,13 +158,13 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                   <IconPlus size={15} />
                   <span>
                     <b>Link a folder from this PC…</b>
-                    <small>Opens a Windows folder picker on this PC. BitBob gets read-only access to the folder you choose, nothing else.</small>
+                    <small>Opens a Windows folder picker on this PC. BitBull gets read-only access to the folder you choose, nothing else.</small>
                   </span>
                 </button>
               ) : helper === 'checking' ? (
                 <p className="fm-note">Checking for the link helper…</p>
               ) : !onThisPc() ? (
-                <p className="fm-note">To link a new folder, open BitBob on the PC it runs on (http://localhost:8787).</p>
+                <p className="fm-note">To link a new folder, open BitBull on the PC it runs on (http://localhost:8787).</p>
               ) : (
                 <>
                   <p className="fm-note">To link folders from here, start the link helper on this PC (start.ps1 does it), then reopen this menu:</p>
@@ -188,7 +188,7 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
               )}
               {busy && <p className="fm-note fm-busy">{busy}</p>}
               {msg && <p className={`fm-note ${msg.ok ? 'good' : 'bad'}`}>{msg.text}</p>}
-              {state.links.length > 0 && <p className="fm-note">Every chat in this BitBob can read linked folders; attaching one tells this chat to use it.</p>}
+              {state.links.length > 0 && <p className="fm-note">Every chat in this BitBull can read linked folders; attaching one tells this chat to use it.</p>}
             </>
           )}
         </div>

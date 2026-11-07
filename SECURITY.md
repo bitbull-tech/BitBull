@@ -2,13 +2,13 @@
 
 ## Supported versions
 
-Only the latest `main` is supported. BitBob is a single-owner, self-hosted project —
+Only the latest `main` is supported. BitBull is a single-owner, self-hosted project —
 you run your own copy, so keep it updated (`git pull` + redeploy).
 
 ## Reporting a vulnerability
 
 **Please report privately via GitHub:** open a
-[security advisory](https://github.com/tommyhgunz14/BitBob/security/advisories/new)
+[security advisory](https://github.com/tommyhgunz14/BitBull/security/advisories/new)
 (Security tab → Advisories → "Report a vulnerability").
 
 > Repository owner: enable **Private vulnerability reporting**
@@ -19,7 +19,7 @@ you run your own copy, so keep it updated (`git pull` + redeploy).
   you have one.
 - **Never include real secrets** (API keys, tokens) in a report — describe the type of
   secret instead.
-- BitBob is maintained by one person in his own time, so there is no response SLA. Reports
+- BitBull is maintained by one person in his own time, so there is no response SLA. Reports
   are read and acknowledged on a best-effort basis, usually within a week or two; a serious
   one gets looked at first. If you have heard nothing after a month, please chase — it means
   the report was missed, not ignored.

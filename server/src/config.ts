@@ -136,7 +136,7 @@ function buildConfig() {
   // Outside Docker, listen on loopback by default: a LAN-reachable agent API (even with a
   // token) is a foot-gun for non-experts, and with ALLOW_NO_AUTH it is wide open (see
   // assertConfig). Docker keeps 0.0.0.0 so the gateway can reach it on the internal network.
-  host: env("HOST", (process.env.BITBOB_SANDBOX || (existsSync("/.dockerenv") ? "docker" : "none")) === "none" ? "127.0.0.1" : "0.0.0.0"),
+  host: env("HOST", (process.env.BITBULL_SANDBOX || (existsSync("/.dockerenv") ? "docker" : "none")) === "none" ? "127.0.0.1" : "0.0.0.0"),
 
   /** Bearer token protecting the API + UI. Required unless explicitly disabled. */
   appToken: env("APP_TOKEN", ""),
@@ -158,7 +158,7 @@ function buildConfig() {
     apiKey: env("DITTO_API_KEY", ""),
     /** Save every completed turn to Ditto as a memory ("turn") or not ("off"). */
     archive: env("DITTO_ARCHIVE", "turn") as "turn" | "off",
-    source: env("DITTO_SOURCE", "bitbob"),
+    source: env("DITTO_SOURCE", "bitbull"),
   },
 
   /**
@@ -196,20 +196,20 @@ function buildConfig() {
   },
 
   /**
-   * Where the agent's tools run. In the Docker image BITBOB_SANDBOX=docker: the agent's
+   * Where the agent's tools run. In the Docker image BITBULL_SANDBOX=docker: the agent's
    * shell is confined to the container. On a bare host the shell is switched off
    * unless ALLOW_HOST_SHELL=true, because it would run as you on your machine.
    */
   sandbox: {
-    kind: (process.env.BITBOB_SANDBOX || (existsSync("/.dockerenv") ? "docker" : "none")) as "docker" | "none" | string,
+    kind: (process.env.BITBULL_SANDBOX || (existsSync("/.dockerenv") ? "docker" : "none")) as "docker" | "none" | string,
     allowHostShell: bool(env("ALLOW_HOST_SHELL", "false")),
     /** Set by docker compose: all outbound traffic goes through the allowlist proxy. */
     egressProxy: process.env.HTTPS_PROXY || process.env.https_proxy || "",
   },
 
   /**
-   * Off-machine storage on Hippius (S3-compatible). BitBob holds the only credential: Hippius
-   * sub-tokens scope to a bucket, not a folder, so prefix isolation is BitBob's job. See
+   * Off-machine storage on Hippius (S3-compatible). BitBull holds the only credential: Hippius
+   * sub-tokens scope to a bucket, not a folder, so prefix isolation is BitBull's job. See
    * docs/STORAGE.md.
    */
   storage: {
@@ -218,7 +218,7 @@ function buildConfig() {
     /** Sub-token with Object Read & Write on this bucket only — never the account master key */
     accessKey: env("HIPPIUS_ACCESS_KEY", ""),
     secretKey: env("HIPPIUS_SECRET_KEY", ""),
-    bucket: env("HIPPIUS_BUCKET", "bitbob-agent"),
+    bucket: env("HIPPIUS_BUCKET", "bitbull-agent"),
     /** 32 bytes, base64 or hex. Without it nothing stored can ever be read back. */
     encryptionKey: env("HIPPIUS_ENCRYPTION_KEY", ""),
     /** off = store nothing; uploads = everything the user attaches or adds */

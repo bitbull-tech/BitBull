@@ -1,11 +1,11 @@
-# Threat Model — BitBob
+# Threat Model — BitBull
 
-Who and what BitBob defends against, where the walls are, and — just as important —
+Who and what BitBull defends against, where the walls are, and — just as important —
 where they are not. Read this before self-hosting, forking, or reporting an issue.
 
 ## Scope and actors
 
-BitBob is a **single-owner, self-hosted** personal agent. It is not multi-tenant and makes
+BitBull is a **single-owner, self-hosted** personal agent. It is not multi-tenant and makes
 no claims about isolating users from each other. The actors we design against:
 
 1. **A malicious repository** the agent is asked to clone or review (hostile `.git/config`,
@@ -40,7 +40,7 @@ no claims about isolating users from each other. The actors we design against:
    destinations denied before any allow rule; approvals decided only by the user.
 4. **Server ↔ engines**: engine children get a scrubbed env; the OpenCode plugin redacts
    known key values from tool output; read-only subagents get no shell and no delegation.
-5. **Server ↔ Windows link helper** (`localhost:8790`): only BitBob's page (Origin-checked);
+5. **Server ↔ Windows link helper** (`localhost:8790`): only BitBull's page (Origin-checked);
    link/unlink need the owner in a Windows dialog; the helper never accepts a path from the page.
 6. **Workspaces ↔ linked folders**: links are `ro,noexec,nosuid,nodev`, re-verified at runtime;
    folders with secrets are linked only as filtered copies.
@@ -90,17 +90,17 @@ secrets (GAPS #11). Until then, everything below should be read with this in min
 
 ### R2 — Claude engine hands the SayGM key to the shell
 `ANTHROPIC_API_KEY` is set for the Claude SDK and inherited by every shell it spawns; the
-bitbob-guard plugin exists only for OpenCode. Prefer the OpenCode engine for untrusted work.
+bitbull-guard plugin exists only for OpenCode. Prefer the OpenCode engine for untrusted work.
 
 ### R3 — Redaction is exact-substring only
-Server `redact()` and bitbob-guard match configured values verbatim. Base64, case changes,
+Server `redact()` and bitbull-guard match configured values verbatim. Base64, case changes,
 splitting across tool calls, or using a key without printing it (e.g. `curl -H "…$(cat)"`)
 all evade it. Redaction prevents **accidental echo**, never exfiltration. GitHub and SayGM
 hosts are on the allowlist by design — they are standing exfil channels for any key the
 agent can reach.
 
 ### R4 — DNS exfiltration (checked 5 Nov 2026 — contained, but by topology)
-**Not exploitable as built.** In `bitbob-agent`, `getent hosts example.com` and
+**Not exploitable as built.** In `bitbull-agent`, `getent hosts example.com` and
 `getent hosts github.com` both fail while `curl https://github.com` succeeds: the container
 has no name resolution of its own and reaches the network only through squid, so there is no
 unproxied, unlogged channel out.
@@ -113,7 +113,7 @@ nothing in the code would notice it changing. Attaching the agent to a routable 
 for convenience, or when the GAPS #11 tool container arrives — silently restores DNS
 resolution and with it a tunnelling channel squid never sees.
 
-Guarded by `scripts\bitbob-wsl\test-stack.ps1 -Check`, which asserts both halves (no
+Guarded by `scripts\bitbull-wsl\test-stack.ps1 -Check`, which asserts both halves (no
 resolution, yet HTTPS through the proxy) against a running stack. Run it after any change to
 `docker-compose.yml`'s networks.
 
@@ -147,7 +147,7 @@ Every residual above applies directly to the owner's user account. Development o
 - A weak `APP_TOKEN` can be brute-forced from anything on your PC (no rate limiting).
 - A classic `ghp_` token with broad scope lets an injected agent push to **all** your repos.
 - A personal Ditto key with `DITTO_ARCHIVE=turn` archives *everything you type* into a
-  memory every connected agent can search. Use a dedicated key for BitBob's own Ditto agent.
+  memory every connected agent can search. Use a dedicated key for BitBull's own Ditto agent.
 - Broadening `allowlist.txt` opens unlogged egress; `private_dst` still protects your LAN.
 
 ## Pre-release audit (2026-11, four reviewers + handler)
@@ -166,9 +166,9 @@ numbering; "this branch" means the security branch, now merged.
 2. `link-helper.ps1` `/vault-key`: any local process with a forged Origin gets the vault
    key — gate it behind a Windows consent dialog or a paired helper token. (This branch:
    consent dialog.)
-3. `desktop/src-tauri`: app commands are invocable from the BitBob webview (default-allow)
+3. `desktop/src-tauri`: app commands are invocable from the BitBull webview (default-allow)
    — reject non-`main` webview labels in each command. **Status: prove it first** — the fix
-   compiles (`cargo check` clean) but needs a runtime proof (invoke from the BitBob window's
+   compiles (`cargo check` clean) but needs a runtime proof (invoke from the BitBull window's
    devtools, pre-fix and post-fix) before it ships. **Still open as of 5 Nov 2026** — no
    label guard is present in `lib.rs`; the webview-scoped capability in
    `capabilities/default.json` (`"windows": ["main"]`) is the only control, and the whole
@@ -203,7 +203,7 @@ numbering; "this branch" means the security branch, now merged.
     fix: plan mode fenced filesystem and shell only — reviewers still held MCP tools
     (`save_memory`, `request_network_access`). **Closed 7 Nov 2026** after both reviewers in the
     second swarm reached it independently: plan mode now attaches no MCP servers on the Claude
-    engine and switches every `ditto_*`, `bitbob_*` and integration tool off per prompt on
+    engine and switches every `ditto_*`, `bitbull_*` and integration tool off per prompt on
     OpenCode, so a hostile target can no longer write to long-term memory or word a network
     consent card.
 

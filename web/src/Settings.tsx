@@ -283,7 +283,7 @@ function VaultPanel() {
       const r = await api.vaultUnlock(key)
       setMsg(r.moved.length ? `Unlocked; moved ${r.moved.join(', ')} out of settings.local.json into the vault.` : 'Unlocked.')
       load()
-      window.dispatchEvent(new CustomEvent('bitbob:settings-changed'))
+      window.dispatchEvent(new CustomEvent('bitbull:settings-changed'))
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e))
     }
@@ -299,7 +299,7 @@ function VaultPanel() {
       <h3>Vault</h3>
       <p className="muted small">
         API keys saved here go into an encrypted vault on the server (AES-256-GCM). The key to it is kept on this PC by the link helper, not by
-        BitBob, so the agent's own shell can't read your keys. {v.unlocked ? <b>Unlocked</b> : <b>Locked</b>}
+        BitBull, so the agent's own shell can't read your keys. {v.unlocked ? <b>Unlocked</b> : <b>Locked</b>}
         {v.keys.length ? ` · holds ${v.keys.join(', ')}` : v.exists ? '' : ' · not created yet (created at the first unlock)'}.
       </p>
       <div className="row-actions">

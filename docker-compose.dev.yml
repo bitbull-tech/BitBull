@@ -7,10 +7,10 @@
 # or set COMPOSE_FILE once, which is what the Windows scripts do:
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
 #
-# Users installing BitBob never need this file: they pull. See docs/CLIENTS.md "Phase 5".
+# Users installing BitBull never need this file: they pull. See docs/CLIENTS.md "Phase 5".
 
 services:
-  bitbob-agent:
+  bitbull-agent:
     build: .
   egress:
     build: ./egress

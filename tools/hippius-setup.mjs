@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Create the Hippius bucket and a scoped sub-token for BitBob, and (optionally) write the
- * credentials straight into BitBob's settings so the secret never has to be copied by hand.
+ * Create the Hippius bucket and a scoped sub-token for BitBull, and (optionally) write the
+ * credentials straight into BitBull's settings so the secret never has to be copied by hand.
  *
  *   HIPPIUS_CONSOLE_TOKEN=... node tools/hippius-setup.mjs
- *   HIPPIUS_CONSOLE_TOKEN=... BITBOB_APP_TOKEN=... node tools/hippius-setup.mjs --save
+ *   HIPPIUS_CONSOLE_TOKEN=... BITBULL_APP_TOKEN=... node tools/hippius-setup.mjs --save
  *
  * The console token comes from the Hippius Console -> Settings (an account access token,
  * used with `Authorization: Token ...`). It is only used here, never stored, and never sent
@@ -21,13 +21,13 @@
  *   --doctor            list everything and say what to do next
  *   --list              list master tokens, sub-tokens and buckets
  *   --rotate <id|key>   mint a new secret for an existing token (revokes the old one)
- *   --bucket <name>     bucket to use or create        (default: bitbob-agent, or HIPPIUS_BUCKET)
+ *   --bucket <name>     bucket to use or create        (default: bitbull-agent, or HIPPIUS_BUCKET)
  *   --prefix <p>        limit the sub-token to one key prefix, repeatable (e.g. --prefix general/)
  *   --actions <a,b>     sub-token actions              (default: read,write)
- *   --name <n>          sub-token name                 (default: bitbob-agent)
+ *   --name <n>          sub-token name                 (default: bitbull-agent)
  *   --expires <iso>     expiry, e.g. 2027-01-01T00:00:00Z (default: no expiry)
- *   --save              write the credentials into BitBob instead of printing the secret
- *   --bitbob <url>          BitBob base URL                    (default: http://localhost:8787, or BITBOB_URL)
+ *   --save              write the credentials into BitBull instead of printing the secret
+ *   --bitbull <url>          BitBull base URL                    (default: http://localhost:8787, or BITBULL_URL)
  *   --list              show existing buckets and sub-tokens, change nothing
  *
  * Docs: https://api.hippius.com/ (Swagger), docs/STORAGE.md
@@ -42,8 +42,8 @@ const one = (n, d) => {
 };
 const many = (n) => args.flatMap((a, i) => (a === `--${n}` && args[i + 1] ? [args[i + 1]] : []));
 
-const bucket = one("bucket", process.env.HIPPIUS_BUCKET ?? "bitbob-agent");
-const bitbobUrl = (one("bitbob", process.env.BITBOB_URL ?? "http://localhost:8787")).replace(/\/$/, "");
+const bucket = one("bucket", process.env.HIPPIUS_BUCKET ?? "bitbull-agent");
+const bitbullUrl = (one("bitbull", process.env.BITBULL_URL ?? "http://localhost:8787")).replace(/\/$/, "");
 
 if (!TOKEN) {
   console.error("Set HIPPIUS_CONSOLE_TOKEN first (Hippius Console -> Settings -> access token).");
@@ -58,7 +58,7 @@ async function hippius(path, init = {}) {
     ...init,
     headers: {
       authorization: `Token ${TOKEN}`,
-      "user-agent": "bitbob-agent-setup/1.0",
+      "user-agent": "bitbull-agent-setup/1.0",
       ...(init.body ? { "content-type": "application/json" } : {}),
       ...(init.headers ?? {}),
     },
@@ -154,7 +154,7 @@ async function main() {
         for (const t of active) console.log(`    node tools/hippius-setup.mjs --rotate ${idOf(t)}      # ${t.name ?? "(unnamed)"} ${keyOf(t)}`);
         console.log("  Rotating mints a new secret and revokes the old one. Anything still using the old secret stops working.");
       }
-      console.log("- Then add --save (with BITBOB_APP_TOKEN set) to write the credentials straight into BitBob.");
+      console.log("- Then add --save (with BITBULL_APP_TOKEN set) to write the credentials straight into BitBull.");
     }
     return;
   }
@@ -187,7 +187,7 @@ async function main() {
   // 2. The sub-token, scoped to that bucket (and optionally to a key prefix)
   const prefixes = many("prefix");
   const payload = {
-    name: one("name", "bitbob-agent"),
+    name: one("name", "bitbull-agent"),
     scope_type: "single_bucket",
     bucket_names: [bucket],
     actions: one("actions", "read,write").split(",").map((s) => s.trim()).filter(Boolean),
@@ -199,28 +199,28 @@ async function main() {
   await handOver(created, bucket);
 }
 
-/** The one moment the secret exists outside Hippius: into BitBob, or onto the screen. */
+/** The one moment the secret exists outside Hippius: into BitBull, or onto the screen. */
 async function handOver(created, bucketName) {
   const accessKeyId = created.accessKeyId ?? created.access_key_id;
   const secret = created.secret;
   if (!accessKeyId || !secret) throw new Error(`No credentials in the response:\n${JSON.stringify(created, null, 2)}`);
 
   if (flag("save")) {
-    const appToken = process.env.BITBOB_APP_TOKEN ?? "";
-    if (!appToken) throw new Error("--save needs BITBOB_APP_TOKEN (the token you unlock the BitBob UI with)");
-    const res = await fetch(`${bitbobUrl}/api/settings`, {
+    const appToken = process.env.BITBULL_APP_TOKEN ?? "";
+    if (!appToken) throw new Error("--save needs BITBULL_APP_TOKEN (the token you unlock the BitBull UI with)");
+    const res = await fetch(`${bitbullUrl}/api/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json", authorization: `Bearer ${appToken}` },
       body: JSON.stringify({ values: { HIPPIUS_ACCESS_KEY: accessKeyId, HIPPIUS_SECRET_KEY: secret, HIPPIUS_BUCKET: bucketName } }),
     });
-    if (!res.ok) throw new Error(`BitBob refused the settings (${res.status}): ${(await res.text()).slice(0, 300)}`);
-    console.log(`\nSaved into BitBob at ${bitbobUrl}. The secret was never printed.`);
+    if (!res.ok) throw new Error(`BitBull refused the settings (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    console.log(`\nSaved into BitBull at ${bitbullUrl}. The secret was never printed.`);
     console.log(`Access key: ${accessKeyId}`);
-    console.log("\nStill to do in BitBob, Settings > Configuration > Hippius storage:");
+    console.log("\nStill to do in BitBull, Settings > Configuration > Hippius storage:");
     console.log("  - Encryption key > Generate > copy it somewhere safe > Save");
     console.log("Then Settings > Status should show Hippius storage green.");
   } else {
-    console.log("\nPaste these into BitBob, Settings > Configuration > Hippius storage.");
+    console.log("\nPaste these into BitBull, Settings > Configuration > Hippius storage.");
     console.log("The secret is shown once, here, and nowhere else:\n");
     console.log(`  Sub-token access key : ${accessKeyId}`);
     console.log(`  Sub-token secret     : ${secret}`);

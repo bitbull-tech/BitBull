@@ -10,15 +10,15 @@ import { config, DATA_DIR, ROOT } from "./config.js";
  *
  * The sandbox reaches the internet only through the egress proxy. Domains in
  * egress/allowlist.txt are always allowed; anything else is refused unless the user
- * approved it here. Squid asks BitBob about every host that isn't on the static list
+ * approved it here. Squid asks BitBull about every host that isn't on the static list
  * (external ACL helper → GET /internal/egress/check), so an approval takes effect within
- * seconds, with no redeploy or proxy restart, and BitBob also learns about every refusal.
+ * seconds, with no redeploy or proxy restart, and BitBull also learns about every refusal.
  *
- * The agent asks with the `request_network_access` tool (BitBob's own MCP server, mcp.ts):
+ * The agent asks with the `request_network_access` tool (BitBull's own MCP server, mcp.ts):
  * domain + why. The user sees a card with Allow / Allow the whole domain / Deny; the tool
  * call waits for that answer.
  *
- * Approvals live in memory only and end when BitBob restarts. They used to be saved in DATA_DIR,
+ * Approvals live in memory only and end when BitBull restarts. They used to be saved in DATA_DIR,
  * but everything there is writable by the agent's shell (GAPS.md #11: same user as the
  * server), so a prompt-injected agent could have planted a domain that the next restart
  * would quietly allow. Domains needed for good belong in egress/allowlist.txt (in git,
@@ -104,7 +104,7 @@ export function onNetworkChange(fn: () => void) {
   return () => listeners.delete(fn);
 }
 
-/** Is BitBob behind the egress proxy at all? (host mode has open internet and no proxy) */
+/** Is BitBull behind the egress proxy at all? (host mode has open internet and no proxy) */
 export const proxied = () => !!config.sandbox.egressProxy;
 
 // ---------- hosts ----------

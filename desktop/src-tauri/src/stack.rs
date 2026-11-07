@@ -1,5 +1,5 @@
 //! Everything the desktop app does that is not window/tray plumbing: find the repo, check the
-//! machine (WSL, the `bitbob` distro, Docker, the stack), run the existing PowerShell scripts, read
+//! machine (WSL, the `bitbull` distro, Docker, the stack), run the existing PowerShell scripts, read
 //! logs. No Tauri types in here, so it compiles and is tested on any OS; the process-running
 //! parts only do anything useful on Windows.
 //!
@@ -14,24 +14,24 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-/// Saved in the app's config dir as `bitbob-desktop.json`.
+/// Saved in the app's config dir as `bitbull-desktop.json`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
-    /// The BitBob checkout on this PC (where `scripts/bitbob-wsl/*.ps1` live).
+    /// The BitBull checkout on this PC (where `scripts/bitbull-wsl/*.ps1` live).
     pub repo: Option<PathBuf>,
     /// WSL distro that runs the stack (`setup.ps1 -Distro`).
     pub distro: String,
     /// Port of the live stack on 127.0.0.1.
     pub port: u16,
-    /// Sign the BitBob page in with `APP_TOKEN` from `<repo>\.env` instead of pasting it.
+    /// Sign the BitBull page in with `APP_TOKEN` from `<repo>\.env` instead of pasting it.
     pub auto_token: bool,
-    /// Open the BitBob page as soon as the stack answers, instead of staying on the launcher.
+    /// Open the BitBull page as soon as the stack answers, instead of staying on the launcher.
     pub open_when_ready: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { repo: None, distro: "bitbob".into(), port: 8787, auto_token: true, open_when_ready: true }
+        Settings { repo: None, distro: "bitbull".into(), port: 8787, auto_token: true, open_when_ready: true }
     }
 }
 
@@ -48,7 +48,7 @@ impl Settings {
         }
         std::fs::write(file, serde_json::to_string_pretty(self).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
     }
-    pub fn bitbob_url(&self) -> String {
+    pub fn bitbull_url(&self) -> String {
         format!("http://localhost:{}/", self.port)
     }
 }
@@ -58,16 +58,16 @@ pub fn valid_distro(name: &str) -> bool {
     !name.is_empty() && name.len() <= 40 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
-/// Does this folder look like the BitBob repo?
+/// Does this folder look like the BitBull repo?
 pub fn is_repo(dir: &Path) -> bool {
-    dir.join("scripts").join("bitbob-wsl").join("start.ps1").is_file() && dir.join("docker-compose.yml").is_file()
+    dir.join("scripts").join("bitbull-wsl").join("start.ps1").is_file() && dir.join("docker-compose.yml").is_file()
 }
 
 /// Where the repo probably is: next to the exe (portable layout), then the usual places.
 pub fn guess_repo(exe_dir: Option<&Path>) -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
     if let Some(d) = exe_dir {
-        // desktop/src-tauri/target/release/bitbob-desktop.exe -> repo root
+        // desktop/src-tauri/target/release/bitbull-desktop.exe -> repo root
         let mut p = d.to_path_buf();
         for _ in 0..5 {
             cands.push(p.clone());
@@ -78,11 +78,11 @@ pub fn guess_repo(exe_dir: Option<&Path>) -> Option<PathBuf> {
         }
     }
     for drive in ["D:", "C:", "E:"] {
-        cands.push(PathBuf::from(format!("{drive}\\github\\BitBob")));
+        cands.push(PathBuf::from(format!("{drive}\\github\\BitBull")));
     }
     if let Some(home) = std::env::var_os("USERPROFILE") {
-        cands.push(Path::new(&home).join("github").join("BitBob"));
-        cands.push(Path::new(&home).join("BitBob"));
+        cands.push(Path::new(&home).join("github").join("BitBull"));
+        cands.push(Path::new(&home).join("BitBull"));
     }
     cands.into_iter().find(|c| is_repo(c))
 }
@@ -126,7 +126,7 @@ pub struct Status {
     pub distro: Check,
     pub docker: Check,
     pub containers: Check,
-    /// BitBob answered /api/health on the configured port
+    /// BitBull answered /api/health on the configured port
     pub healthy: bool,
     pub url: String,
     /// commit the running containers were built from (deploy.ps1 records it; the image has no .git)
@@ -138,7 +138,7 @@ pub struct Status {
 /// One pass over everything the launcher shows. Each probe is short (a few seconds at most)
 /// and independent, so one failing never hides the others.
 pub fn status(s: &Settings) -> Status {
-    let mut st = Status { url: s.bitbob_url(), ..Default::default() };
+    let mut st = Status { url: s.bitbull_url(), ..Default::default() };
     if let Some(repo) = &s.repo {
         st.repo = Some(repo.display().to_string());
         st.repo_ok = is_repo(repo);
@@ -184,7 +184,7 @@ pub fn status(s: &Settings) -> Status {
     if st.docker.ok {
         st.containers = match run_capture(
             "wsl.exe",
-            &["-d", &s.distro, "--cd", "~/BitBob", "--exec", "docker", "compose", "ps", "-a", "--format", "{{.Name}} {{.State}}"],
+            &["-d", &s.distro, "--cd", "~/BitBull", "--exec", "docker", "compose", "ps", "-a", "--format", "{{.Name}} {{.State}}"],
             Duration::from_secs(20),
         ) {
             Ok((0, out)) => summarise_compose_ps(&out),
@@ -293,12 +293,12 @@ pub enum Action {
 impl Action {
     pub fn label(self) -> &'static str {
         match self {
-            Action::Setup => "Set up the bitbob distro",
-            Action::Start => "Start BitBob",
-            Action::Stop => "Stop BitBob",
+            Action::Setup => "Set up the bitbull distro",
+            Action::Start => "Start BitBull",
+            Action::Stop => "Stop BitBull",
             Action::Deploy => "Deploy (copy code in and rebuild)",
-            Action::Backup => "Back up BitBob data",
-            Action::InstallAtLogin => "Start BitBob at login",
+            Action::Backup => "Back up BitBull data",
+            Action::InstallAtLogin => "Start BitBull at login",
             Action::Logs => "Container logs",
         }
     }
@@ -311,9 +311,9 @@ pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&st
         return Err("invalid distro name".into());
     }
     if !is_repo(repo) {
-        return Err(format!("{} is not the BitBob repo", repo.display()));
+        return Err(format!("{} is not the BitBull repo", repo.display()));
     }
-    let script = |name: &str| repo.join("scripts").join("bitbob-wsl").join(format!("{name}.ps1")).display().to_string();
+    let script = |name: &str| repo.join("scripts").join("bitbull-wsl").join(format!("{name}.ps1")).display().to_string();
     let ps = |file: String, extra: &[&str]| {
         let mut a = vec!["-NoProfile".to_string(), "-NonInteractive".into(), "-ExecutionPolicy".into(), "Bypass".into(), "-File".into(), file, "-Distro".into(), distro.to_string()];
         a.extend(extra.iter().map(|s| s.to_string()));
@@ -337,7 +337,7 @@ pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&st
         Action::InstallAtLogin => ps(script("start"), &["-InstallAtLogin"]),
         Action::Logs => (
             "wsl.exe".to_string(),
-            ["-d", distro, "--cd", "~/BitBob", "--exec", "docker", "compose", "logs", "--tail", "300", "--no-color"].iter().map(|s| s.to_string()).collect(),
+            ["-d", distro, "--cd", "~/BitBull", "--exec", "docker", "compose", "logs", "--tail", "300", "--no-color"].iter().map(|s| s.to_string()).collect(),
         ),
     })
 }
@@ -423,54 +423,54 @@ mod tests {
 
     #[test]
     fn distro_names() {
-        assert!(valid_distro("bitbob"));
+        assert!(valid_distro("bitbull"));
         assert!(valid_distro("Ubuntu-24.04"));
         assert!(!valid_distro(""));
-        assert!(!valid_distro("bitbob; rm -rf /"));
+        assert!(!valid_distro("bitbull; rm -rf /"));
         assert!(!valid_distro("a b"));
     }
 
     #[test]
     fn utf16_and_utf8_output() {
-        let utf16: Vec<u8> = "bitbob\r\nUbuntu\r\n".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
-        assert_eq!(parse_distro_list(&decode(&utf16)), vec!["bitbob", "Ubuntu"]);
-        assert_eq!(parse_distro_list(&decode(b"bitbob\nUbuntu\n")), vec!["bitbob", "Ubuntu"]);
+        let utf16: Vec<u8> = "bitbull\r\nUbuntu\r\n".encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
+        assert_eq!(parse_distro_list(&decode(&utf16)), vec!["bitbull", "Ubuntu"]);
+        assert_eq!(parse_distro_list(&decode(b"bitbull\nUbuntu\n")), vec!["bitbull", "Ubuntu"]);
     }
 
     #[test]
     fn compose_summary() {
-        let c = summarise_compose_ps("bitbob-agent running\nbitbob-egress running\nbitbob-gateway exited\n");
+        let c = summarise_compose_ps("bitbull-agent running\nbitbull-egress running\nbitbull-gateway exited\n");
         assert!(!c.ok);
-        assert!(c.detail.contains("bitbob-gateway: exited"));
-        assert!(summarise_compose_ps("bitbob-agent running\n").ok);
+        assert!(c.detail.contains("bitbull-gateway: exited"));
+        assert!(summarise_compose_ps("bitbull-agent running\n").ok);
         assert!(!summarise_compose_ps("").ok);
     }
 
     #[test]
     fn commands_are_argv_arrays_from_fixed_shapes() {
-        let dir = std::env::temp_dir().join(format!("bitbob-desktop-test-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("scripts/bitbob-wsl")).unwrap();
-        std::fs::write(dir.join("scripts/bitbob-wsl/start.ps1"), "").unwrap();
+        let dir = std::env::temp_dir().join(format!("bitbull-desktop-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("scripts/bitbull-wsl")).unwrap();
+        std::fs::write(dir.join("scripts/bitbull-wsl/start.ps1"), "").unwrap();
         std::fs::write(dir.join("docker-compose.yml"), "").unwrap();
         assert!(is_repo(&dir));
-        let (p, a) = command_for(Action::Stop, &dir, "bitbob", None).unwrap();
+        let (p, a) = command_for(Action::Stop, &dir, "bitbull", None).unwrap();
         assert_eq!(p, "powershell.exe");
         assert_eq!(&a[..5], &["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"]);
         assert!(a[5].ends_with("start.ps1"));
-        assert_eq!(&a[6..], &["-Distro", "bitbob", "-Stop"]);
-        assert!(command_for(Action::Setup, &dir, "bitbob", Some("Ubuntu && calc")).is_err());
-        assert!(command_for(Action::Start, &dir, "bitbob$(x)", None).is_err());
-        let (p, a) = command_for(Action::Logs, &dir, "bitbob", None).unwrap();
+        assert_eq!(&a[6..], &["-Distro", "bitbull", "-Stop"]);
+        assert!(command_for(Action::Setup, &dir, "bitbull", Some("Ubuntu && calc")).is_err());
+        assert!(command_for(Action::Start, &dir, "bitbull$(x)", None).is_err());
+        let (p, a) = command_for(Action::Logs, &dir, "bitbull", None).unwrap();
         assert_eq!(p, "wsl.exe");
-        assert_eq!(a[1], "bitbob");
-        assert!(command_for(Action::Start, &dir.join("nope"), "bitbob", None).is_err());
+        assert_eq!(a[1], "bitbull");
+        assert!(command_for(Action::Start, &dir.join("nope"), "bitbull", None).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn settings_roundtrip() {
-        let f = std::env::temp_dir().join(format!("bitbob-desktop-settings-{}.json", std::process::id()));
-        let s = Settings { repo: Some(PathBuf::from("D:\\github\\BitBob")), ..Default::default() };
+        let f = std::env::temp_dir().join(format!("bitbull-desktop-settings-{}.json", std::process::id()));
+        let s = Settings { repo: Some(PathBuf::from("D:\\github\\BitBull")), ..Default::default() };
         s.save(&f).unwrap();
         assert_eq!(Settings::load(&f), s);
         std::fs::remove_file(&f).unwrap();

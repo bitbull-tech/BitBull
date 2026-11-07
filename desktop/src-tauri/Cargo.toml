@@ -1,12 +1,12 @@
 [package]
-name = "bitbob-desktop"
+name = "bitbull-desktop"
 version = "0.1.0"
-description = "BitBob desktop: manages the local sandboxed stack and shows the BitBob UI"
+description = "BitBull desktop: manages the local sandboxed stack and shows the BitBull UI"
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "bitbob_desktop_lib"
+name = "bitbull_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

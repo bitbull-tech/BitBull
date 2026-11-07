@@ -6,10 +6,10 @@ indexed in Ditto so you can find it again by what it is.
 
 **Hippius holds the bytes, Ditto holds what they are.** Ditto is a memory store with no
 blob storage, so it can't hold photos or film; Hippius has no idea what a file depicts. For
-every stored file BitBob saves a short Ditto memory (project, filename, key, size, SHA-256), so
+every stored file BitBull saves a short Ditto memory (project, filename, key, size, SHA-256), so
 "find the photo of Grandad's squadron" searches Ditto and gets back a Hippius key.
 
-## Why BitBob holds the only credential
+## Why BitBull holds the only credential
 
 The console only scopes a sub-token to a **bucket** (Object Read Only or Object Read &
 Write, across all buckets or named ones), and there is no IAM, no STS/AssumeRole and no
@@ -22,22 +22,22 @@ the scope (a bad one comes back as `502 s3-scope-sync-failed`). So prefix-scoped
 credentials *are* possible — just not from the console UI.
 `tools/hippius-setup.mjs --prefix` uses this.
 
-BitBob still holds the only credential, for reasons that don't depend on that:
+BitBull still holds the only credential, for reasons that don't depend on that:
 
 - Files are encrypted before upload, so a prefix-scoped key handed to someone else gives
   them ciphertext. Access without the encryption key is meaningless, and handing out the
   encryption key is forever.
 - A sub-token can't be scoped per *person* without one token per person to issue, rotate
-  and revoke — which is an access-control system, and BitBob already has the database for one.
+  and revoke — which is an access-control system, and BitBull already has the database for one.
 - Sharing wants a link, not a credential (see below).
 
 So: one sub-token, one bucket, prefixes per project, and **no user ever gets a Hippius
-credential**. When multi-user arrives, a user's access is a row in BitBob's own database — the
+credential**. When multi-user arrives, a user's access is a row in BitBull's own database — the
 storage layer doesn't change. Prefix-scoped sub-tokens stay available as defence in depth,
 or for a tenant who genuinely needs to point their own S3 client at their own folder.
 
-When you do need to hand someone a link, it will be a BitBob link (`/s/<token>`), not a
-presigned URL. Not built yet, and deliberately: a BitBob link can be revoked the moment you
+When you do need to hand someone a link, it will be a BitBull link (`/s/<token>`), not a
+presigned URL. Not built yet, and deliberately: a BitBull link can be revoked the moment you
 change your mind, has no 7-day ceiling, is logged, and can cover a whole folder. A Hippius
 presigned URL is one object, dies after 7 days, can't be revoked early except by killing
 the sub-token, and would hand over ciphertext anyway.
@@ -45,7 +45,7 @@ the sub-token, and would hand over ciphertext anyway.
 ## The layout
 
 ```
-hippius://bitbob-agent/
+hippius://bitbull-agent/
   <project-slug>-<id>/uploads/<chat>/photo.jpg     one prefix per project
   general/uploads/…                                chats outside a project
 ```
@@ -61,7 +61,7 @@ you attach a file, or add one through Files
    ▼
 it lands in the workspace (the agent works on local files, as before)
    │
-   └─ background queue, in BitBob's own process, never in the agent's shell
+   └─ background queue, in BitBull's own process, never in the agent's shell
         ├─ AES-256-GCM, streamed, key from HIPPIUS_ENCRYPTION_KEY
         ├─ PUT to the bucket under <project>/<path>
         ├─ row in `stored_files` (key, plaintext size, sha256, status)
@@ -75,7 +75,7 @@ it lands in the workspace (the agent works on local files, as before)
 - **In the background, with retries** (2s, 15s, 60s). An upload never slows down the UI or a
   turn. Anything still pending after a restart is picked up again at boot.
 - **The SHA-256 is of the plaintext**, so a restore that matches proves the whole round trip.
-- **Never the agent's job.** `bitbob-guard` blanks `HIPPIUS_*` in the agent's shell and redacts
+- **Never the agent's job.** `bitbull-guard` blanks `HIPPIUS_*` in the agent's shell and redacts
   the values from tool output. The agent cannot reach the bucket, by design.
 
 ## Restoring
@@ -93,7 +93,7 @@ came from: `.env`, `set here` or `default`.
 | Setting | |
 |---|---|
 | `HIPPIUS_ACCESS_KEY` / `HIPPIUS_SECRET_KEY` | The sub-token. Console → S3 Buckets → Sub Tokens → Object Read & Write, this bucket only |
-| `HIPPIUS_BUCKET` | Default `bitbob-agent`. Create it in the console first |
+| `HIPPIUS_BUCKET` | Default `bitbull-agent`. Create it in the console first |
 | `HIPPIUS_ENCRYPTION_KEY` | 32 bytes, base64 or hex. **Keep a copy somewhere else** |
 | `STORAGE_MIRROR` | `uploads` (default) or `off` |
 | `HIPPIUS_S3_ENDPOINT` / `HIPPIUS_REGION` | `https://s3.hippius.com`, `decentralized` |
@@ -106,7 +106,7 @@ number of files stored, and anything queued or failed.
 
 It is not like the other settings. Lose it and every stored file is permanently unreadable;
 change it and everything already stored is orphaned (still there, no longer decryptable).
-BitBob validates the length when you save it, but it cannot tell you that you've changed it to
+BitBull validates the length when you save it, but it cannot tell you that you've changed it to
 the wrong 32 bytes. Generate one in Settings, write it down somewhere that isn't this
 machine, and don't rotate it casually.
 
@@ -123,10 +123,10 @@ node tools/hippius-setup.mjs --doctor          # what exists, and what to do abo
 node tools/hippius-setup.mjs                   # create the bucket + a scoped sub-token
 ```
 
-It prints the access key and secret once for pasting into BitBob. With `--save` and
-`BITBOB_APP_TOKEN` set it writes them into BitBob's settings directly and never prints the secret.
-`--prefix general/` restricts the sub-token to one key prefix, and `--bitbob` points it at a
-different BitBob (e.g. the test stack on 8788).
+It prints the access key and secret once for pasting into BitBull. With `--save` and
+`BITBULL_APP_TOKEN` set it writes them into BitBull's settings directly and never prints the secret.
+`--prefix general/` restricts the sub-token to one key prefix, and `--bitbull` points it at a
+different BitBull (e.g. the test stack on 8788).
 
 **Your seed phrase is not part of this.** It signs into the Hippius console, and that is
 the only place it belongs — the API's mnemonic route is a challenge/signature flow for
@@ -144,7 +144,7 @@ node tools/hippius-setup.mjs --rotate <token-id-or-access-key>
 
 Then, either way:
 
-1. BitBob → Settings → Configuration → **Hippius storage**: check the access key and bucket.
+1. BitBull → Settings → Configuration → **Hippius storage**: check the access key and bucket.
 2. **Encryption key → Generate**, copy it somewhere that isn't this machine, Save.
 3. Settings → Status → "Hippius storage" should go green and name the bucket.
 4. Attach a file to a chat, then open Files: it should show a green dot. Restore it to prove

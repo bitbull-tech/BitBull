@@ -196,7 +196,7 @@ export function ModelPicker({
               className="link"
               onClick={() => {
                 setOpen(false)
-                window.dispatchEvent(new CustomEvent('bitbob:browse-models'))
+                window.dispatchEvent(new CustomEvent('bitbull:browse-models'))
               }}
             >
               See all models

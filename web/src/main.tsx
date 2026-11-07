@@ -1,3 +1,5 @@
+// first, before any module reads its settings: see legacyStorage.ts
+import './legacyStorage'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './theme'

@@ -6,14 +6,14 @@ import path from "node:path";
 import { test } from "node:test";
 import { findRepos, inspectRepo, listRepos, repoDiffStat } from "./repos.js";
 
-const ws = mkdtempSync(path.join(tmpdir(), "bitbob-repos-"));
+const ws = mkdtempSync(path.join(tmpdir(), "bitbull-repos-"));
 const g = (dir: string, ...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@x" } });
 
 // origin (bare) + a clone with a branch, an unpushed commit, a dirty file and an untracked file
 const origin = path.join(ws, "origin.git");
 mkdirSync(origin);
 g(origin, "init", "--bare", "-q", "-b", "main");
-const seed = mkdtempSync(path.join(tmpdir(), "bitbob-seed-"));
+const seed = mkdtempSync(path.join(tmpdir(), "bitbull-seed-"));
 g(seed, "init", "-q", "-b", "main");
 writeFileSync(path.join(seed, "a.txt"), "a");
 g(seed, "add", ".");

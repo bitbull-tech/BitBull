@@ -5,12 +5,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 
-// links.ts reads BITBOB_LINKS_PATH at import time
-const root = mkdtempSync(path.join(tmpdir(), "bitbob-links-"));
-process.env.BITBOB_LINKS_PATH = root;
+// links.ts reads BITBULL_LINKS_PATH at import time
+const root = mkdtempSync(path.join(tmpdir(), "bitbull-links-"));
+process.env.BITBULL_LINKS_PATH = root;
 const { listLinks, mountFlagsOf, resolveLink } = await import("./links.js");
 
-const src = mkdtempSync(path.join(tmpdir(), "bitbob-links-src-"));
+const src = mkdtempSync(path.join(tmpdir(), "bitbull-links-src-"));
 writeFileSync(path.join(src, "letter.txt"), "1943");
 mkdirSync(path.join(root, "photos"));
 mkdirSync(path.join(root, "writable"));

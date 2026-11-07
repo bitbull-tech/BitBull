@@ -1,6 +1,30 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type Swarm } from './api'
 import { IconX } from './icons'
+
+import upperPipe from './assets/detectives/upper-pipe.webp'
+import forePipe from './assets/detectives/fore-pipe.webp'
+import upperGlass from './assets/detectives/upper-glass.webp'
+import foreGlass from './assets/detectives/fore-glass.webp'
+import torso from './assets/detectives/torso.webp'
+import h1 from './assets/detectives/head-1.webp'
+import h2 from './assets/detectives/head-2.webp'
+import h3 from './assets/detectives/head-3.webp'
+import h4 from './assets/detectives/head-4.webp'
+import h5 from './assets/detectives/head-5.webp'
+import h6 from './assets/detectives/head-6.webp'
+import h7 from './assets/detectives/head-7.webp'
+import h8 from './assets/detectives/head-8.webp'
+import h9 from './assets/detectives/head-9.webp'
+import c1 from './assets/detectives/collar-1.webp'
+import c2 from './assets/detectives/collar-2.webp'
+import c3 from './assets/detectives/collar-3.webp'
+import c4 from './assets/detectives/collar-4.webp'
+import c5 from './assets/detectives/collar-5.webp'
+import c6 from './assets/detectives/collar-6.webp'
+import c7 from './assets/detectives/collar-7.webp'
+import c8 from './assets/detectives/collar-8.webp'
+import c9 from './assets/detectives/collar-9.webp'
 
 /**
  * What the swarm is doing, while it does it.
@@ -8,12 +32,19 @@ import { IconX } from './icons'
  * The framing is a detective one because that is honestly what happens: two investigators work
  * the case separately, then cross-examine each other, then the handler delivers a verdict.
  *
- * Each reviewer is a Victorian sleuth assembled from a kit — deerstalker (most often), bowler or
- * topper; monocle or spectacles; handlebar, walrus or mutton chops; a calabash pipe, a magnifying
- * glass, or both — chosen deterministically from a hash of the model id, so a model always looks
- * like itself and nobody has to draw sixty portraits. The coat is the model family's colour from
- * the existing --fam-* tokens. No vendor logo or wordmark appears anywhere: the persona is the
- * family name with a rank in front of it, which is ours to make up.
+ * The reviewers are BitBull's bulldog dressed as Sherlock Holmes — deerstalker, monocle, pipe,
+ * magnifying glass and the τ tag — in nine collar colours (art supplied by Tom, cut out of one
+ * sheet). Each model gets one from a hash of its id, so it always looks the same, and the two in a
+ * room never wear collars you could confuse.
+ *
+ * Each one is a jointed puppet cut from Tom's parts sheet: both arms in two pieces (upper arm fixed
+ * at the shoulder, forearm turning at the elbow), one torso and a head per collar colour. While
+ * working the pipe lifts for a puff (held clear of the face) and the smoke drifts off, the glass sweeps with
+ * a glint across the lens, and the head tilts as if thinking; the two lean in during
+ * cross-examination, and at the end there is a hop and a nod, or a head-shake with the glass let
+ * fall. The right upper arm is the left one mirrored (no τ on it); the blue, green and orange
+ * collars are recoloured from other heads so all nine sit on the same torso. Never mirror a whole
+ * figure: that would flip the τ. Coordinates are the rig's own pixels (242 × 217), the same for all.
  */
 
 /* ---------------- identity ---------------- */
@@ -27,38 +58,22 @@ function hash(s: string) {
   return h >>> 0
 }
 
-const HATS = ['deerstalker', 'deerstalker', 'deerstalker', 'bowler', 'topper'] as const
-const CLOTH = [
-  { base: '#7a5c3e', check: '#3d2b1c' }, // houndstooth brown
-  { base: '#6b6a3f', check: '#3f3e22' }, // moss tweed
-  { base: '#6f6a64', check: '#3b3734' }, // grey plaid
-  { base: '#8a4e2e', check: '#4a2716' }, // chestnut
-]
-const SKIN = ['#f2d4b7', '#e3b48f', '#c98e66', '#8d5a3b']
-const EYEWEAR = ['monocle', 'monocle', 'spectacles', 'none'] as const
-const WHISKERS = ['handlebar', 'walrus', 'mutton', 'none'] as const
-const PROPS = ['pipe', 'pipe', 'magnifier', 'both'] as const
+const HEADS = [h1, h2, h3, h4, h5, h6, h7, h8, h9]
+const COLLARS = [c1, c2, c3, c4, c5, c6, c7, c8, c9]
+const DETECTIVES = HEADS
+/** blue, green, orange, green, pink, teal, maroon, teal, purple: the two greens and two teals look alike */
+const LOOK_ALIKE = [[0], [1, 3], [2], [4], [5, 7], [6], [8]]
+const groupOf = (i: number) => LOOK_ALIKE.findIndex((g) => g.includes(i))
 
-function look(model: string) {
-  const h = hash(model)
-  return {
-    hat: HATS[h % HATS.length],
-    cloth: CLOTH[(h >>> 3) % CLOTH.length],
-    skin: SKIN[(h >>> 6) % SKIN.length],
-    eye: EYEWEAR[(h >>> 9) % EYEWEAR.length],
-    whiskers: WHISKERS[(h >>> 12) % WHISKERS.length],
-    prop: PROPS[(h >>> 15) % PROPS.length],
-    id: h.toString(36),
-  }
-}
-
-/** Family, for the coat colour only — the picker's own --fam-* tokens. */
-function famOf(id: string) {
-  if (/claude|anthropic/i.test(id)) return 'anthropic'
-  if (/^(gpt|o\d)/i.test(id)) return 'openai'
-  if (/gemini|gemma/i.test(id)) return 'google'
-  if (/qwen|glm|deepseek|kimi|mimo|llama|mistral|oss/i.test(id)) return 'open'
-  return 'other'
+/** One detective per reviewer: stable per model, and never two that look alike in the same room. */
+function castFor(models: string[]): number[] {
+  const used = new Set<number>()
+  return models.map((m) => {
+    let i = hash(m) % DETECTIVES.length
+    for (let k = 0; k < DETECTIVES.length && used.has(groupOf(i)); k++) i = (i + 1) % DETECTIVES.length
+    used.add(groupOf(i))
+    return i
+  })
 }
 
 const KNOWN: Record<string, string> = {
@@ -88,121 +103,64 @@ const QUIPS = [
 ]
 const quip = (model: string, phase: string) => QUIPS[hash(model + phase) % QUIPS.length]
 
-/* ---------------- the sleuth ---------------- */
+/* ---------------- the detective ---------------- */
 
-function Sleuth({ model, busy, verdict }: { model: string; busy: boolean; verdict?: 'pass' | 'fail' }) {
-  const k = look(model)
-  const pid = `cloth-${k.id}`
-  const pipe = k.prop === 'pipe' || k.prop === 'both'
-  const glass = k.prop === 'magnifier' || k.prop === 'both'
-  const style = { '--coat': `var(--fam-${famOf(model)}, #7a7a7a)` } as CSSProperties
-  const hatBrim = 'M30 60c10 6 50 6 60 0-2 5-12 9-30 9s-28-4-30-9z'
+const VB = { w: 242, h: 217 }
+const LENS = { cx: 213, cy: 54, r: 21 }
+const PIPE = { x: 25, y: 30 } // inside the drawn smoke, so ours grows out of it rather than floating above
+/** Rotation centres: the elbows (forearms turn there) and the neck. The pipe forearm is drawn
+ *  already turned out at the elbow, and only swings ±3° from there, so it never crosses the face. */
+const PIVOT = { pipe: '52px 164px', glass: '214px 164px', neck: '133px 137px' }
+
+function Detective({ n, slot, model, busy, verdict }: { n: number; slot: number; model: string; busy: boolean; verdict?: 'pass' | 'fail' }) {
+  const clip = `lens-${slot}`
+  const img = (href: string) => <image href={href} width={VB.w} height={VB.h} />
   return (
-    <svg className={`sleuth ${busy ? 'busy' : ''}`} style={style} viewBox="0 0 120 150" role="img" aria-label={persona(model)}>
+    <svg className={`sleuth ${busy ? 'busy' : ''} ${verdict ?? ''}`} viewBox={`0 0 ${VB.w} ${VB.h}`} role="img" aria-label={persona(model)}>
       <defs>
-        <pattern id={pid} width="6" height="6" patternUnits="userSpaceOnUse">
-          <rect width="6" height="6" fill={k.cloth.base} />
-          <path d="M0 0h3v3H0zM3 3h3v3H3z" fill={k.cloth.check} opacity=".55" />
-        </pattern>
+        <clipPath id={clip}>
+          <circle cx={LENS.cx} cy={LENS.cy} r={LENS.r} />
+        </clipPath>
+        {/* soft-edged puffs read as smoke; hard circles read as dots */}
+        <filter id={`soft-${slot}`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.4" />
+        </filter>
       </defs>
-
-      {/* coat, Inverness cape, collar and cravat */}
-      <path className="coat" d="M12 150c2-26 20-40 48-40s46 14 48 40z" />
-      <path className="cape" d="M20 150c3-20 18-32 40-32s37 12 40 32z" />
-      <path d="M50 110l10 16 10-16z" fill="#f4f1ea" />
-      <path className="cravat" d="M56 112l4 7 4-7z" />
-
-      {/* neck, ears, head */}
-      <rect x="53" y="94" width="14" height="18" rx="4" fill={k.skin} />
-      <ellipse cx="38" cy="72" rx="4" ry="6" fill={k.skin} />
-      <ellipse cx="82" cy="72" rx="4" ry="6" fill={k.skin} />
-      <ellipse cx="60" cy="72" rx="22" ry="25" fill={k.skin} />
-      {k.whiskers === 'mutton' && (
-        <g className="hair">
-          <path d="M38 68c0 13 6 21 12 23l-2-15z" />
-          <path d="M82 68c0 13-6 21-12 23l2-15z" />
+      <g className="rig">
+        {img(upperPipe)}
+        {img(upperGlass)}
+        {img(torso)}
+        <g className="head" style={{ transformOrigin: PIVOT.neck }}>
+          {img(HEADS[n])}
         </g>
-      )}
-
-      {/* brows, eyes, nose, mouth */}
-      <path className="line" d="M47 63h9M64 63h9" />
-      <circle className="eye" cx="52" cy="70" r="2" />
-      <circle className="eye" cx="68" cy="70" r="2" />
-      <path className="line thin" d="M60 72c-1 5-2 7 1 8" />
-      {(k.whiskers === 'none' || k.whiskers === 'mutton') && <path className="line thin" d="M54 86c3 2 9 2 12 0" />}
-      {k.whiskers === 'handlebar' && (
-        <path className="hair" d="M60 83c-4-3-11-3-15 1 3-1 6 0 8 1 3 1 5 0 7-2 2 2 4 3 7 2 2-1 5-2 8-1-4-4-11-4-15-1z" />
-      )}
-      {k.whiskers === 'walrus' && <path className="hair" d="M48 82c4-3 20-3 24 0 0 5-5 7-12 7s-12-2-12-7z" />}
-
-      {/* eyewear */}
-      {k.eye === 'monocle' && (
-        <g>
-          <circle className="glass" cx="68" cy="70" r="6.5" />
-          <path className="chain" d="M74 74c4 8 2 18-4 30" />
+        {/* over the head on the right, where the band rises behind the cheek; on the left its end is
+            already cut away where the jaw covers it, so it never runs into the mouth */}
+        {img(COLLARS[n])}
+        <g className="limb pipe" style={{ transformOrigin: PIVOT.pipe }}>
+          {img(forePipe)}
+          {busy && (
+            <g className="smoke" filter={`url(#soft-${slot})`}>
+              <circle cx={PIPE.x} cy={PIPE.y} r="7" />
+              <circle cx={PIPE.x} cy={PIPE.y} r="7" />
+              <circle cx={PIPE.x} cy={PIPE.y} r="7" />
+            </g>
+          )}
         </g>
-      )}
-      {k.eye === 'spectacles' && (
-        <g>
-          <circle className="glass" cx="52" cy="70" r="6" />
-          <circle className="glass" cx="68" cy="70" r="6" />
-          <path className="line thin" d="M58 70h4" />
+        <g className="limb glass" style={{ transformOrigin: PIVOT.glass }}>
+          {img(foreGlass)}
+          {busy && (
+            <g clipPath={`url(#${clip})`}>
+              <g transform={`rotate(28 ${LENS.cx} ${LENS.cy})`}>
+                <rect className="glint" x={LENS.cx - 4} y={LENS.cy - 32} width="8" height="64" />
+              </g>
+            </g>
+          )}
         </g>
-      )}
-
-      {/* headwear */}
-      {k.hat === 'deerstalker' && (
-        <g>
-          <path className="hat" d="M36 60c0-22 11-34 24-34s24 12 24 34z" fill={`url(#${pid})`} />
-          <path className="hat" d={hatBrim} fill={`url(#${pid})`} />
-          <path className="seam" d="M60 27v33M45 36c4 8 4 16 3 24M75 36c-4 8-4 16-3 24" />
-          {/* the ear flaps, tied up over the crown */}
-          <path className="bow" d="M53 30c-4-6-1-10 7-6 8-4 11 0 7 6" />
-        </g>
-      )}
-      {k.hat === 'bowler' && (
-        <g>
-          <path className="hat dark" d="M38 58c0-20 9-28 22-28s22 8 22 28z" />
-          <path className="hat dark" d="M30 58c10 5 50 5 60 0-2 4-12 7-30 7s-28-3-30-7z" />
-          <path className="band" d="M39 54h42" />
-        </g>
-      )}
-      {k.hat === 'topper' && (
-        <g>
-          <path className="hat dark" d="M42 56V20c0-3 36-3 36 0v36z" />
-          <path className="hat dark" d="M30 58c10 5 50 5 60 0-2 4-12 7-30 7s-28-3-30-7z" />
-          <path className="band" d="M42 50h36" />
-        </g>
-      )}
-
-      {/* a calabash pipe, smoking while it works */}
-      {pipe && (
-        <g>
-          <path className="stem" d="M64 86c8 4 16 4 20-2" />
-          <path className="bowl" d="M80 74h12l-2 12c-1 4-7 4-8 0z" />
-          {busy && <ellipse className="ember" cx="86" cy="74" rx="5" ry="1.6" />}
-        </g>
-      )}
-      {pipe && busy && (
-        <g className="smoke">
-          <circle cx="87" cy="67" r="3" />
-          <circle cx="91" cy="59" r="3.8" />
-          <circle cx="88" cy="50" r="4.6" />
-        </g>
-      )}
-
-      {/* the magnifying glass, sweeping while it works */}
-      {glass && (
-        <g className={`magnifier ${busy ? 'sweep' : ''}`}>
-          <path className="handle" d="M84 136l12-16" />
-          <circle className="lens" cx="100" cy="112" r="10" />
-        </g>
-      )}
-
+      </g>
       {verdict && (
         <g className={`stamp ${verdict}`}>
-          <circle cx="24" cy="128" r="13" />
-          {verdict === 'pass' ? <path d="M17 128l5 5 9-10" /> : <path d="M18 122l12 12M30 122l-12 12" />}
+          <circle cx="133" cy="192" r="17" />
+          {verdict === 'pass' ? <path d="M124 192l6 6 12-13" /> : <path d="M126 185l14 14M140 185l-14 14" />}
         </g>
       )}
     </svg>
@@ -256,6 +214,7 @@ export function SwarmTheatre({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const cast = castFor(s.reviewers.map((r) => r.model))
   const elapsed = Math.round((Date.now() - s.startedAt) / 1000)
   const mins = Math.floor(elapsed / 60)
 
@@ -271,7 +230,7 @@ export function SwarmTheatre({
         <p className="theatre-phase">{PHASE_LINE[s.phase]}</p>
 
         <div className={`theatre-room phase-${s.phase}`}>
-          {s.reviewers.map((r) => {
+          {s.reviewers.map((r, slot) => {
             const busy = r.status === 'reviewing' || r.status === 'challenging'
             const verdict = r.status === 'done' ? 'pass' : r.status === 'error' ? 'fail' : undefined
             const said = r.error
@@ -279,7 +238,7 @@ export function SwarmTheatre({
               : r.note ?? (busy ? quip(r.model, r.status) : r.status === 'done' ? 'Case closed.' : 'Awaiting the brief.')
             return (
               <div className="detective" key={r.sessionId}>
-                <Sleuth model={r.model} busy={busy} verdict={verdict} />
+                <Detective n={cast[slot]} slot={slot} model={r.model} busy={busy} verdict={verdict} />
                 <div className="bubble" data-quip={!r.note && !r.error}>
                   {r.error ? <span className="error">{r.error}</span> : said}
                 </div>

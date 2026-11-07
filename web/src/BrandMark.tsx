@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { assetUrl, getBrand } from './brand'
-import defaultMark from './assets/bitbob-mark.png'
+import defaultMark from './assets/bitbull-mark.png'
 
 /** True when the page is currently rendering in dark mode, and updates when that changes. */
 function useDark() {
@@ -27,7 +27,7 @@ function useDark() {
 }
 
 /**
- * The operator's logo; else their text mark if brand.json sets one; else BitBob's own mark
+ * The operator's logo; else their text mark if brand.json sets one; else BitBull's own mark
  * (the hard hat).
  * `onDark` forces the dark logo: the sidebar is dark whatever the theme.
  */

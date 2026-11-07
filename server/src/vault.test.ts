@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { configureVault, lockVault, unlockVault, vaultExists, vaultKeys, vaultSet, vaultUnlocked, vaultValues } from "./vault.js";
 
-const dir = mkdtempSync(path.join(tmpdir(), "bitbob-vault-"));
+const dir = mkdtempSync(path.join(tmpdir(), "bitbull-vault-"));
 const file = path.join(dir, "vault.json");
 const KEY = "a".repeat(64);
 const OTHER = "b".repeat(64);

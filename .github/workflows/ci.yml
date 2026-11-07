@@ -39,9 +39,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: bitbob          # the server, UI and agent tooling
+          - image: bitbull          # the server, UI and agent tooling
             context: .
-          - image: bitbob-egress   # squid allowlist proxy, also used as the gateway
+          - image: bitbull-egress   # squid allowlist proxy, also used as the gateway
             context: ./egress
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

@@ -19,8 +19,8 @@ Look in this order and use what the project already defines:
 4. Exercise the actual path you changed: run the script, hit the endpoint, load the page. For UI work, screenshot or describe what you saw.
 
 ## Second opinion on the diff
-Before proposing a commit or PR, when the change is more than a one-liner: call BitBob's
-`ditto_review` tool (MCP `bitbob`) on the repo (mode `working`, or `staged` / `base` as fits).
+Before proposing a commit or PR, when the change is more than a one-liner: call BitBull's
+`ditto_review` tool (MCP `bitbull`) on the repo (mode `working`, or `staged` / `base` as fits).
 It sends the diff to Ditto Review, an independent reviewer, and returns findings as JSON. Read
 them against the code before agreeing; include what it found and what you disagreed with in the
 report. If it replies that the repo isn't enabled for Review or the key lacks access, say so

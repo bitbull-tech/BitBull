@@ -31,6 +31,6 @@ description: Use when committing, branching, opening pull requests, resolving me
 - Read both sides, resolve to preserve both intents, run the tests, and explain each non-obvious resolution.
 
 ## Before a PR
-Run the `verify-changes` skill, then `ditto_review` (BitBob's MCP tool, mode `base` with the
+Run the `verify-changes` skill, then `ditto_review` (BitBull's MCP tool, mode `base` with the
 branch's base, e.g. `main`) for an independent review of everything on the branch; address or
 answer its findings in the PR description.

@@ -36,7 +36,7 @@ export interface Brand {
 }
 
 export const defaultBrand: Brand = {
-  name: "BitBob",
+  name: "BitBull",
   tagline: "The Bittensor Builder",
   logo: null,
   logoDark: null,

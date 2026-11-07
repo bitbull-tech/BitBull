@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    bitbob_desktop_lib::run()
+    bitbull_desktop_lib::run()
 }

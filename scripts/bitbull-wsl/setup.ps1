@@ -1,20 +1,20 @@
 <#
-  One-time: create a dedicated, locked-down WSL distro "bitbob" for BitBob.
+  One-time: create a dedicated, locked-down WSL distro "bitbull" for BitBull.
 
   The new distro has no Windows drive mounts, cannot launch Windows programs, and runs
   Docker with user-namespace remapping.
 
   Run from the repo in PowerShell:
-      powershell -ExecutionPolicy Bypass -File scripts\bitbob-wsl\setup.ps1
+      powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\setup.ps1
 
   By default it downloads Canonical's published Ubuntu 24.04 WSL root filesystem and checks
   it against the SHA256SUMS published beside it. Nothing else is needed on the machine: no
   existing Ubuntu, no Docker on Windows, no Microsoft Store.
 
   Options:
-      -Distro bitbob        name of the distro to create
+      -Distro bitbull        name of the distro to create
       -User thetb           Linux user to create inside it
-      -InstallDir ...       where its virtual disk lives (default %LOCALAPPDATA%\BitBob-WSL)
+      -InstallDir ...       where its virtual disk lives (default %LOCALAPPDATA%\BitBull-WSL)
       -Sha256 <hex>         require this exact rootfs hash. Recommended: the published
                             SHA256SUMS travels with the file, so it proves the download
                             arrived intact, not that it is the file you reviewed. A hash
@@ -28,8 +28,8 @@
 #>
 param(
   [string]$User = $env:USERNAME.ToLower(),
-  [string]$Distro = "bitbob",
-  [string]$InstallDir = "$env:LOCALAPPDATA\BitBob-WSL",
+  [string]$Distro = "bitbull",
+  [string]$InstallDir = "$env:LOCALAPPDATA\BitBull-WSL",
   [string]$Rootfs = "",
   # The rootfs this was last verified against (5 Nov 2026, ubuntu-noble-wsl-amd64-24.04lts).
   # Pass -Sha256 '' to accept whatever SHA256SUMS currently lists, then pin the new value here.
@@ -127,7 +127,7 @@ Step "Provisioning (Docker, user, code, data, lockdown) - takes a few minutes"
 # Still before the lockdown, so /mnt is available and the repo can be read from Windows.
 $repoInGm = (& wsl.exe -d $Distro -u root --exec wslpath -a ($Repo -replace '\\', '/')).Trim()
 if (-not $repoInGm -or $repoInGm -notmatch '^/') { throw "could not reach $Repo from $Distro (is /mnt available?)" }
-Wsl @("-d", $Distro, "-u", "root", "--exec", "bash", "-c", "tr -d '\r' < '$repoInGm/scripts/bitbob-wsl/provision.sh' > /root/provision.sh && bash /root/provision.sh '$User' '$repoInGm'")
+Wsl @("-d", $Distro, "-u", "root", "--exec", "bash", "-c", "tr -d '\r' < '$repoInGm/scripts/bitbull-wsl/provision.sh' > /root/provision.sh && bash /root/provision.sh '$User' '$repoInGm'")
 
 Step "Restarting '$Distro' with the lockdown applied"
 Wsl @("--terminate", $Distro)
@@ -140,9 +140,9 @@ $interop = (& wsl.exe -d $Distro --exec sh -c "cmd.exe /c ver >/dev/null 2>&1 &&
 Write-Host ("  Windows drives visible in $Distro : " + $(if ($mnt) { "YES ($mnt) - check /etc/wsl.conf" } else { "none" }))
 Write-Host ("  Launch Windows programs     : " + $interop)
 
-Step "Building and starting BitBob (first build takes several minutes)"
-Wsl @("-d", $Distro, "--cd", "~/BitBob", "--exec", "sh", "-c", "COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml BITBOB_DATA_DIR=`$HOME/bitbob-data BITBOB_HOST_DATA_DIR=`$HOME/bitbob-data BITBOB_LINKS_DIR=/srv/bitbob-links docker compose up -d --build && docker compose ps")
+Step "Building and starting BitBull (first build takes several minutes)"
+Wsl @("-d", $Distro, "--cd", "~/BitBull", "--exec", "sh", "-c", "COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml BITBULL_DATA_DIR=`$HOME/bitbull-data BITBULL_HOST_DATA_DIR=`$HOME/bitbull-data BITBULL_LINKS_DIR=/srv/bitbull-links docker compose up -d --build && docker compose ps")
 
 Write-Host "`nDone. Open http://localhost:8787" -ForegroundColor Green
-Write-Host "Keep editing and committing in $Repo as before; run scripts\bitbob-wsl\deploy.ps1 to ship changes into $Distro."
-Write-Host "To start BitBob automatically when you log in: scripts\bitbob-wsl\start.ps1 -InstallAtLogin"
+Write-Host "Keep editing and committing in $Repo as before; run scripts\bitbull-wsl\deploy.ps1 to ship changes into $Distro."
+Write-Host "To start BitBull automatically when you log in: scripts\bitbull-wsl\start.ps1 -InstallAtLogin"

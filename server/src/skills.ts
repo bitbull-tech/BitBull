@@ -60,8 +60,8 @@ export function mirrorSkillsInto(workspace: string) {
   if (existsSync(config.skillsDir)) cpSync(config.skillsDir, target, { recursive: true });
 }
 
-// Helper scripts the skills call (e.g. tools/atlas-run.mjs) are reachable via $BITBOB_TOOLS
-process.env.BITBOB_TOOLS = path.join(ROOT, "tools");
+// Helper scripts the skills call (e.g. tools/atlas-run.mjs) are reachable via $BITBULL_TOOLS
+process.env.BITBULL_TOOLS = path.join(ROOT, "tools");
 process.env.ATLAS_WORKFLOWS_DIR = config.integrations.atlas.workflowsDir;
 
 export async function syncSkills({ backup = true } = {}) {
