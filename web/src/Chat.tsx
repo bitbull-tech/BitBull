@@ -8,6 +8,8 @@ import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadIt
 import { reportLocal } from './activity'
 import { FolderMenu } from './FolderMenu'
 import { BrandMark } from './BrandMark'
+import { getBrand } from './brand'
+import mascot from './assets/bitbull-arms-folded.webp'
 
 const greeting = () => {
   const h = new Date().getHours()
@@ -305,17 +307,22 @@ export function Chat({
         {empty ? (
           <div className="hero">
             {project ? (
-              <div className={`hero-mark pc-${project.color}`}>{project.name.slice(0, 2).toUpperCase()}</div>
+              <>
+                <div className={`hero-mark pc-${project.color}`}>{project.name.slice(0, 2).toUpperCase()}</div>
+                <h1>{project.name}</h1>
+                <p>{project.description || 'Chats, files and instructions for this project live together. Attach photos, film and documents to get started.'}</p>
+              </>
             ) : (
-              <BrandMark className="hero-mark" />
+              // BitBull himself stands beside the welcome; a white-labelled install with its own logo keeps its mark instead
+              <div className={`hero-intro ${getBrand().logo ? 'branded' : ''}`}>
+                {getBrand().logo ? <BrandMark className="hero-mark" /> : <img className="hero-mascot" src={mascot} alt="" draggable={false} />}
+                <div className="hero-copy">
+                  <p className="hero-greet">{greeting()}.</p>
+                  <h1>What are we working on?</h1>
+                  <p>Any SayGM model, one conversation. Memory lives in Ditto, so context follows you from model to model.</p>
+                </div>
+              </div>
             )}
-            {!project && <p className="hero-greet">{greeting()}.</p>}
-            <h1>{project ? project.name : 'What are we working on?'}</h1>
-            <p>
-              {project
-                ? project.description || 'Chats, files and instructions for this project live together. Attach photos, film and documents to get started.'
-                : 'Any SayGM model, one conversation. Memory lives in Ditto, so context follows you from model to model.'}
-            </p>
             <div className="suggest-label">Try a starting point</div>
             <div className="suggest">
               {(project ? PROJECT_SUGGESTIONS : SUGGESTIONS).map((s) => (

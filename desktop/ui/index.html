@@ -9,7 +9,12 @@
   @media (prefers-color-scheme: dark) { :root { --bg:#15171b; --fg:#e8e9ec; --mut:#9aa0ab; --card:#1e2127; --line:#2c3038; --btn:#e8e9ec; --btnfg:#15171b; } }
   * { box-sizing: border-box; }
   body { margin:0; font: 14px/1.45 system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width: 780px; margin: 0 auto; padding: 20px 20px 32px; }
+  /* BitBull stands to the left of the console, hand out, presenting it; hidden when the window is narrow */
+  .stage { display:flex; justify-content:center; align-items:flex-start; max-width: 1110px; margin: 0 auto; }
+  .mascot { flex: 0 0 300px; position: sticky; top: 0; padding: 150px 0 0 10px; margin-right: -20px; user-select: none; pointer-events: none; }
+  .mascot img { display:block; width:100%; height:auto; filter: drop-shadow(0 12px 22px rgb(0 0 0 / .18)); }
+  @media (max-width: 960px) { .mascot { display:none; } }
+  main { flex: 1; min-width: 0; max-width: 780px; padding: 20px 20px 32px; }
   h1 { font-size: 18px; margin: 0 0 4px; display:flex; align-items:center; gap:10px; }
   h1 .dot { width:12px; height:12px; border-radius:50%; background:var(--mut); }
   h1 .dot.ok { background:var(--ok); } h1 .dot.bad { background:var(--bad); }
@@ -38,6 +43,8 @@
 </style>
 </head>
 <body>
+<div class="stage">
+<aside class="mascot" aria-hidden="true"><img src="bitbull-presenting.webp" alt="" draggable="false"></aside>
 <main>
   <h1><span class="dot" id="dot"></span> BitBull <span id="headline" class="sub" style="margin:0;font-weight:400"></span></h1>
   <p class="sub">This window manages the local stack. BitBull itself runs in its sandbox and opens in its own window.</p>
@@ -96,6 +103,7 @@
     <pre id="log"></pre>
   </div>
 </main>
+</div>
 <script>
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
