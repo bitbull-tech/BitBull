@@ -9,7 +9,7 @@ import { IconChevronRight, IconFolder, IconRefresh, IconX } from './icons'
  * deployed separately from the machine you edit on) and not a folder on your PC.
  *
  * Almost read-only: "Sync from origin" fetches and fast-forwards, because a stale copy quietly
- * wastes a QA swarm. Every other change (checkout, commit, push) is handed to the agent as a
+ * wastes a QA Hound run. Every other change (checkout, commit, push) is handed to the agent as a
  * chat message, so it happens in view and the reviewer can look at it.
  */
 export function ReposDialog({ project, onClose, onBrowse }: { project: Project | null; onClose: () => void; onBrowse: (dir: string) => void }) {
@@ -197,7 +197,7 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                     {r.behind > 0 && (
                       <p className="small warn-line">
                         This copy is {r.behind} commit{r.behind === 1 ? '' : 's'} behind {r.upstream ?? 'origin'}
-                        {r.ahead ? ` and ${r.ahead} ahead` : ''}. A QA swarm would review the older code.
+                        {r.ahead ? ` and ${r.ahead} ahead` : ''}. A QA Hound run would review the older code.
                       </p>
                     )}
 
@@ -253,7 +253,7 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
           })}
           <p className="muted small">
             <b>These are the agent's working copies</b>, inside BitBull's sandbox — not the code BitBull itself is running, and not the folder on
-            your PC. They are what the agent reads, edits and reviews, and what a QA swarm looks at. "Sync from origin" fetches and
+            your PC. They are what the agent reads, edits and reviews, and what QA Hound looks at. "Sync from origin" fetches and
             fast-forwards a copy; every other button puts a request in the chat so the agent does the work where you can see it.
           </p>
         </div>

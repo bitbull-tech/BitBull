@@ -5,27 +5,30 @@ conversation of 7 Oct – 4 Nov 2026. Short version in `CLAUDE.md`; for agents *
 `agent-readme.md`. The same handoff is in Ditto (search "BitBull handoff 4 Nov 2026"), so in a
 BitBull chat "catch me up on BitBull" gets it through the project-recall skill.
 
-## Renamed to BitBull (4 Nov 2026)
+## Earlier names
 
-The product was **GM Agent** in repo **SayGMAgent** until 4 Nov 2026; Tom renamed it **BitBull —
-The Bittensor Builder**. Everything was renamed in one commit, runtime identifiers included:
-repo `tommyhgunz14/BitBull` (`D:\github\BitBull`), WSL distro `bitbull` (disk in
-`%LOCALAPPDATA%\BitBull-WSL`), data `~/bitbull-data`, code copy `~/BitBull`, containers
-`bitbull-agent` / `bitbull-egress` / `bitbull-gateway`, images `bitbull:local` / `bitbull-egress:local`,
-links `/srv/bitbull-links` (+ `bitbull-src`, `bitbull-mirrors`, `/usr/local/sbin/bitbull-links`),
-scripts `scripts/bitbull-wsl/`, env vars `BITBULL_*` (test-stack/deploy), MCP server `bitbull`
-(tool `request_network_access`, header `x-bitbull-internal`), OpenCode plugin `bitbull-guard.js`,
-browser keys `bitbull-*`, Ditto source `bitbull` (older memories keep `saygm-agent`), desktop app
-identifier `io.bitbull.desktop`. SayGM (the model gateway) keeps its name everywhere: `SAYGM_*`
-env vars, `config.saygm`, provider ids. Older Ditto memories, chats and this file's history still
-say "GM"; read them as BitBull. The live stack was reinstalled fresh under the new names
-(old `gm` distro unregistered after `backup.ps1`).
+BitBull has had two earlier names; everything (repo, distro, containers, paths, env vars, browser
+keys, app identifier) now uses `bitbull`, and the company stays **BitBob Ltd** (`LICENSE`, author
+fields, the planned code-signing identity). Only these still carry an old name, on purpose:
+
+- `scripts/bitbull-wsl/migrate-from-bitbob.ps1` moves an install from the `bitbob` distro to
+  `bitbull` by cloning the whole distro (`wsl --export/--import`) and renaming fixed paths inside the
+  copy — deliberately not a tar of the agent-writable data folder unpacked as root (threat model
+  P0 #8).
+- Three first-run carry-overs keep their old-name lookups: the vault key
+  (`%LOCALAPPDATA%\BitBob\vault.key`, copied by `link-helper.ps1` before it could mint a new one and
+  orphan the vault), the launcher settings (`lib.rs`, `carry_over_legacy_settings`), and the
+  browser's saved settings (`web/src/legacyStorage.ts`, which must stay main.tsx's first import).
+- Older Ditto memories have the source `saygm-agent`; new ones use `bitbull` (`DITTO_SOURCE`).
+
+SayGM (the model gateway) keeps its own name everywhere: `SAYGM_*` env vars, `config.saygm`,
+provider ids. History below is written with today's name throughout.
 
 ## Added later on 4 Nov 2026
 
 - **Claude.ai account import** (`tools/import-claude-export.mjs` + `POST /api/import/conversations`):
   the Settings → Privacy → Export data zip → projects (with docs) and chats with original dates.
-- **QA swarm** (`server/src/swarm.ts`, `web/src/SwarmDialog.tsx`, top-bar button): reviewer
+- **QA Hound** (code name *swarm*: `server/src/swarm.ts`, `web/src/SwarmDialog.tsx`, top-bar button): reviewer
   models in their own sessions (review round, then challenge round), then the originating chat's
   model gives the verdict as a server-started turn the UI joins (`bitbull:turn-started`).
   Reviewer prompts are read-only by instruction; they run in the normal sandbox.
@@ -254,7 +257,7 @@ recall/record) is worth evaluating at the device-token phase, not before.
 - Link helper `/open {path}`: validated distro path under `bitbull-data` → `\\wsl.localhost\bitbull\…`
   → explorer.exe. `start.ps1`/`provision.sh` make `bitbull-data` 755 so Explorer can traverse it.
 
-## QA swarm on the old clone (4 Nov 2026, fable-5 vs gpt-5.4, kimi-k3 as handler)
+## QA Hound on the old clone (4 Nov 2026, fable-5 vs gpt-5.4, kimi-k3 as handler)
 
 Reviewed the 3-week-old clone (a4f8d88). Everything it found had already been fixed upstream
 except: symlink escape in the workspace file APIs (now closed: uploads and listing go through
@@ -296,30 +299,13 @@ React XSS surface, serveStatic path. → run a swarm on the current tree with th
   main supersedes it).
 - Wants errors surfaced, reviews done by subagents, and things verified before "done".
 
-## Renamed: BitBob → BitBull (7 Nov 2026)
-
-The product is now **BitBull**. The company is still **BitBob Ltd** (`LICENSE`, author fields, the
-planned code-signing identity), and every "BitBob Ltd" was deliberately left alone. Everything else
-was renamed, runtime identifiers included: distro `bitbull`, `~/BitBull`, `~/bitbull-data`,
-`/srv/bitbull-{links,src,mirrors}`, `/etc/bitbull-links{,.d}`, containers `bitbull-*`, images
-`ghcr.io/tommyhgunz14/bitbull{,-egress}`, `BITBULL_*` env vars, `scripts/bitbull-wsl/`,
-`bitbull-guard.js`, `bitbull-approved`, header `x-bitbull-internal`, MCP server `bitbull`, app
-identifier `io.bitbull.desktop`, browser keys `bitbull-*`. The bulk replace also rewrote earlier
-entries in this file, so where history above says "BitBull" before 7 Nov, it meant BitBob.
-
-Existing installs migrate with `scripts/bitbull-wsl/migrate-from-bitbob.ps1`, which clones the whole
-distro (`wsl --export/--import`) and renames fixed paths inside the copy — deliberately not a tar of
-the agent-writable data folder unpacked as root (threat model P0 #8). Three things carry themselves
-over on first run, and keep their old-name lookups on purpose: the vault key
-(`%LOCALAPPDATA%\BitBob\vault.key`, copied by `link-helper.ps1` before it could mint a new one and
-orphan the vault), the launcher settings (`lib.rs`, `carry_over_legacy_settings`), and the browser's
-saved settings (`web/src/legacyStorage.ts`, which must stay main.tsx's first import).
+## Logo and the QA Hound detectives (7 Nov 2026)
 
 New logo: a grinning grey bulldog in a red spiked collar with a τ name tag, supplied by Tom. Master at
 `desktop/src-tauri/icons/source.png`. The full bust is used from 48px up; 32px and below use a
 head crop, because the bust blurs and the τ is unreadable there.
 
-The QA swarm's detectives are Tom's art too: the bulldog as Sherlock (deerstalker, monocle, pipe,
+QA Hound's detectives are Tom's art too: the bulldog as Sherlock (deerstalker, monocle, pipe,
 magnifying glass, τ tag) in nine collar colours, cut from his parts sheet into a jointed puppet in
 `web/src/assets/detectives/` (transparent WebP, ~108 KB in all): upper arms fixed at the shoulders,
 forearms that turn at the elbow (pipe, glass), one torso (the blue body with its collar removed), and
@@ -329,7 +315,30 @@ run into the jaw, it is cut away behind the head in the image itself. The pipe f
 is baked turned out 12° and only swings ±3°, which keeps it off the face. The sheet had only six loose heads, so blue, green and orange are
 hue-shifted copies of the teal/purple ones; the right upper arm is the left one mirrored (no τ on
 it). Every layer is the same 242 × 217 canvas, pre-positioned, so `SwarmTheatre.tsx` stacks them in
-one SVG and turns each about a pivot in those pixels (PIVOT, LENS, PIPE): the pipe comes up to the
-mouth with smoke growing out of the drawn plume, the glass sweeps with a glint, the head tilts, the
+one SVG and turns each about a pivot in those pixels (PIVOT, LENS, PIPE): the pipe lifts for a
+puff (held clear of the face) with smoke growing out of the drawn plume, the glass sweeps with a glint, the head tilts, the
 two lean in during cross-examination, then a hop and nod or a head-shake with the glass let fall.
 Never mirror a whole figure: it would flip the τ. The cut-and-place script is not in the repo.
+
+## QA Hound, dog icons and colour schemes (7 Nov 2026)
+
+- **QA Swarm is now QA Hound** in everything a person reads: the top-bar button and its tooltip
+  ("QA Hound - unleash multiple LLMs on your designated repo, folder or file to review, challenge
+  each other and summarise a verdict and recommendations."), the dialog (whose start button is
+  "Unleash the hounds"), the progress pill, reviewer chat titles ("QA Hound · …"), activity log
+  lines and the reviewer prompts. Code, files and the API keep the name *swarm* (`swarm.ts`,
+  `SwarmDialog.tsx`, `/api/swarm`), so nothing that calls it changes. Chats from earlier runs keep
+  their "QA swarm · …" titles.
+- **Every model is shown as a detective dog** (`web/src/dogs.tsx`, `assets/dogs/dog-1..9.webp`,
+  96 px head-and-collar crops of the theatre heads): model picker, model browser, the chip on each
+  reply, and the QA Hound room. Anthropic models wear orange, OpenAI green, Google blue; everything
+  else gets pink, teal, maroon or purple from a hash of the model id, so a model is always the same
+  dog. The theatre starts from that dog and only steps away from it to avoid two look-alikes in one
+  room. `familyOf` in `dogs.tsx` mirrors the server's in `models.ts`; keep the two in step.
+- **Colour schemes** (Settings → Appearance → Colours): seven presets and colour pickers for the
+  background and sidebar of each theme. Only those two colours are stored, as `scheme` in
+  `brand.json` via `PUT /api/appearance` (signed in; `GET /api/brand` stays public). The browser
+  derives the rest in `web/src/brand.ts` (`schemeTokens`): panels, lines and ink from the
+  background, and sidebar text and accent from the sidebar, light ink on dark colours and dark on
+  light ones. `saveScheme` (server `brand.ts`) keeps the rest of the file, refuses a `brand.json`
+  that is a link or invalid JSON, and is covered by `brand.test.ts`. See `docs/BRANDING.md`.

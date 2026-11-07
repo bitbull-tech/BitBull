@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type SettingRow, type Status } from './api'
 import { IconCheck, IconLogout, IconMonitor, IconMoon, IconRefresh, IconSun, IconX } from './icons'
 import type { ThemePref } from './theme'
-import { getBrand } from './brand'
+import { applyBrand, getBrand, PRESETS, type Scheme, type SchemePart } from './brand'
 import { BrandMark } from './BrandMark'
 import { NetworkPanel } from './network'
 import { FoldersPanel } from './Folders'
@@ -235,6 +235,7 @@ export function Settings({
                   </button>
                 ))}
               </div>
+              <ColourPanel />
               <h3>Branding</h3>
               <div className="brand-panel">
                 <BrandMark className="brand-mark" />
@@ -528,6 +529,118 @@ function Integrations() {
           ? 'family photos may be animated in private, labelled projects with the uploader\'s confirmation.'
           : 'real people appear only through their original images; generated video and 3D are used for the world around them.'}{' '}
         Set <code>HERITAGE_LIKENESS_POLICY</code> in <code>.env</code>.
+      </p>
+    </>
+  )
+}
+
+/* ---------------- colours ---------------- */
+
+const DEFAULTS: Record<'light' | 'dark', Required<SchemePart>> = {
+  light: { bg: '#faf7ef', side: '#16150f' },
+  dark: { bg: '#0d0d0b', side: '#0a0a09' },
+}
+const same = (a: Scheme, b: Scheme) => JSON.stringify(a) === JSON.stringify(b)
+const clone = (s: Scheme): Scheme => ({ light: { ...s.light }, dark: { ...s.dark } })
+
+/**
+ * Background and sidebar colour for each theme. Changes show at once and are saved to brand.json
+ * a moment later, so they apply in every browser and in the desktop app. Everything else in the
+ * palette (panels, lines, text, the sidebar's text and accent) is worked out from these two.
+ */
+function ColourPanel() {
+  const [scheme, setScheme] = useState<Scheme>(() => clone(getBrand().scheme ?? { light: {}, dark: {} }))
+  const [saved, setSaved] = useState<Scheme>(scheme)
+  const [state, setState] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // preview immediately
+  useEffect(() => {
+    applyBrand({ ...getBrand(), scheme })
+  }, [scheme])
+
+  // save shortly after the last change
+  useEffect(() => {
+    if (same(scheme, saved)) return
+    const t = window.setTimeout(() => {
+      api
+        .saveAppearance(scheme)
+        .then((b) => {
+          setSaved(clone(b.scheme))
+          setState({ ok: true, text: 'Saved' })
+        })
+        .catch((e) => setState({ ok: false, text: e instanceof Error ? e.message : String(e) }))
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [scheme, saved])
+
+  const set = (mode: 'light' | 'dark', key: 'bg' | 'side', value: string | undefined) =>
+    setScheme((cur) => {
+      const next = clone(cur)
+      if (value) next[mode][key] = value.toLowerCase()
+      else delete next[mode][key]
+      return next
+    })
+
+  // closing Settings inside the half-second still saves the last change
+  const latest = useRef({ scheme, saved })
+  latest.current = { scheme, saved }
+  useEffect(
+    () => () => {
+      const { scheme: s, saved: v } = latest.current
+      if (!same(s, v)) void api.saveAppearance(s).catch(() => {})
+    },
+    [],
+  )
+
+  const active = PRESETS.find((p) => same(p.scheme, scheme))?.id
+
+  return (
+    <>
+      <h3>Colours</h3>
+      <div className="scheme-presets">
+        {PRESETS.map((p) => {
+          const l = { ...DEFAULTS.light, ...p.scheme.light }
+          const d = { ...DEFAULTS.dark, ...p.scheme.dark }
+          return (
+            <button key={p.id} className={`scheme-card ${active === p.id ? 'on' : ''}`} onClick={() => setScheme(clone(p.scheme))} title={`${p.name}: light and dark`}>
+              <span className="scheme-swatch" aria-hidden="true">
+                <i style={{ background: l.side }} />
+                <i style={{ background: l.bg }} />
+                <i style={{ background: d.side }} />
+                <i style={{ background: d.bg }} />
+              </span>
+              <span className="scheme-name">
+                {p.name}
+                {active === p.id && <IconCheck size={13} />}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <div className="scheme-grid">
+        {(['light', 'dark'] as const).map((mode) => (
+          <div key={mode} className="scheme-col">
+            <div className="scheme-mode">{mode === 'light' ? <IconSun size={14} /> : <IconMoon size={14} />} {mode === 'light' ? 'Light' : 'Dark'} theme</div>
+            {(['bg', 'side'] as const).map((key) => (
+              <label key={key} className="scheme-row">
+                <input type="color" value={scheme[mode][key] ?? DEFAULTS[mode][key]} onChange={(e) => set(mode, key, e.target.value)} />
+                <span className="grow">{key === 'bg' ? 'Background' : 'Sidebar'}</span>
+                {scheme[mode][key] ? (
+                  <button className="link small" onClick={() => set(mode, key, undefined)}>
+                    Default
+                  </button>
+                ) : (
+                  <span className="muted small">Default</span>
+                )}
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+      <p className="muted small">
+        Applies everywhere BitBull is opened: it is saved in <code>brand.json</code> in the data folder. Text, panels and the sidebar's accent
+        follow the colours you pick, so any colour stays readable.
+        {state && <span className={state.ok ? 'ok-text' : 'error'}> {state.text}.</span>}
       </p>
     </>
   )

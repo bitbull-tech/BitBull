@@ -24,7 +24,7 @@ import {
 } from "./turns.js";
 import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
-import { brand, brandAsset } from "./brand.js";
+import { brand, brandAsset, saveScheme } from "./brand.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
@@ -138,6 +138,15 @@ app.post("/api/models/refresh", async (c) => {
 
 /** Effective configuration (secrets masked) for the Settings panel. */
 app.get("/api/settings", (c) => c.json({ groups: describeSettings() }));
+/** Background and sidebar colours from Settings → Appearance. Signed in (unlike GET /api/brand). */
+app.put("/api/appearance", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { scheme?: unknown };
+  try {
+    return c.json(saveScheme(body.scheme ?? {}));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
 /** Live connection checks that cost no model tokens. */
 /** Change settings from the UI (saved to DATA_DIR/settings.local.json, applied live). */
 app.put("/api/settings", async (c) => {
@@ -662,7 +671,7 @@ app.post("/api/vault/lock", async (c) => {
   return c.json({ unlocked: false });
 });
 
-// ---------- QA swarm ----------
+// ---------- QA Hound (the swarm) ----------
 const SwarmSchema = z.object({
   sessionId: z.string().min(1),
   target: z.string().min(1).max(400),

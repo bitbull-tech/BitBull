@@ -118,18 +118,22 @@ export function SwarmDialog({
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal swarm-modal" role="dialog" aria-label="QA swarm">
+      <div className="modal swarm-modal" role="dialog" aria-label="QA Hound">
         <header className="modal-head">
-          <h2>QA swarm · {project?.name ?? 'General workspace'}</h2>
+          <h2>QA Hound · {project?.name ?? 'General workspace'}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <IconX />
           </button>
         </header>
         <div className="modal-body">
+          <p className="hound-lead">
+            <b>QA Hound</b> - unleash multiple LLMs on your designated repo, folder or file to review, challenge each other and summarise a
+            verdict and recommendations.
+          </p>
           <p className="muted small">
             Up to two other models each review the target in the sandbox, read-only, then read each other's reports and try to knock them down. Your
             current model (<b>{primaryModel}</b>) weighs both and gives the verdict as its next reply in this chat. The reviewers' chats appear in
-            the sidebar as "QA swarm · …" so you can read their working.
+            the sidebar as "QA Hound · …" so you can read their working.
           </p>
           <label className="field">
             <span>Target (path in this workspace)</span>
@@ -207,7 +211,7 @@ export function SwarmDialog({
               Cancel
             </button>
             <button className="btn primary" onClick={start} disabled={busy}>
-              {busy ? 'Starting…' : 'Start swarm'}
+              {busy ? 'Starting…' : 'Unleash the hounds'}
             </button>
           </div>
         </div>
@@ -247,9 +251,9 @@ export function SwarmPill({ swarm, onUpdate, onFinalTurn, onOpen }: { swarm: Swa
             : 'failed'
   const detail = swarm.reviewers.map((r) => `${r.model}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n')
   return (
-    <span className={`pill swarm-pill ${swarm.phase === 'error' ? 'bad' : swarm.phase === 'done' ? 'ok' : 'run'}`} title={`QA swarm on ${swarm.target}\n${detail}${swarm.error ? `\n${swarm.error}` : ''}`}>
+    <span className={`pill swarm-pill ${swarm.phase === 'error' ? 'bad' : swarm.phase === 'done' ? 'ok' : 'run'}`} title={`QA Hound on ${swarm.target}\n${detail}${swarm.error ? `\n${swarm.error}` : ''}`}>
       <button className="link" onClick={() => onOpen?.()} title="Watch the inquiry">
-        swarm · {label}
+        QA Hound · {label}
       </button>
       {swarm.phase === 'done' || swarm.phase === 'error' ? (
         <button className="link small" onClick={() => onUpdate(null)} aria-label="Dismiss">

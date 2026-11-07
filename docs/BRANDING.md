@@ -44,9 +44,30 @@ Everything is optional; leave out what you don't want to change.
 | `icon` | Browser tab icon. Falls back to `logo` |
 | `mark` | 1–3 characters drawn on a tinted tile instead of BitBull's hard-hat mark, when there is no logo image |
 | `tokens.light` / `tokens.dark` | Any of the design tokens below |
+| `scheme.light` / `scheme.dark` | Background (`bg`) and sidebar (`side`) colour as `#rrggbb`. Written by Settings → Appearance → Colours; see below |
 
 Images must sit directly in `brand/` (no subfolders) and be `.svg`, `.png`, `.jpg`,
 `.webp` or `.ico`.
+
+## Colours from the app
+
+Settings → Appearance → **Colours** sets the background and the sidebar for each theme, from a
+preset (Classic, Bulldog, Slate, Ocean, Forest, Bordeaux, Paper) or a colour picker. The change shows
+at once and is saved into `brand.json` as `scheme`, leaving the rest of the file alone, so it
+applies in every browser and in the desktop app:
+
+```json
+"scheme": {
+  "light": { "bg": "#f3f5f8", "side": "#1e293b" },
+  "dark": { "bg": "#0b1120", "side": "#111827" }
+}
+```
+
+Only those two colours are stored. The browser works out the rest from each one (panels, lines,
+text, the sidebar's text and accent), picking light ink for a dark colour and dark ink for a light
+one, so any choice stays readable. A `scheme` colour wins over the same tokens in `tokens`. The
+save goes through `PUT /api/appearance`, which needs a signed-in session (reading the brand stays
+public, for the sign-in screen); it refuses to write if `brand.json` is a link or isn't valid JSON.
 
 ## Tokens
 
@@ -67,8 +88,9 @@ Two things worth knowing:
 
 - **`accent-text` is the colour drawn *on* the accent**, so change it with `accent`. A dark
   accent wants white text; a yellow one wants near-black.
-- **The sidebar is dark in both themes.** It re-declares the surface tokens for its own
-  subtree from the `side-*` set, so it stays readable whatever you do to `bg` and `panel`.
+- **The sidebar is dark in both themes by default.** It re-declares the surface tokens for its own
+  subtree from the `side-*` set, so it stays readable whatever you do to `bg` and `panel`. A light
+  sidebar picked under Colours gets dark text and a blue accent automatically.
 
 Fonts are names, not files: `"font": "'Public Sans', sans-serif"`. To use a webfont the
 browser doesn't have, add its stylesheet `<link>` to `web/index.html` (that part does need

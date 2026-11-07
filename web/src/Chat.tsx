@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconLock, IconPlan, IconSend, IconShare, IconStop, IconTool, IconX } from './icons'
+import { ModelDog } from './dogs'
 import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadItem } from './uploads'
 import { reportLocal } from './activity'
 import { FolderMenu } from './FolderMenu'
@@ -145,7 +146,7 @@ export function Chat({
       }, 0)
     }
     window.addEventListener('bitbull:compose', onCompose)
-    // A turn the server started in this chat on its own (a QA swarm's verdict): join it
+    // A turn the server started in this chat on its own (a QA Hound verdict): join it
     const onTurn = (e: Event) => {
       const d = (e as CustomEvent<{ sessionId: string; turnId: string }>).detail
       const cur = sessionRef.current
@@ -550,7 +551,11 @@ function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: str
       <div className="avatar">BitBull</div>
       <div className="msg-body">
         <div className="msg-meta">
-          <span className="model-chip">{m.model}</span>
+          {m.model && (
+            <span className="model-chip">
+              <ModelDog id={m.model} size={16} /> {m.model}
+            </span>
+          )}
           {m.plan && <span className="tag plan-tag"><IconPlan size={11} /> Plan</span>}
           {m.streaming && <span className="typing"><i /><i /><i /></span>}
         </div>

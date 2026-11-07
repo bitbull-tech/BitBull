@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type Model, type ModelDetail } from './api'
 import { IconSearch, IconX } from './icons'
+import { ModelDog } from './dogs'
 
 /**
  * Everything SayGM publishes about a model, without going to SayGM: one sortable table of
@@ -135,7 +136,7 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
                 {rows.map((m) => (
                   <tr key={m.id} className={`${m.id === sel ? 'sel' : ''} ${m.id === current ? 'cur' : ''}`} onClick={() => setSel(m.id)}>
                     <td>
-                      <span className={`fam-dot fam-${m.family}`} /> {m.name}
+                      <ModelDog id={m.id} family={m.family} size={22} /> {m.name}
                       <div className="models-id">{m.id}</div>
                     </td>
                     <td>{m.provider ?? '—'}</td>
@@ -161,7 +162,9 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
               <p className="muted small">Pick a model to see everything SayGM publishes about it.</p>
             ) : (
               <>
-                <h3>{picked.name}</h3>
+                <h3 className="models-detail-title">
+                  <ModelDog id={picked.id} family={picked.family} size={40} /> {picked.name}
+                </h3>
                 <code className="models-id">{picked.id}</code>
                 <dl>
                   <dt>Maker</dt>

@@ -1,3 +1,5 @@
+import type { Brand, Scheme } from './brand'
+
 export type EngineId = 'opencode' | 'claude'
 
 export interface Session {
@@ -304,6 +306,8 @@ export const api = {
   /** null or '' clears the UI value so .env applies again */
   updateSettings: (values: Record<string, string | null>) =>
     req<{ changed: string[]; groups: SettingGroup[] }>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
+  /** Background and sidebar colours (Settings → Appearance); saved in brand.json for every browser */
+  saveAppearance: (scheme: Scheme) => req<Brand>('/api/appearance', { method: 'PUT', body: JSON.stringify({ scheme }) }),
   status: () => req<Status>('/api/status'),
   network: () => req<NetworkState>('/api/network'),
   links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),

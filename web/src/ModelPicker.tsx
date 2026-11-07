@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Model } from './api'
 import { IconCheck, IconChevron, IconEye, IconLock, IconSearch } from './icons'
+import { ModelDog } from './dogs'
 
 const FAMILY_LABEL: Record<Model['family'], string> = {
   anthropic: 'Anthropic',
@@ -88,7 +89,7 @@ export function ModelPicker({
   return (
     <div className="mp" ref={rootRef}>
       <button className="mp-trigger" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open}>
-        <span className={`fam-dot fam-${current?.family ?? 'other'}`} />
+        <ModelDog id={current?.id ?? value} family={current?.family} size={20} />
         <span className="mp-name">{current?.name ?? value}</span>
         {current?.price && <span className="mp-price">{priceLabel(current)}</span>}
         <IconChevron size={14} />
@@ -141,7 +142,7 @@ export function ModelPicker({
                     onMouseEnter={() => setCursor(i)}
                     onClick={() => choose(m.id)}
                   >
-                    <span className={`fam-dot fam-${m.family}`} />
+                    <ModelDog id={m.id} family={m.family} size={26} />
                     <div className="mp-main">
                       <div className="mp-title">
                         {m.name}

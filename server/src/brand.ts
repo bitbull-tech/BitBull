@@ -6,7 +6,7 @@
  * a token name must be one we know, and a value may not contain the characters that would
  * let it escape its declaration. Assets may only be image files inside `<DATA_DIR>/brand/`.
  */
-import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { record } from "./activity.js";
@@ -33,7 +33,13 @@ export interface Brand {
   /** 1–3 characters drawn when there is no logo image */
   mark: string;
   tokens: { light: Partial<Record<BrandToken, string>>; dark: Partial<Record<BrandToken, string>> };
+  /** Colours picked in Settings → Appearance; the browser derives the full palette from them. */
+  scheme: Scheme;
 }
+
+/** Background and sidebar colour per theme, as #rrggbb. Anything else is dropped. */
+export type SchemePart = { bg?: string; side?: string };
+export type Scheme = { light: SchemePart; dark: SchemePart };
 
 export const defaultBrand: Brand = {
   name: "BitBull",
@@ -43,6 +49,7 @@ export const defaultBrand: Brand = {
   icon: null,
   mark: "",
   tokens: { light: {}, dark: {} },
+  scheme: { light: {}, dark: {} },
 };
 
 const ASSET_EXT = new Set([".svg", ".png", ".jpg", ".jpeg", ".webp", ".ico"]);
@@ -102,6 +109,18 @@ function tokensOf(raw: unknown): Partial<Record<BrandToken, string>> {
   return out;
 }
 
+const HEX = /^#[0-9a-f]{6}$/i;
+function schemePart(raw: unknown): SchemePart {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const out: SchemePart = {};
+  for (const k of ["bg", "side"] as const) if (typeof r[k] === "string" && HEX.test(r[k] as string)) out[k] = (r[k] as string).toLowerCase();
+  return out;
+}
+export function parseScheme(raw: unknown): Scheme {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { light: schemePart(r.light), dark: schemePart(r.dark) };
+}
+
 export function parseBrand(raw: unknown): Brand {
   const r = (raw ?? {}) as Record<string, unknown>;
   const t = (r.tokens ?? {}) as Record<string, unknown>;
@@ -113,6 +132,7 @@ export function parseBrand(raw: unknown): Brand {
     icon: safeAsset(r.icon),
     mark: clean(r.mark, 3) || defaultBrand.mark,
     tokens: { light: tokensOf(t.light), dark: tokensOf(t.dark) },
+    scheme: parseScheme(r.scheme),
   };
 }
 
@@ -135,6 +155,37 @@ export function brand(): Brand {
     record({ level: "warn", source: "config", message: `brand.json could not be read: ${e instanceof Error ? e.message : String(e)}` });
     return cached?.brand ?? defaultBrand;
   }
+}
+
+/**
+ * Save the colour scheme from Settings → Appearance into brand.json, keeping everything else in
+ * the file as it is. An empty scheme removes the key. The file sits in the agent-writable data
+ * folder, so it is never followed if it is a link (the new file replaces the link itself), and a
+ * file that isn't valid JSON is left alone rather than overwritten.
+ */
+export function saveScheme(raw: unknown): Brand {
+  const scheme = parseScheme(raw);
+  const file = brandFile();
+  let current: Record<string, unknown> = {};
+  if (existsSync(file)) {
+    if (!lstatSync(file).isFile()) throw new Error("brand.json is not a plain file; not touching it");
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) current = parsed as Record<string, unknown>;
+      else throw new Error("not an object");
+    } catch {
+      throw new Error("brand.json isn't valid JSON; fix or remove it before changing colours here");
+    }
+  }
+  const empty = !Object.keys(scheme.light).length && !Object.keys(scheme.dark).length;
+  if (empty) delete current.scheme;
+  else current.scheme = scheme;
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(current, null, 2) + "\n");
+  renameSync(tmp, file);
+  cached = null;
+  record({ level: "info", source: "config", message: empty ? "Colour scheme reset to the default" : "Colour scheme changed in Settings → Appearance" });
+  return brand();
 }
 
 /** Absolute path of a brand asset, or null if it isn't one we are willing to serve. */

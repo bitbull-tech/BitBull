@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type Swarm } from './api'
 import { IconX } from './icons'
+import { dogFor } from './dogs'
 
 import upperPipe from './assets/detectives/upper-pipe.webp'
 import forePipe from './assets/detectives/fore-pipe.webp'
@@ -69,7 +70,7 @@ const groupOf = (i: number) => LOOK_ALIKE.findIndex((g) => g.includes(i))
 function castFor(models: string[]): number[] {
   const used = new Set<number>()
   return models.map((m) => {
-    let i = hash(m) % DETECTIVES.length
+    let i = dogFor(m) // the same dog as the model's icon everywhere else, unless the room already has its look-alike
     for (let k = 0; k < DETECTIVES.length && used.has(groupOf(i)); k++) i = (i + 1) % DETECTIVES.length
     used.add(groupOf(i))
     return i
@@ -220,7 +221,7 @@ export function SwarmTheatre({
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal theatre" role="dialog" aria-label="QA swarm progress">
+      <div className="modal theatre" role="dialog" aria-label="QA Hound progress">
         <header className="modal-head">
           <h2>The inquiry · {s.target}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">

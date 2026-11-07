@@ -643,14 +643,14 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           ) : (
             <button
               className="btn files-btn"
-              title="QA swarm: other models review a repo, folder or file, challenge each other, and this chat's model gives the verdict"
+              title="QA Hound - unleash multiple LLMs on your designated repo, folder or file to review, challenge each other and summarise a verdict and recommendations."
               onClick={() => {
                 // a swarm reports into a chat: start one if this is still a draft
                 if (active) setSwarmOpen(true)
                 else void createSession(cfg.defaultEngine).then((s) => s && setSwarmOpen(true))
               }}
             >
-              <IconSearch size={14} /> QA swarm
+              <IconSearch size={14} /> QA Hound
             </button>
           )}
           <ModelPicker models={models} value={model} onChange={setModel} />
@@ -727,7 +727,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           onStarted={(s) => {
             setSwarm(s)
             setSwarmOpen(false)
-            setTheatre(true) // a swarm costs real money and takes minutes: show it working
+            setTheatre(true) // a QA Hound run costs real money and takes minutes: show it working
             void refreshSessions()
           }}
         />

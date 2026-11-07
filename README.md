@@ -1,7 +1,5 @@
 # BitBull — The Bittensor Builder
 
-_(Formerly "GM Agent" / repo SayGMAgent; renamed 4 Nov 2026.)_
-
 A personal agent on top of **[SayGM](https://saygm.com)** (one key, many models, switch
 any time), with **[Ditto](https://heyditto.ai)** as long-term memory, two pluggable agent
 engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
@@ -9,7 +7,11 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - Chat UI with streaming, tool-call view, per-message model switching
 - Turns run on the server, not in your tab: close it, sleep the laptop, come back, and the
   chat picks up where it left off
-- Light and dark, and white-labelled from one `brand.json` — name, logo and every colour
+- Light and dark, with colour schemes for the background and sidebar (Settings → Appearance), and
+  white-labelled from one `brand.json` — name, logo and every colour
+- **QA Hound**: unleash multiple LLMs on a repo, folder or file to review it, challenge each other
+  and summarise a verdict and recommendations
+- Every model has its own detective bulldog as its icon, the same everywhere in the app
 - Engine per chat: **OpenCode** (native for every model) or **Claude Agent SDK**
 - Ditto MCP wired into the agent + every turn and skill archived to Ditto
 - Skills in `/skills`, versioned in Git, shared by both engines
@@ -523,18 +525,22 @@ before answering about the project, and save durable facts at the end of a turn.
 now** re-runs the seed (safe: it merges). This is the right way to bring imported projects into
 memory, since a chat can only read its own project's workspace.
 
-## QA swarm
+## QA Hound
 
-**QA swarm** (top bar, in any chat) points up to two *other* models at a repo, folder or file in
-the workspace. Each reviews it on its own in the sandbox, read-only, across the areas you tick
+**QA Hound** — unleash multiple LLMs on your designated repo, folder or file to review, challenge
+each other and summarise a verdict and recommendations.
+
+The **QA Hound** button (top bar, in any chat) points up to two *other* models at a repo, folder or
+file in the workspace. Each reviews it on its own in the sandbox, read-only, across the areas you tick
 (attack vectors, correctness, code quality, performance, user experience) and writes a report with
 evidence; then each reads the other's report and has to agree, refute or admit it can't tell,
 with evidence; then the chat's own model, the primary handler, weighs both rounds, checks any
 disputed point itself, and replies in the chat with a per-reviewer summary, a ranked table of
 verified issues and an overall recommendation (use as is / fix first / don't use). The
-reviewers' chats are in the sidebar as "QA swarm · …" and in the activity log, so their working
+reviewers' chats are in the sidebar as "QA Hound · …" and in the activity log, so their working
 is inspectable and exportable. Different model families catch different things; two reviewers
-from one family mostly share blind spots. `POST /api/swarm` starts one from outside.
+from one family mostly share blind spots. `POST /api/swarm` starts one from outside (the code and
+API keep the name *swarm*).
 
 ## Repositories
 
@@ -585,7 +591,7 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `PATCH/DELETE` | `/api/projects/:id` | Update (name, instructions, colour, integrations) / delete |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
-| `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA swarm (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
+| `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA Hound run (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
 | `GET/POST` | `/api/vault`, `/api/vault/unlock {key}`, `/api/vault/lock` | Vault state; unlock with the 64-hex key (migrates secrets out of settings.local.json); lock |
 | `GET` | `/api/projects/:id/repos` | Git clones in the workspace: branch, status, ahead/behind, branches, last commit (read-only) |
