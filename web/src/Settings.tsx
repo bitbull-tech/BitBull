@@ -31,11 +31,28 @@ export function Settings({
   const [checking, setChecking] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [info, setInfo] = useState<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[]; likenessPolicy: string } | null>(null)
+  const [live, setLive] = useState<IntegrationStatus[] | null>(null)
+  const [focus, setFocus] = useState<string | null>(null)
+
+  const onRowSaved = (next: SettingGroup[], text: string) => {
+    setGroups(next)
+    setSaveMsg({ ok: true, text })
+    void check()
+  }
+  /** From a Status card to that service's card under Integrations */
+  const openIntegration = (id: string) => {
+    setTab('integrations')
+    setFocus(id)
+    window.setTimeout(() => document.getElementById(`int-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }
 
   const check = async () => {
     setChecking(true)
     try {
-      setStatus(await api.status())
+      const [st, li] = await Promise.all([api.status(), api.integrationStatus().catch(() => ({ integrations: [] as IntegrationStatus[] }))])
+      setStatus(st)
+      setLive(li.integrations)
     } finally {
       setChecking(false)
     }
@@ -44,6 +61,7 @@ export function Settings({
   useEffect(() => {
     void check()
     void api.settings().then((r) => setGroups(r.groups))
+    void api.integrations().then(setInfo).catch(() => {})
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -64,9 +82,9 @@ export function Settings({
             [
               ['status', 'Status'],
               ['integrations', 'Integrations'],
+              ['config', 'Configuration'],
               ['folders', 'Folders'],
               ['network', 'Network'],
-              ['config', 'Configuration'],
               ['appearance', 'Appearance'],
             ] as const
           ).map(([id, label]) => (
@@ -79,29 +97,20 @@ export function Settings({
         <div className="modal-body">
           {tab === 'status' && (
             <>
+              <p className="muted small">At a glance. Click a service to set it up under Integrations.</p>
               <div className="status-grid">
-                <StatusCard
-                  title="SayGM"
-                  ok={status?.saygm.ok}
-                  loading={!status}
-                  detail={
-                    status?.saygm.ok
-                      ? `${status.saygm.models} chat models · ${status.saygm.ms} ms`
-                      : status?.saygm.error ?? 'Not reachable'
-                  }
-                />
-                <StatusCard
-                  title="Ditto memory"
-                  ok={status?.ditto.ok}
-                  loading={!status}
-                  detail={status?.ditto.ok ? `${status.ditto.tools} memory tools · archive: ${cfg.ditto.archive}` : status?.ditto.error ?? 'Not connected'}
-                />
-                <StatusCard
-                  title="Hippius storage"
-                  ok={status ? status.storage?.ok : undefined}
-                  loading={!status}
-                  detail={status?.storage?.detail ?? 'Not configured'}
-                />
+                {SERVICES.map((svc) => {
+                  const st = serviceState(svc.id, status, live, groups)
+                  return (
+                    <button key={svc.id} className={`status-card as-link ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`} onClick={() => openIntegration(svc.id)}>
+                      <div className="status-title">
+                        <span className="pulse" />
+                        {svc.name}
+                      </div>
+                      <div className="status-detail">{st.loading ? 'Checking…' : st.detail}</div>
+                    </button>
+                  )
+                })}
                 <StatusCard
                   title="Agent sandbox"
                   ok={status ? status.sandbox?.kind !== 'none' : undefined}
@@ -117,22 +126,119 @@ export function Settings({
                 <button className="btn" onClick={() => void check()} disabled={checking}>
                   <IconRefresh size={14} /> {checking ? 'Checking…' : 'Re-check connections'}
                 </button>
-                <button
-                  className="btn"
-                  disabled={refreshing}
-                  onClick={async () => {
-                    setRefreshing(true)
-                    try {
-                      await api.refreshModels()
-                      onModelsRefreshed()
-                    } finally {
-                      setRefreshing(false)
-                    }
-                  }}
-                >
-                  <IconRefresh size={14} /> {refreshing ? 'Refreshing…' : 'Reload SayGM model list'}
-                </button>
               </div>
+            </>
+          )}
+
+          {tab === 'integrations' && (
+            <>
+              <p className="muted small">
+                The services BitBull connects to. Keys marked <b>Edit</b> can be changed here and apply straight away, overriding <code>.env</code>;
+                while the vault is unlocked they are saved there, encrypted (Configuration → Vault). <b>Use .env</b> removes the override. Secrets are
+                never shown in full.
+              </p>
+              {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}
+              {!groups && <p className="muted">Loading…</p>}
+              {groups &&
+                SERVICES.map((svc) => {
+                  const g = groups.find((x) => x.id === svc.id)
+                  const st = serviceState(svc.id, status, live, groups)
+                  const meta = info?.integrations.find((i) => i.id === svc.id)
+                  return (
+                    <section key={svc.id} id={`int-${svc.id}`} className={`int-card ${focus === svc.id ? 'focus' : ''}`}>
+                      <div className="int-head">
+                        <div className={`status-card mini ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`}>
+                          <span className="pulse" />
+                        </div>
+                        <div className="grow">
+                          <b>{svc.name}</b>
+                          <div className="muted small">{meta?.blurb ?? svc.blurb}</div>
+                        </div>
+                        <a className="btn" href={meta?.docs ?? svc.docs} target="_blank" rel="noreferrer">
+                          Docs
+                        </a>
+                      </div>
+                      <div className="int-status small">{st.loading ? 'Checking…' : st.detail}</div>
+                      {g && (
+                        <div className="cfg-table">
+                          {g.rows.map((r) => (
+                            <ConfigRow key={r.env} r={r} onSaved={onRowSaved} onError={(text) => setSaveMsg({ ok: false, text })} />
+                          ))}
+                        </div>
+                      )}
+                      {meta?.notes && <p className="muted small">{meta.notes}</p>}
+                      {meta?.hasMcp && (
+                        <p className="muted small">Its MCP tools reach a chat only in projects that switch it on (project settings).</p>
+                      )}
+                      {svc.id === 'saygm' && (
+                        <div className="row-actions">
+                          <button
+                            className="btn"
+                            disabled={refreshing}
+                            onClick={async () => {
+                              setRefreshing(true)
+                              try {
+                                await api.refreshModels()
+                                onModelsRefreshed()
+                              } finally {
+                                setRefreshing(false)
+                              }
+                            }}
+                          >
+                            <IconRefresh size={14} /> {refreshing ? 'Refreshing…' : 'Reload model list'}
+                          </button>
+                        </div>
+                      )}
+                      {svc.id === 'atlas' && info && (
+                        <>
+                          <h3>Exported Atlas workflows</h3>
+                          {info.atlasWorkflows.length ? (
+                            <ul className="skill-list">
+                              {info.atlasWorkflows.map((w) => (
+                                <li key={w.file}>
+                                  <code>{w.file}</code>
+                                  <span>
+                                    {w.title}
+                                    {w.inputs.length ? ` · inputs: ${w.inputs.join(', ')}` : ''}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted small">None yet. In Atlas, export a workflow as an API and save its JSON into the workflows folder above.</p>
+                          )}
+                        </>
+                      )}
+                    </section>
+                  )
+                })}
+            </>
+          )}
+          {tab === 'folders' && <FoldersPanel />}
+          {tab === 'network' && <NetworkPanel />}
+
+          {tab === 'config' && (
+            <>
+              <p className="muted small">
+                How BitBull itself runs: engine and models, the sandbox, the vault, skills and subagents. Settings marked <b>Edit</b> apply straight
+                away, overriding <code>.env</code>; access and sandbox settings can only be changed in <code>.env</code> followed by a deploy. Keys for
+                outside services are under Integrations.
+              </p>
+              <VaultPanel />
+              {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}
+              {!groups && <p className="muted">Loading…</p>}
+              {groups
+                ?.filter((g) => !SERVICES.some((svc) => svc.id === g.id))
+                .map((g) => (
+                  <section key={g.id} className="cfg-group">
+                    <h3>{g.id === 'bitbull' ? 'Agent and runtime' : g.title}</h3>
+                    <div className="cfg-table">
+                      {g.rows.map((r) => (
+                        <ConfigRow key={r.env} r={r} onSaved={onRowSaved} onError={(text) => setSaveMsg({ ok: false, text })} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
 
               <h3>Skills</h3>
               {status?.skills.length ? (
@@ -145,7 +251,7 @@ export function Settings({
                   ))}
                 </ul>
               ) : (
-                <p className="muted">No skills yet. Add folders under <code>skills/</code>.</p>
+                <p className="muted">{status ? <>No skills yet. Add folders under <code>skills/</code>.</> : 'Loading…'}</p>
               )}
 
               <h3>Subagents</h3>
@@ -162,7 +268,7 @@ export function Settings({
                   ))}
                 </ul>
               ) : (
-                <p className="muted">No subagents. Add definitions under <code>subagents/</code>.</p>
+                <p className="muted">{status ? <>No subagents. Add definitions under <code>subagents/</code>.</> : 'Loading…'}</p>
               )}
 
               <h3>Runtime</h3>
@@ -170,48 +276,14 @@ export function Settings({
                 <dt>Engines</dt>
                 <dd>{cfg.engines.map((e) => e.label).join(' · ')}</dd>
                 <dt>Workspace</dt>
-                <dd><code>{status?.workspace ?? '…'}</code></dd>
+                <dd>
+                  <code>{status?.workspace ?? '…'}</code>
+                </dd>
                 <dt>System prompt</dt>
                 <dd>{status ? (status.systemPromptFound ? 'agent/SYSTEM.md loaded' : 'not found') : '…'}</dd>
                 <dt>Node</dt>
                 <dd>{status?.node ?? '…'}</dd>
               </dl>
-            </>
-          )}
-
-          {tab === 'integrations' && <Integrations />}
-          {tab === 'folders' && <FoldersPanel />}
-          {tab === 'network' && <NetworkPanel />}
-
-          {tab === 'config' && (
-            <>
-              <p className="muted small">
-                Keys and settings marked <b>Edit</b> can be changed here and take effect straight away, overriding <code>.env</code>. <b>Use .env</b>{' '}
-                removes the override. Everything else, including access and sandbox settings, can only be changed in <code>.env</code> followed by a
-                deploy. Secrets are never shown in full.
-              </p>
-              <VaultPanel />
-              {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}
-              {!groups && <p className="muted">Loading…</p>}
-              {groups?.map((g) => (
-                <section key={g.id} className="cfg-group">
-                  <h3>{g.title}</h3>
-                  <div className="cfg-table">
-                    {g.rows.map((r) => (
-                      <ConfigRow
-                        key={r.env}
-                        r={r}
-                        onSaved={(groups, text) => {
-                          setGroups(groups)
-                          setSaveMsg({ ok: true, text })
-                          void check()
-                        }}
-                        onError={(text) => setSaveMsg({ ok: false, text })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
             </>
           )}
 
@@ -461,77 +533,54 @@ function StatusCard({ title, ok, loading, detail }: { title: string; ok?: boolea
   )
 }
 
-function Integrations() {
-  const [info, setInfo] = useState<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[]; likenessPolicy: string } | null>(null)
-  const [live, setLive] = useState<IntegrationStatus[] | null>(null)
-  useEffect(() => {
-    void api.integrations().then(setInfo)
-    void api.integrationStatus().then((r) => setLive(r.integrations))
-  }, [])
-  if (!info) return <p className="muted">Loading…</p>
-  return (
-    <>
-      <p className="muted small">
-        External creative services the agent can use. Set the keys in <code>.env</code> and restart, then switch an integration on per project
-        (project settings). MCP tools only reach chats in projects that enable them.
-      </p>
-      {info.integrations.map((i) => {
-        const st = live?.find((l) => l.id === i.id)
-        return (
-          <section key={i.id} className="int-card">
-            <div className="int-head">
-              <div className={`status-card mini ${!st ? '' : st.ok ? 'ok' : i.configured ? 'bad' : ''}`}>
-                <span className="pulse" />
-              </div>
-              <div className="grow">
-                <b>{i.name}</b>
-                <div className="muted small">{i.blurb}</div>
-              </div>
-              <a className="btn" href={i.docs} target="_blank" rel="noreferrer">Docs</a>
-            </div>
-            <div className="int-status small">{st ? st.detail : 'Checking…'}</div>
-            <div className="cfg-table">
-              {i.env.map((e) => (
-                <div className="cfg-row" key={e.key}>
-                  <div className="cfg-label">{e.label}</div>
-                  <div className="cfg-val">
-                    <code>{e.set ? e.value || 'set' : '(not set)'}</code>
-                    <div className="cfg-env">{e.key}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {i.notes && <p className="muted small">{i.notes}</p>}
-            {i.id === 'atlas' && (
-              <>
-                <h3>Exported Atlas workflows</h3>
-                {info.atlasWorkflows.length ? (
-                  <ul className="skill-list">
-                    {info.atlasWorkflows.map((w) => (
-                      <li key={w.file}>
-                        <code>{w.file}</code>
-                        <span>{w.title}{w.inputs.length ? ` · inputs: ${w.inputs.join(', ')}` : ''}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted small">None yet. In Atlas, export a workflow as an API and save its JSON into the workflows folder above.</p>
-                )}
-              </>
-            )}
-          </section>
-        )
-      })}
-      <h3>Heritage likeness policy</h3>
-      <p className="small">
-        <code>{info.likenessPolicy}</code> —{' '}
-        {info.likenessPolicy === 'private-likeness'
-          ? 'family photos may be animated in private, labelled projects with the uploader\'s confirmation.'
-          : 'real people appear only through their original images; generated video and 3D are used for the world around them.'}{' '}
-        Set <code>HERITAGE_LIKENESS_POLICY</code> in <code>.env</code>.
-      </p>
-    </>
-  )
+/* ---------------- services ---------------- */
+
+/** The outside services, in the order Status and Integrations show them. Ids match the server's setting groups. */
+const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
+  { id: 'saygm', name: 'SayGM', blurb: 'The model gateway: one key, every model in the picker.', docs: 'https://saygm.com' },
+  { id: 'ditto', name: 'Ditto memory', blurb: 'Long-term memory shared by every chat and model.', docs: 'https://heyditto.ai' },
+  { id: 'github', name: 'GitHub', blurb: 'Clone, pull, push and open PRs from the agent’s shell.', docs: 'https://github.com/settings/personal-access-tokens' },
+  { id: 'taostats', name: 'Taostats', blurb: 'Bittensor network data (subnets, validators, prices) for the taostats-api skill.', docs: 'https://docs.taostats.io' },
+  { id: 'atlas', name: 'Atlas AI Studio', blurb: 'Images, video, 3D and animation workflows.', docs: 'https://docs.atlas.design' },
+  { id: 'four04', name: '404.xyz (404—GEN)', blurb: 'Text-to-3D generation on Bittensor.', docs: 'https://www.404.xyz' },
+  { id: 'hippius', name: 'Hippius storage', blurb: 'Encrypted copies of your uploads on decentralised S3 storage.', docs: 'https://hippius.com' },
+]
+
+/** One line of state for a service, from whichever check covers it. */
+function serviceState(
+  id: string,
+  status: Status | null,
+  live: IntegrationStatus[] | null,
+  groups: SettingGroup[] | null,
+): { loading: boolean; ok: boolean; configured: boolean; detail: string } {
+  switch (id) {
+    case 'saygm':
+      if (!status) return { loading: true, ok: false, configured: true, detail: '' }
+      return {
+        loading: false,
+        ok: status.saygm.ok,
+        configured: true,
+        detail: status.saygm.ok ? `${status.saygm.models} chat models · ${status.saygm.ms} ms` : status.saygm.error ?? 'Not reachable',
+      }
+    case 'ditto':
+      if (!status) return { loading: true, ok: false, configured: true, detail: '' }
+      return { loading: false, ok: status.ditto.ok, configured: status.ditto.error !== 'DITTO_API_KEY not set', detail: status.ditto.ok ? `${status.ditto.tools} memory tools` : status.ditto.error ?? 'Not connected' }
+    case 'hippius':
+      if (!status) return { loading: true, ok: false, configured: true, detail: '' }
+      return { loading: false, ok: !!status.storage?.ok, configured: !!status.storage?.configured, detail: status.storage?.detail ?? 'Not configured' }
+    case 'taostats': {
+      // no live probe: the agent calls it, BitBull only holds the key
+      const row = groups?.find((g) => g.id === 'taostats')?.rows.find((r) => r.env === 'TAOSTATS_API_KEY')
+      if (!row) return { loading: !groups, ok: false, configured: false, detail: '' }
+      const set = row.value !== '(not set)'
+      return { loading: false, ok: set, configured: set, detail: set ? 'Key set · the agent uses it through the taostats-api skill' : 'Not configured: add an API key below' }
+    }
+    default: {
+      const st = live?.find((l) => l.id === id)
+      if (!st) return { loading: !live, ok: false, configured: false, detail: live ? 'Not configured' : '' }
+      return { loading: false, ok: st.ok, configured: st.configured, detail: st.detail }
+    }
+  }
 }
 
 /* ---------------- colours ---------------- */

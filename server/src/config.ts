@@ -21,7 +21,7 @@ const bool = (v: string) => ["1", "true", "yes", "on"].includes(v.toLowerCase())
 export type EngineId = "opencode" | "claude";
 
 /* ---------- settings saved from the UI ----------
- * .env is the base. Keys edited in Settings → Configuration are saved to
+ * .env is the base. Keys edited in Settings (Integrations / Configuration) are saved to
  * <DATA_DIR>/settings.local.json (mode 600, never in git) and win over .env.
  * They're applied to process.env before the config below is built, and again live on save.
  */

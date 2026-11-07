@@ -1,14 +1,17 @@
-//! BitBull desktop: a small Windows wrapper around the sandboxed Docker stack. It checks the
-//! machine, runs the repo's own PowerShell scripts (setup / start / stop / deploy / backup),
-//! shows their output, and once BitBull answers it opens the normal web UI in a second window.
+//! BitBull desktop: a small wrapper around the sandboxed Docker stack, for Windows and macOS. It
+//! checks the machine, runs the repo's own scripts (setup / start / stop / deploy / backup:
+//! PowerShell in scripts/bitbull-wsl on Windows, bash in scripts/bitbull-mac on a Mac), shows their
+//! output, and once BitBull answers it opens the normal web UI in a second window. On a Mac it is
+//! also the link helper BitBull's page talks to (helper.rs); on Windows that is link-helper.ps1.
 //!
 //! Two windows on purpose: `main` is the launcher (local HTML, has IPC to these commands);
 //! `bitbull` shows http://localhost:8787 and has **no** IPC capability, so nothing served by BitBull,
 //! and nothing an agent writes into a page, can reach the commands below.
 
+mod helper;
 mod stack;
 
-use stack::{Action, Settings, Status};
+use stack::{Action, Platform, Settings, Status};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -74,7 +77,8 @@ fn set_settings(state: State<AppState>, settings: Settings) -> Result<Settings, 
     let mut s = settings;
     if let Some(r) = &s.repo {
         if !stack::is_repo(r) {
-            return Err(format!("{} does not contain scripts\\bitbull-wsl\\start.ps1 and docker-compose.yml", r.display()));
+            let scripts = if cfg!(target_os = "macos") { "scripts/bitbull-mac/start.sh" } else { "scripts\\bitbull-wsl\\start.ps1" };
+            return Err(format!("{} does not contain {scripts} and docker-compose.yml", r.display()));
         }
     }
     if s.repo.is_none() {
@@ -85,7 +89,7 @@ fn set_settings(state: State<AppState>, settings: Settings) -> Result<Settings, 
     Ok(s)
 }
 
-/// Windows folder picker (from Rust, so the page needs no dialog permission).
+/// Folder picker (from Rust, so the page needs no dialog permission).
 #[tauri::command]
 async fn pick_repo(app: AppHandle) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
@@ -112,7 +116,7 @@ fn start_action(app: &AppHandle, action: Action, source: Option<&str>) -> Result
     let state = app.state::<AppState>();
     let s = state.settings.lock().unwrap().clone();
     let repo = s.repo.clone().ok_or("Choose the BitBull folder first")?;
-    let (program, args) = stack::command_for(action, &repo, &s.distro, source)?;
+    let (program, args) = stack::command_for(Platform::current(), action, &repo, &s.distro, s.port, source)?;
     let mut guard = state.child.lock().unwrap();
     if let Some(c) = guard.as_mut() {
         if c.try_wait().map(|x| x.is_none()).unwrap_or(false) {
@@ -194,8 +198,8 @@ fn stop_and_quit(app: &AppHandle) {
         let confirmed = app
             .dialog()
             .message(
-                "This stops the BitBull containers and shuts the distro down, then closes this app. \
-                 Anything running inside BitBull is interrupted.\n\n\
+                "This stops the BitBull containers and shuts BitBull's Linux VM (the distro on Windows) down, \
+                 then closes this app. Anything running inside BitBull is interrupted.\n\n\
                  To close the app and leave BitBull running, use Quit instead.",
             )
             .title("Stop BitBull and quit?")
@@ -211,7 +215,7 @@ fn stop_and_quit(app: &AppHandle) {
             let _ = app.emit_to("main", "bitbull-log", LogLine { run: 0, line: format!("! {e}") });
             return;
         }
-        // let start.ps1 -Stop finish before this process goes away (it is what brings the stack down)
+        // let the stop script finish before this process goes away (it is what brings the stack down)
         let state = app.state::<AppState>();
         for _ in 0..900 {
             if state.child.lock().map(|c| c.is_none()).unwrap_or(true) {
@@ -299,6 +303,52 @@ fn sign_in_if_local(app: &AppHandle, webview: &tauri::Webview, url: &tauri::Url)
     let _ = webview.eval(&js);
 }
 
+/// The link helper's view of the app: the settings, native dialogs, the Keychain, Finder.
+struct AppHost(AppHandle);
+
+impl helper::Host for AppHost {
+    fn repo(&self) -> Option<PathBuf> {
+        self.0.state::<AppState>().settings.lock().unwrap().repo.clone()
+    }
+    fn port(&self) -> u16 {
+        self.0.state::<AppState>().settings.lock().unwrap().port
+    }
+    fn profile(&self) -> String {
+        self.0.state::<AppState>().settings.lock().unwrap().distro.clone()
+    }
+    fn confirm(&self, title: &str, text: &str, ok: &str, cancel: &str) -> bool {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        self.bring_forward();
+        self.0
+            .dialog()
+            .message(text)
+            .title(title)
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(ok.into(), cancel.into()))
+            .blocking_show()
+    }
+    fn pick_folder(&self, title: &str) -> Option<PathBuf> {
+        use tauri_plugin_dialog::DialogExt;
+        self.bring_forward();
+        self.0.dialog().file().set_title(title).blocking_pick_folder()?.into_path().ok()
+    }
+    fn vault_key(&self) -> Result<String, String> {
+        helper::keychain_vault_key()
+    }
+    fn open_in_finder(&self, p: &std::path::Path) -> Result<(), String> {
+        let st = std::process::Command::new("/usr/bin/open").arg(p).status().map_err(|e| e.to_string())?;
+        if st.success() { Ok(()) } else { Err(format!("open {} failed", p.display())) }
+    }
+}
+
+impl AppHost {
+    /// The request comes from a browser window; the dialog should not open behind it.
+    fn bring_forward(&self) {
+        #[cfg(target_os = "macos")]
+        let _ = self.0.show();
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -310,6 +360,11 @@ pub fn run() {
                 settings.repo = stack::guess_repo(std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())).as_deref());
             }
             app.manage(AppState { settings: Mutex::new(settings), file, child: Mutex::new(None), run_seq: Mutex::new(0) });
+            // On a Mac the app is the link helper (folder links, Open in Finder, the vault key);
+            // on Windows that is link-helper.ps1, started by start.ps1.
+            if Platform::current() == Platform::Mac {
+                helper::serve(std::sync::Arc::new(AppHost(app.handle().clone())));
+            }
 
             // tray: the app lives here; closing windows never stops the stack
             let open = MenuItem::with_id(app, "open", "Open BitBull", true, None::<&str>)?;

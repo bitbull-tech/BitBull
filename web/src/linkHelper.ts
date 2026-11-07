@@ -15,6 +15,12 @@ export interface HelperLink {
   path: string
 }
 
+/** BitBull on a Mac: the helper is the BitBull app itself, folders open in Finder, links are copies. */
+export const isMac = /Mac/i.test(navigator.userAgent)
+export const fileManager = isMac ? 'Finder' : 'Explorer'
+/** What starts the helper, for the "no helper" notes. */
+export const HELPER_CMD = isMac ? 'Open the BitBull app (it stays in the menu bar)' : 'powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
+
 export const onThisPc = () => ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
 
 export async function helperStatus(): Promise<{ links: HelperLink[] } | null> {
@@ -55,35 +61,36 @@ async function waitForGm(name?: string, present = true) {
   return false
 }
 
-export const HELPER_HINT =
-  'Linking from the page needs the link helper on this PC. start.ps1 starts it; or run: powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
+export const HELPER_HINT = isMac
+  ? 'Linking from the page needs the link helper, which on a Mac runs inside the BitBull app: open the app (it stays in the menu bar) and reload.'
+  : 'Linking from the page needs the link helper on this PC. start.ps1 starts it; or run: powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
 
 /** Opens the folder picker on this PC; resolves once BitBull shows the new link. */
 export async function linkFolder(onStep?: (s: string) => void) {
   onStep?.('Choose the folder in the window that opened on this PC…')
   const r = await post('/link', {})
   if (!r.ok) return r
-  onStep?.(`Linked ${r.path ?? ''}. BitBull is restarting to see it…`)
+  onStep?.(isMac ? `Linked ${r.path ?? ''}. Waiting for BitBull to show it…` : `Linked ${r.path ?? ''}. BitBull is restarting to see it…`)
   await waitForGm(r.name ?? undefined, true)
   return r
 }
 
 export async function unlinkFolder(name: string, onStep?: (s: string) => void) {
-  onStep?.(`Confirm in the Windows box to remove ${name}…`)
+  onStep?.(`Confirm in the box that opened on this computer to remove ${name}…`)
   const r = await post('/unlink', { name })
   if (!r.ok) return r
-  onStep?.(`Removed ${name}. BitBull is restarting…`)
+  onStep?.(isMac ? `Removed ${name}.` : `Removed ${name}. BitBull is restarting…`)
   await waitForGm(name, false)
   return r
 }
 
-/** Filtered links only: re-scan the folder on Windows and copy it again (no restart). */
+/** Filtered links (every link on a Mac): re-scan the folder and copy it again (no restart). */
 export async function refreshFolder(name: string, onStep?: (s: string) => void) {
   onStep?.(`Refreshing ${name}: checking it for secrets and copying it again…`)
   return post('/refresh', { name })
 }
 
-/** Open a folder of BitBull's data in Windows Explorer (the helper maps the distro path to \\wsl.localhost\…). */
+/** Open a folder of BitBull's data in Explorer (the helper maps the distro path to \\wsl.localhost\…) or Finder. */
 export async function openInExplorer(hostPath: string): Promise<{ ok: boolean; message?: string }> {
   if (!onThisPc()) return { ok: false, message: 'Only from this PC' }
   try {

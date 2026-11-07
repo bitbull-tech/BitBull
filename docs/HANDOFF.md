@@ -342,3 +342,24 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
   background, and sidebar text and accent from the sidebar, light ink on dark colours and dark on
   light ones. `saveScheme` (server `brand.ts`) keeps the rest of the file, refuses a `brand.json`
   that is a link or invalid JSON, and is covered by `brand.test.ts`. See `docs/BRANDING.md`.
+
+## Settings reorganised, and BitBull for macOS (7 Nov 2026)
+
+- **Settings tabs.** Status is now an overview: one card per outside service plus the sandbox,
+  each a link to its setup. **Integrations** holds every outside service, one card each with live
+  status, docs link and its editable keys: SayGM (with Reload model list), Ditto, GitHub,
+  Taostats, Atlas (with exported workflows), 404, Hippius. **Configuration** is BitBull's own
+  workings: the vault, agent and runtime settings (the server's `bitbull` group), heritage
+  policy, skills, subagents, runtime info. The server's setting groups are unchanged; the web
+  splits them by id (`SERVICES` in `Settings.tsx`). Taostats has no live probe, so its card says
+  whether a key is set.
+- **macOS** (CLIENTS.md Phase 6, decisions there): `scripts/bitbull-mac/` (setup, deploy, start,
+  status, logs, backup, link; bash 3.2), launcher support (`stack.rs` `Platform`, Mac checks via
+  `status.sh`, actions through `/usr/bin/env … /bin/bash`), the link helper built into the app
+  (`helper.rs`, Keychain via `security-framework`), `icon.icns`, bundle targets `all` with
+  `minimumSystemVersion` 13.0, Mac wording in the web (Finder, "this computer"). CI: a proposed
+  `macos.yml` (universal `.dmg`) and arm64 images in `ci.yml`, both in `ci-proposed/` for Tom to
+  move into `.github/workflows/` himself. Not yet run on a Mac: scripts are shellchecked and
+  `link.sh` was exercised on Linux; the Rust side has unit tests for both platforms' argv and the
+  helper's routing, but the macOS-only lines (Keychain, `AppHandle::show`) were not compiled here.
+

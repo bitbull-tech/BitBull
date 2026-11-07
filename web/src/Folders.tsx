@@ -90,7 +90,7 @@ export function FoldersPanel() {
                       title={`Remove ${r.name}`}
                       disabled={!!busy}
                       onClick={() => {
-                        setBusy(`Confirm in the Windows box to remove ${r.name}…`)
+                        setBusy(`Confirm in the box that opened on this computer to remove ${r.name}…`)
                         void run(() => unlinkFolder(r.name, setBusy), `Removed ${r.name}.`)
                       }}
                     >

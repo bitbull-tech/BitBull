@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type FileEntry, type Project, type StoredFile } from './api'
-import { onThisPc, openInExplorer } from './linkHelper'
+import { fileManager, isMac, onThisPc, openInExplorer } from './linkHelper'
 import { IconCheck, IconChevronRight, IconCopy, IconFile, IconFolder, IconRefresh, IconX } from './icons'
 import { filterItems, fmtBytes, fromDrop, fromInput, SKIP_DIRS, uploadItems, type UploadItem } from './uploads'
 
@@ -156,17 +156,17 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
               {where.host && (
                 <>
                   <span className="muted small">On the host:</span>
-                  <code title="The same folder inside the bitbull WSL distro (wsl -d bitbull)">{where.host}</code>
+                  <code title={isMac ? "The same folder on this Mac, in BitBull's folder" : 'The same folder inside the bitbull WSL distro (wsl -d bitbull)'}>{where.host}</code>
                   <button className="icon-btn sm" title="Copy host path" onClick={() => copy(where.host!)}>
                     {copied === where.host ? <IconCheck size={13} /> : <IconCopy size={13} />}
                   </button>
                   {onThisPc() && (
                     <button
                       className="btn sm"
-                      title="Open this folder in Windows Explorer (via the link helper on this PC)"
-                      onClick={() => void openInExplorer(where.host!).then((r) => !r.ok && setMsg(r.message ?? 'Could not open Explorer'))}
+                      title={`Open this folder in ${fileManager} (via the link helper on this computer)`}
+                      onClick={() => void openInExplorer(where.host!).then((r) => !r.ok && setMsg(r.message ?? `Could not open ${fileManager}`))}
                     >
-                      Open in Explorer
+                      Open in {fileManager}
                     </button>
                   )}
                 </>

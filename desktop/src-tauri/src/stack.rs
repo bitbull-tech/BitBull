@@ -1,7 +1,8 @@
 //! Everything the desktop app does that is not window/tray plumbing: find the repo, check the
-//! machine (WSL, the `bitbull` distro, Docker, the stack), run the existing PowerShell scripts, read
-//! logs. No Tauri types in here, so it compiles and is tested on any OS; the process-running
-//! parts only do anything useful on Windows.
+//! machine, run the repo's own scripts, read logs. On Windows that is WSL, the `bitbull` distro
+//! and the PowerShell scripts in scripts/bitbull-wsl; on a Mac it is Colima (or Docker Desktop /
+//! OrbStack) and the bash scripts in scripts/bitbull-mac. No Tauri types in here, so it compiles
+//! and is tested on any OS; `Platform` picks which set of scripts a call means.
 //!
 //! Rules carried over from the scripts: child processes get argv arrays, never a command
 //! string built from data; the only values that come from outside (repo path, distro name)
@@ -14,12 +15,47 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+/// Which scripts and checks apply. `current()` is the OS this build runs on; tests pass both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Platform {
+    Windows,
+    Mac,
+}
+
+impl Platform {
+    pub fn current() -> Platform {
+        if cfg!(target_os = "macos") { Platform::Mac } else { Platform::Windows }
+    }
+    pub fn id(self) -> &'static str {
+        match self {
+            Platform::Windows => "windows",
+            Platform::Mac => "macos",
+        }
+    }
+    fn scripts(self) -> &'static str {
+        match self {
+            Platform::Windows => "bitbull-wsl",
+            Platform::Mac => "bitbull-mac",
+        }
+    }
+    fn start_script(self) -> &'static str {
+        match self {
+            Platform::Windows => "start.ps1",
+            Platform::Mac => "start.sh",
+        }
+    }
+}
+
+/// Where a Mac's own programs and Homebrew live. A GUI app starts with a bare PATH, so every
+/// command the app runs on a Mac gets this one.
+pub const MAC_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+
 /// Saved in the app's config dir as `bitbull-desktop.json`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
-    /// The BitBull checkout on this PC (where `scripts/bitbull-wsl/*.ps1` live).
+    /// The BitBull checkout on this computer (where `scripts/bitbull-wsl` / `scripts/bitbull-mac` live).
     pub repo: Option<PathBuf>,
-    /// WSL distro that runs the stack (`setup.ps1 -Distro`).
+    /// WSL distro that runs the stack (`setup.ps1 -Distro`); on a Mac, the Colima profile (VM) name.
     pub distro: String,
     /// Port of the live stack on 127.0.0.1.
     pub port: u16,
@@ -58,9 +94,13 @@ pub fn valid_distro(name: &str) -> bool {
     !name.is_empty() && name.len() <= 40 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
-/// Does this folder look like the BitBull repo?
+/// Does this folder look like the BitBull repo (with the scripts for this OS)?
 pub fn is_repo(dir: &Path) -> bool {
-    dir.join("scripts").join("bitbull-wsl").join("start.ps1").is_file() && dir.join("docker-compose.yml").is_file()
+    is_repo_for(Platform::current(), dir)
+}
+
+pub fn is_repo_for(platform: Platform, dir: &Path) -> bool {
+    dir.join("scripts").join(platform.scripts()).join(platform.start_script()).is_file() && dir.join("docker-compose.yml").is_file()
 }
 
 /// Where the repo probably is: next to the exe (portable layout), then the usual places.
@@ -77,12 +117,16 @@ pub fn guess_repo(exe_dir: Option<&Path>) -> Option<PathBuf> {
             }
         }
     }
-    for drive in ["D:", "C:", "E:"] {
-        cands.push(PathBuf::from(format!("{drive}\\github\\BitBull")));
+    if cfg!(windows) {
+        for drive in ["D:", "C:", "E:"] {
+            cands.push(PathBuf::from(format!("{drive}\\github\\BitBull")));
+        }
     }
-    if let Some(home) = std::env::var_os("USERPROFILE") {
-        cands.push(Path::new(&home).join("github").join("BitBull"));
-        cands.push(Path::new(&home).join("BitBull"));
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+        let home = Path::new(&home);
+        for rel in ["github/BitBull", "GitHub/BitBull", "Documents/GitHub/BitBull", "Developer/BitBull", "code/BitBull", "src/BitBull", "BitBull"] {
+            cands.push(rel.split('/').fold(home.to_path_buf(), |p, c| p.join(c)));
+        }
     }
     cands.into_iter().find(|c| is_repo(c))
 }
@@ -119,10 +163,14 @@ pub struct Check {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Status {
+    /// "windows" or "macos": the launcher labels the four checks below to match
+    pub platform: String,
     pub repo: Option<String>,
     pub repo_ok: bool,
     pub env_ok: bool,
+    /// Windows: WSL itself. Mac: the container runtime (Colima, or Docker Desktop / OrbStack).
     pub wsl: Check,
+    /// Windows: the bitbull distro. Mac: the bitbull VM (or the engine BitBull shares).
     pub distro: Check,
     pub docker: Check,
     pub containers: Check,
@@ -138,7 +186,8 @@ pub struct Status {
 /// One pass over everything the launcher shows. Each probe is short (a few seconds at most)
 /// and independent, so one failing never hides the others.
 pub fn status(s: &Settings) -> Status {
-    let mut st = Status { url: s.bitbull_url(), ..Default::default() };
+    let platform = Platform::current();
+    let mut st = Status { url: s.bitbull_url(), platform: platform.id().into(), ..Default::default() };
     if let Some(repo) = &s.repo {
         st.repo = Some(repo.display().to_string());
         st.repo_ok = is_repo(repo);
@@ -148,8 +197,12 @@ pub fn status(s: &Settings) -> Status {
     st.healthy = ok;
     st.built = body.as_deref().and_then(build_commit);
     st.checkout = s.repo.as_deref().and_then(head_commit);
+    if platform == Platform::Mac {
+        mac_checks(s, &mut st);
+        return st;
+    }
     if !cfg!(windows) {
-        let na = Check { ok: false, detail: "only checked on Windows".into() };
+        let na = Check { ok: false, detail: "only checked on Windows and macOS".into() };
         st.wsl = na.clone();
         st.distro = na.clone();
         st.docker = na.clone();
@@ -193,6 +246,44 @@ pub fn status(s: &Settings) -> Status {
         };
     }
     st
+}
+
+/// The Mac checks come from `scripts/bitbull-mac/status.sh`, which knows the runtime the user
+/// chose: one line per check, `name<TAB>1|0<TAB>detail`.
+fn mac_checks(s: &Settings, st: &mut Status) {
+    let na = |d: &str| Check { ok: false, detail: d.into() };
+    let Some(repo) = s.repo.as_deref().filter(|r| is_repo_for(Platform::Mac, r)) else {
+        for c in [&mut st.wsl, &mut st.distro, &mut st.docker, &mut st.containers] {
+            *c = na("choose the BitBull folder first");
+        }
+        return;
+    };
+    let script = repo.join("scripts").join("bitbull-mac").join("status.sh").display().to_string();
+    let profile = format!("BITBULL_PROFILE={}", if valid_distro(&s.distro) { s.distro.as_str() } else { "bitbull" });
+    let port = format!("BITBULL_PORT={}", s.port);
+    match run_capture("/usr/bin/env", &[&format!("PATH={MAC_PATH}"), &profile, &port, "/bin/bash", &script], Duration::from_secs(30)) {
+        Ok((_, out)) => apply_mac_checks(&out, st),
+        Err(e) => {
+            for c in [&mut st.wsl, &mut st.distro, &mut st.docker, &mut st.containers] {
+                *c = na(&e);
+            }
+        }
+    }
+}
+
+pub fn apply_mac_checks(out: &str, st: &mut Status) {
+    for line in out.lines() {
+        let mut it = line.splitn(3, '\t');
+        let (Some(name), Some(ok), Some(detail)) = (it.next(), it.next(), it.next()) else { continue };
+        let c = Check { ok: ok == "1", detail: detail.chars().take(200).collect() };
+        match name {
+            "runtime" => st.wsl = c,
+            "vm" => st.distro = c,
+            "docker" => st.docker = c,
+            "containers" => st.containers = c,
+            _ => {}
+        }
+    }
 }
 
 /// The `commit` (and dirty flag) out of /api/health's JSON, without pulling in a JSON parser
@@ -274,7 +365,7 @@ fn first_line(out: &str, fallback: &str) -> String {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Action {
-    /// setup.ps1 (first run; creates the distro from the user's existing Ubuntu)
+    /// setup.ps1 / setup.sh (first run: the distro on Windows, the runtime and VM on a Mac)
     Setup,
     /// start.ps1 (distro + link helper; waits for health)
     Start,
@@ -293,7 +384,7 @@ pub enum Action {
 impl Action {
     pub fn label(self) -> &'static str {
         match self {
-            Action::Setup => "Set up the bitbull distro",
+            Action::Setup => "First-time setup",
             Action::Start => "Start BitBull",
             Action::Stop => "Stop BitBull",
             Action::Deploy => "Deploy (copy code in and rebuild)",
@@ -304,14 +395,38 @@ impl Action {
     }
 }
 
-/// The program and argv for an action. `source` is only used by Setup (the Ubuntu distro to
-/// export from) and is validated like a distro name.
-pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&str>) -> Result<(String, Vec<String>), String> {
+/// The program and argv for an action, for the scripts of `platform`. `source` is only used by
+/// Setup: on Windows the Ubuntu distro to build from (validated like a distro name), on a Mac the
+/// runtime, `colima` or `docker`. Nothing else from outside reaches an argument.
+pub fn command_for(platform: Platform, action: Action, repo: &Path, distro: &str, port: u16, source: Option<&str>) -> Result<(String, Vec<String>), String> {
     if !valid_distro(distro) {
         return Err("invalid distro name".into());
     }
-    if !is_repo(repo) {
-        return Err(format!("{} is not the BitBull repo", repo.display()));
+    if !is_repo_for(platform, repo) {
+        return Err(format!("{} is not the BitBull repo (no scripts/{})", repo.display(), platform.scripts()));
+    }
+    let source = source.map(str::trim).filter(|s| !s.is_empty());
+    if platform == Platform::Mac {
+        let script = |name: &str| repo.join("scripts").join("bitbull-mac").join(format!("{name}.sh")).display().to_string();
+        // env sets PATH (a GUI app has a bare one) and the profile and port; no shell is involved
+        let sh = |file: String, extra: &[&str]| {
+            let mut a = vec![format!("PATH={MAC_PATH}"), format!("BITBULL_PROFILE={distro}"), format!("BITBULL_PORT={port}"), "/bin/bash".to_string(), file];
+            a.extend(extra.iter().map(|s| s.to_string()));
+            ("/usr/bin/env".to_string(), a)
+        };
+        return Ok(match action {
+            Action::Setup => match source {
+                None => sh(script("setup"), &[]),
+                Some(rt @ ("colima" | "docker")) => sh(script("setup"), &["--runtime", rt]),
+                Some(_) => return Err("the runtime must be colima or docker".into()),
+            },
+            Action::Start => sh(script("start"), &[]),
+            Action::Stop => sh(script("start"), &["--stop"]),
+            Action::Deploy => sh(script("deploy"), &[]),
+            Action::Backup => sh(script("backup"), &[]),
+            Action::InstallAtLogin => sh(script("start"), &["--install-at-login"]),
+            Action::Logs => sh(script("logs"), &[]),
+        });
     }
     let script = |name: &str| repo.join("scripts").join("bitbull-wsl").join(format!("{name}.ps1")).display().to_string();
     let ps = |file: String, extra: &[&str]| {
@@ -324,7 +439,7 @@ pub fn command_for(action: Action, repo: &Path, distro: &str, source: Option<&st
             // No source distro: setup.ps1 downloads and verifies Canonical's WSL image instead,
             // which is the normal path now (docs/CLIENTS.md 5.2). Only pass -Source when the user
             // explicitly names a distro to build the base from.
-            match source.map(str::trim).filter(|s| !s.is_empty()) {
+            match source {
                 None => ps(script("setup"), &[]),
                 Some(src) if valid_distro(src) => ps(script("setup"), &["-Source", src]),
                 Some(_) => return Err("invalid source distro name".into()),
@@ -448,23 +563,60 @@ mod tests {
 
     #[test]
     fn commands_are_argv_arrays_from_fixed_shapes() {
+        let w = Platform::Windows;
         let dir = std::env::temp_dir().join(format!("bitbull-desktop-test-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("scripts/bitbull-wsl")).unwrap();
         std::fs::write(dir.join("scripts/bitbull-wsl/start.ps1"), "").unwrap();
         std::fs::write(dir.join("docker-compose.yml"), "").unwrap();
-        assert!(is_repo(&dir));
-        let (p, a) = command_for(Action::Stop, &dir, "bitbull", None).unwrap();
+        assert!(is_repo_for(w, &dir));
+        assert!(!is_repo_for(Platform::Mac, &dir));
+        let (p, a) = command_for(w, Action::Stop, &dir, "bitbull", 8787, None).unwrap();
         assert_eq!(p, "powershell.exe");
         assert_eq!(&a[..5], &["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"]);
         assert!(a[5].ends_with("start.ps1"));
         assert_eq!(&a[6..], &["-Distro", "bitbull", "-Stop"]);
-        assert!(command_for(Action::Setup, &dir, "bitbull", Some("Ubuntu && calc")).is_err());
-        assert!(command_for(Action::Start, &dir, "bitbull$(x)", None).is_err());
-        let (p, a) = command_for(Action::Logs, &dir, "bitbull", None).unwrap();
+        assert!(command_for(w, Action::Setup, &dir, "bitbull", 8787, Some("Ubuntu && calc")).is_err());
+        assert!(command_for(w, Action::Start, &dir, "bitbull$(x)", 8787, None).is_err());
+        let (p, a) = command_for(w, Action::Logs, &dir, "bitbull", 8787, None).unwrap();
         assert_eq!(p, "wsl.exe");
         assert_eq!(a[1], "bitbull");
-        assert!(command_for(Action::Start, &dir.join("nope"), "bitbull", None).is_err());
+        assert!(command_for(w, Action::Start, &dir.join("nope"), "bitbull", 8787, None).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn mac_commands_go_through_env_and_bash() {
+        let m = Platform::Mac;
+        let dir = std::env::temp_dir().join(format!("bitbull-desktop-mac-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("scripts/bitbull-mac")).unwrap();
+        std::fs::write(dir.join("scripts/bitbull-mac/start.sh"), "").unwrap();
+        std::fs::write(dir.join("docker-compose.yml"), "").unwrap();
+        assert!(is_repo_for(m, &dir));
+        let (p, a) = command_for(m, Action::Stop, &dir, "bitbull", 8788, None).unwrap();
+        assert_eq!(p, "/usr/bin/env");
+        assert_eq!(a[0], format!("PATH={MAC_PATH}"));
+        assert_eq!(&a[1..4], &["BITBULL_PROFILE=bitbull", "BITBULL_PORT=8788", "/bin/bash"]);
+        assert!(a[4].ends_with("start.sh"));
+        assert_eq!(&a[5..], &["--stop"]);
+        let (_, a) = command_for(m, Action::Setup, &dir, "bitbull", 8787, Some("docker")).unwrap();
+        assert_eq!(&a[5..], &["--runtime", "docker"]);
+        let (_, a) = command_for(m, Action::Setup, &dir, "bitbull", 8787, Some(" ")).unwrap();
+        assert_eq!(a.len(), 5);
+        assert!(command_for(m, Action::Setup, &dir, "bitbull", 8787, Some("colima; rm -rf ~")).is_err());
+        assert!(command_for(m, Action::Logs, &dir, "bit bull", 8787, None).is_err());
+        let (_, a) = command_for(m, Action::Logs, &dir, "bitbull", 8787, None).unwrap();
+        assert!(a[4].ends_with("logs.sh"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn mac_status_lines() {
+        let mut st = Status::default();
+        apply_mac_checks("runtime\t1\tColima 0.9 (own VM)\nvm\t0\tthe bitbull VM is stopped\nnoise\ndocker\t0\tnot answering\ncontainers\t1\tbitbull-agent: running\n", &mut st);
+        assert!(st.wsl.ok && st.wsl.detail.starts_with("Colima"));
+        assert!(!st.distro.ok && st.distro.detail.contains("stopped"));
+        assert!(!st.docker.ok);
+        assert!(st.containers.ok);
     }
 
     #[test]

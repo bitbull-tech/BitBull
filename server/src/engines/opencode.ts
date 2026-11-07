@@ -265,7 +265,7 @@ export function gatewayHint(message: string, model: string): string | null {
     case "402":
       return `SayGM refused the request: payment required (402) for ${model}. Check your SayGM balance or whether your plan includes this model, or switch model.`;
     case "401":
-      return "SayGM rejected the API key (401). Check SAYGM_API_KEY in Settings → Configuration.";
+      return "SayGM rejected the API key (401). Check SAYGM_API_KEY in Settings → Integrations → SayGM.";
     case "403":
       return `SayGM says this key isn't allowed to use ${model} (403).`;
     case "404":

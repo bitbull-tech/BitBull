@@ -86,7 +86,7 @@ whether it matched. A failed upload shows **Try again** with the error on hover.
 
 ## Settings
 
-Either `.env` or the UI (Settings → Configuration → Hippius storage), with `.env` as the
+Either `.env` or the UI (Settings → Integrations → Hippius storage), with `.env` as the
 base and the UI overriding it live — no restart, no deploy. Each row shows where its value
 came from: `.env`, `set here` or `default`.
 
@@ -144,7 +144,7 @@ node tools/hippius-setup.mjs --rotate <token-id-or-access-key>
 
 Then, either way:
 
-1. BitBull → Settings → Configuration → **Hippius storage**: check the access key and bucket.
+1. BitBull → Settings → Integrations → **Hippius storage**: check the access key and bucket.
 2. **Encryption key → Generate**, copy it somewhere that isn't this machine, Save.
 3. Settings → Status → "Hippius storage" should go green and name the bucket.
 4. Attach a file to a chat, then open Files: it should show a green dot. Restore it to prove

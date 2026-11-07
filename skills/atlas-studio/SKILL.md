@@ -14,7 +14,7 @@ Tools appear as `atlas_*` (OpenCode) or `mcp__atlas__*` (Claude engine). Start w
 - **Exported APIs**: export a project as an API, list, rename, enable or disable it.
 
 ## B. Running a workflow (exported API)
-1. In Atlas, open the workflow → export as API, and save the JSON spec into the folder in `$ATLAS_WORKFLOWS_DIR` (shown in BitBull Settings → Configuration). The spec contains credentials: never print it, copy it into the project, or commit it.
+1. In Atlas, open the workflow → export as API, and save the JSON spec into the folder in `$ATLAS_WORKFLOWS_DIR` (shown in BitBull Settings → Integrations → Atlas AI Studio). The spec contains credentials: never print it, copy it into the project, or commit it.
 2. List what's available: `node "$BITBULL_TOOLS/atlas-run.mjs" --list`
 3. Inspect inputs: `node "$BITBULL_TOOLS/atlas-run.mjs" <name> --inspect`
 4. Run: `node "$BITBULL_TOOLS/atlas-run.mjs" <name> --in prompt="..." --in duration=6 --file image=uploads/abc/photo.jpg --out experience/assets/shot-03`

@@ -9,13 +9,19 @@
   @media (prefers-color-scheme: dark) { :root { --bg:#15171b; --fg:#e8e9ec; --mut:#9aa0ab; --card:#1e2127; --line:#2c3038; --btn:#e8e9ec; --btnfg:#15171b; } }
   * { box-sizing: border-box; }
   body { margin:0; font: 14px/1.45 system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
-  /* BitBull stands to the left of the console, hand out, presenting it; hidden when the window is narrow */
-  .stage { display:flex; justify-content:center; align-items:flex-start; max-width: 1110px; margin: 0 auto; }
-  .mascot { flex: 0 0 300px; position: sticky; top: 0; padding: 150px 0 0 10px; margin-right: -20px; user-select: none; pointer-events: none; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px 20px 32px; }
+  /* BitBull stands beside the Checks card, between the cards above and below it, hand out, presenting
+     it; on a narrow window he steps out and the card takes the full width */
+  .checks-row { display:flex; align-items:center; margin-bottom:14px; }
+  .checks-row > .card { flex:1; min-width:0; margin-bottom:0; }
+  .mascot { flex: 0 0 270px; margin: -34px -16px -34px -4px; position: relative; z-index: 1; user-select: none; pointer-events: none; }
   .mascot img { display:block; width:100%; height:auto; filter: drop-shadow(0 12px 22px rgb(0 0 0 / .18)); }
-  @media (max-width: 960px) { .mascot { display:none; } }
-  main { flex: 1; min-width: 0; max-width: 780px; padding: 20px 20px 32px; }
-  h1 { font-size: 18px; margin: 0 0 4px; display:flex; align-items:center; gap:10px; }
+  @media (max-width: 900px) { .mascot { display:none; } }
+  h1 { font-size: 18px; line-height: 1.2; margin: 0 0 4px; display:flex; align-items:center; gap:10px; }
+  h1 .state { font-size: 12.5px; font-weight: 500; line-height: 1.4; color: var(--mut); padding: 1px 9px; border: 1px solid var(--line); border-radius: 999px; }
+  h1 .state.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+  h1 .state.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+  h1 .state:empty { display: none; }
   h1 .dot { width:12px; height:12px; border-radius:50%; background:var(--mut); }
   h1 .dot.ok { background:var(--ok); } h1 .dot.bad { background:var(--bad); }
   .sub { color:var(--mut); margin:0 0 16px; }
@@ -40,13 +46,13 @@
   .hint { color:var(--mut); font-size: 12.5px; margin: 8px 0 0; }
   .err { color: var(--bad); }
   details summary { cursor:pointer; color:var(--mut); }
+  select { font: inherit; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  body:not(.mac) .only-mac, body.mac .only-windows { display:none; }
 </style>
 </head>
 <body>
-<div class="stage">
-<aside class="mascot" aria-hidden="true"><img src="bitbull-presenting.webp" alt="" draggable="false"></aside>
 <main>
-  <h1><span class="dot" id="dot"></span> BitBull <span id="headline" class="sub" style="margin:0;font-weight:400"></span></h1>
+  <h1><span class="dot" id="dot"></span><span>BitBull</span><span id="headline" class="state"></span></h1>
   <p class="sub">This window manages the local stack. BitBull itself runs in its sandbox and opens in its own window.</p>
 
   <div class="card">
@@ -54,7 +60,7 @@
     <div class="row">
       <input type="text" id="repo" placeholder="D:\github\BitBull" style="flex:1; min-width: 240px" readonly>
       <button id="pick">Choose folder…</button>
-      <label>distro <input type="text" id="distro" size="6"></label>
+      <label><span id="l_distro">distro</span> <input type="text" id="distro" size="6"></label>
       <label>port <input type="number" id="port" min="1024" max="65535" style="width:84px"></label>
       <button id="save">Save</button>
     </div>
@@ -65,19 +71,22 @@
     <p class="err" id="settingsErr"></p>
   </div>
 
+  <div class="checks-row">
+  <div class="mascot" aria-hidden="true"><img src="bitbull-presenting.webp" alt="" draggable="false"></div>
   <div class="card">
     <h2>Checks</h2>
     <table id="checks">
       <tr><td class="k">Repo</td><td class="v" id="c_repo">…</td></tr>
       <tr><td class="k">.env</td><td class="v" id="c_env">…</td></tr>
-      <tr><td class="k">WSL</td><td class="v" id="c_wsl">…</td></tr>
-      <tr><td class="k">bitbull distro</td><td class="v" id="c_distro">…</td></tr>
-      <tr><td class="k">Docker in distro</td><td class="v" id="c_docker">…</td></tr>
+      <tr><td class="k" id="k_wsl">WSL</td><td class="v" id="c_wsl">…</td></tr>
+      <tr><td class="k" id="k_distro">bitbull distro</td><td class="v" id="c_distro">…</td></tr>
+      <tr><td class="k" id="k_docker">Docker in distro</td><td class="v" id="c_docker">…</td></tr>
       <tr><td class="k">Containers</td><td class="v" id="c_containers">…</td></tr>
       <tr><td class="k">BitBull</td><td class="v" id="c_health">…</td></tr>
       <tr><td class="k">GitHub version</td><td class="v" id="c_build">…</td></tr>
     </table>
     <p class="hint" id="next"></p>
+  </div>
   </div>
 
   <div class="card">
@@ -92,7 +101,7 @@
       <button data-action="install-at-login">Start at login</button>
       <button id="cancel" disabled>Cancel</button>
     </div>
-    <details style="margin-top:10px">
+    <details style="margin-top:10px" class="only-windows">
       <summary>First-time setup (creates the locked-down <code>bitbull</code> distro)</summary>
       <div class="row" style="margin-top:8px">
         <label>or build the base from a distro you already have (leave blank to download): <input type="text" id="source" value="" size="10" placeholder="Ubuntu"></label>
@@ -100,10 +109,22 @@
       </div>
       <p class="hint">Downloads Canonical's Ubuntu 24.04 image for WSL and checks it against the published SHA256 before importing, so nothing else needs to be installed first. Needs Windows 11 with WSL 2 and a filled-in <code>.env</code> in the repo (copy <code>.env.example</code>). Takes a few minutes; output appears below.</p>
     </details>
+    <details style="margin-top:10px" class="only-mac">
+      <summary>First-time setup (BitBull's own Linux VM, or the Docker you already run)</summary>
+      <div class="row" style="margin-top:8px">
+        <label>run the containers in
+          <select id="runtime">
+            <option value="colima">a dedicated bitbull VM (Colima, recommended)</option>
+            <option value="docker">Docker Desktop or OrbStack, already running</option>
+          </select>
+        </label>
+        <button data-action="setup">Run setup</button>
+      </div>
+      <p class="hint">Colima gives BitBull its own Linux VM that can only see BitBull's folder (<code>~/Library/Application Support/BitBull</code>); it is installed with Homebrew if missing (brew.sh). Needs macOS 13 or later and a filled-in <code>.env</code> in the repo (copy <code>.env.example</code>). The first build takes several minutes; output appears below.</p>
+    </details>
     <pre id="log"></pre>
   </div>
 </main>
-</div>
 <script>
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -130,6 +151,7 @@ $('save').onclick = () => save({});
 for (const id of ['auto_token', 'open_when_ready']) $(id).onchange = () => save({});
 
 function nextStep(s) {
+  if (s.platform === 'macos') return nextStepMac(s);
   if (!s.repo_ok) return 'Choose the BitBull folder (the checkout that has scripts\\bitbull-wsl).';
   if (!s.env_ok) return 'Create .env in the repo from .env.example (SayGM key, APP_TOKEN, Ditto key), then come back.';
   if (!s.wsl.ok) return 'Install WSL 2 first: in an admin PowerShell run  wsl --install  and reboot.';
@@ -140,12 +162,33 @@ function nextStep(s) {
   if (!s.healthy) return 'Press Start (or wait: containers can take a minute after a reboot).';
   return 'BitBull is running. Open it, or close this window — it stays in the tray.';
 }
+function nextStepMac(s) {
+  if (!s.repo_ok) return 'Choose the BitBull folder (the checkout that has scripts/bitbull-mac).';
+  if (!s.env_ok) return 'Create .env in the repo from .env.example (SayGM key, APP_TOKEN, Ditto key), then come back.';
+  if (!s.wsl.ok || /no .* VM yet/.test(s.distro.detail)) return 'Run the first-time setup below.';
+  if (!s.distro.ok || !s.docker.ok) return 'Press Start (it starts the VM, or waits for Docker Desktop / OrbStack).';
+  if (!s.containers.ok && /no containers/.test(s.containers.detail)) return 'Press Deploy to build and start the containers for the first time.';
+  if (!s.containers.ok) return 'Containers are stopped: press Start (it brings them up), or Deploy after a code change.';
+  if (!s.healthy) return 'Press Start (or wait: containers can take a minute after a restart).';
+  return 'BitBull is running. Open it, or close this window — it stays in the menu bar.';
+}
+/** The four machine checks are labelled for the OS this launcher runs on. */
+function labelChecks(platform) {
+  const mac = platform === 'macos';
+  document.body.classList.toggle('mac', mac);
+  $('k_wsl').textContent = mac ? 'Runtime' : 'WSL';
+  $('k_distro').textContent = mac ? 'bitbull VM' : 'bitbull distro';
+  $('k_docker').textContent = mac ? 'Docker' : 'Docker in distro';
+  $('l_distro').textContent = mac ? 'VM' : 'distro';
+  $('repo').placeholder = mac ? '~/github/BitBull' : 'D:\\github\\BitBull';
+}
 async function refresh() {
   try { status = await invoke('get_status'); } catch (e) { log('status failed: ' + e, true); return; }
   const s = status;
+  labelChecks(s.platform);
   check($('c_repo'), s.repo_ok, s.repo ? s.repo + (s.repo_ok ? '' : '  (not the BitBull repo)') : 'not chosen');
   check($('c_env'), s.env_ok, s.env_ok ? '.env present' : 'no .env in the repo');
-  for (const k of ['wsl', 'distro', 'docker', 'containers']) check($('c_' + k), s[k].ok, s[k].detail, /only checked on Windows/.test(s[k].detail));
+  for (const k of ['wsl', 'distro', 'docker', 'containers']) check($('c_' + k), s[k].ok, s[k].detail, /only checked on/.test(s[k].detail));
   check($('c_health'), s.healthy, s.healthy ? 'answering at ' + s.url : 'not answering at ' + s.url);
   // Which commit the running containers came from, next to what the checkout is on now. Without
   // this you cannot tell a deployed change from an undeployed one after a few rounds.
@@ -162,6 +205,7 @@ async function refresh() {
   );
   $('dot').className = 'dot ' + (s.healthy ? 'ok' : 'bad');
   $('headline').textContent = s.healthy ? 'running' : 'not running';
+  $('headline').className = 'state ' + (s.healthy ? 'ok' : 'bad');
   $('open').disabled = !s.healthy;
   $('next').textContent = nextStep(s);
   if (s.healthy && lastHealthy === false && settings.open_when_ready && !running) invoke('open_gm').catch((e) => log(String(e), true));
@@ -172,11 +216,13 @@ $('open').onclick = () => invoke('open_gm').catch((e) => log(String(e), true));
 document.querySelectorAll('button[data-action]').forEach((b) => {
   b.onclick = async () => {
     const action = b.dataset.action;
-    if (action === 'setup' && !confirm('Create the bitbull distro now? This exports a clean image from your existing distro and can take several minutes.')) return;
-    if (action === 'stop' && !confirm('Stop BitBull and shut the distro down?')) return;
+    const mac = status?.platform === 'macos';
+    if (action === 'setup' && !confirm(mac ? 'Set BitBull up now? This can install Colima with Homebrew, create the bitbull VM and build the containers, and takes several minutes.' : 'Create the bitbull distro now? This downloads and verifies a clean Ubuntu image (or uses the distro you named) and can take several minutes.')) return;
+    if (action === 'stop' && !confirm(mac ? 'Stop BitBull (and its VM, if it has its own)?' : 'Stop BitBull and shut the distro down?')) return;
     try {
       running = true; setButtons();
-      await invoke('run_action', { action, source: action === 'setup' ? $('source').value.trim() : null });
+      const source = action !== 'setup' ? null : mac ? $('runtime').value : $('source').value.trim();
+      await invoke('run_action', { action, source });
     } catch (e) { log(String(e), true); running = false; setButtons(); }
   };
 });

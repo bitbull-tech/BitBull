@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus, IconRefresh } from './icons'
-import { helperStatus, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
-
-const HELPER_CMD = 'powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
+import { HELPER_CMD, helperStatus, isMac, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
 
 /**
  * The composer's folder button: upload a copy (the agent may change it), attach a folder you
@@ -157,17 +155,25 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                 <button type="button" role="menuitem" className="fm-item" disabled={!!busy} onClick={() => void startLink()}>
                   <IconPlus size={15} />
                   <span>
-                    <b>Link a folder from this PC…</b>
-                    <small>Opens a Windows folder picker on this PC. BitBull gets read-only access to the folder you choose, nothing else.</small>
+                    <b>Link a folder from this computer…</b>
+                    <small>
+                      {isMac
+                        ? 'Opens a folder picker on this Mac. BitBull gets a read-only copy of the folder you choose, nothing else.'
+                        : 'Opens a Windows folder picker on this PC. BitBull gets read-only access to the folder you choose, nothing else.'}
+                    </small>
                   </span>
                 </button>
               ) : helper === 'checking' ? (
                 <p className="fm-note">Checking for the link helper…</p>
               ) : !onThisPc() ? (
-                <p className="fm-note">To link a new folder, open BitBull on the PC it runs on (http://localhost:8787).</p>
+                <p className="fm-note">To link a new folder, open BitBull on the computer it runs on (http://localhost:8787).</p>
               ) : (
                 <>
-                  <p className="fm-note">To link folders from here, start the link helper on this PC (start.ps1 does it), then reopen this menu:</p>
+                  <p className="fm-note">
+                    {isMac
+                      ? 'To link folders from here, the BitBull app must be running (it holds the link helper on a Mac), then reopen this menu:'
+                      : 'To link folders from here, start the link helper on this PC (start.ps1 does it), then reopen this menu:'}
+                  </p>
                   <div className="fm-cmd">
                     <code>{HELPER_CMD}</code>
                     <button

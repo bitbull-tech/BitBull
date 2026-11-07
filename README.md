@@ -64,7 +64,8 @@ docker compose down               # stop
 Optional limits in `.env`: `BITBULL_CPUS` (default 4), `BITBULL_MEMORY` (default 6g), `BITBULL_PORT`
 (default 8787), `BITBULL_DATA_DIR` (default `./data`).
 
-On Windows, use the locked-down WSL distro (below) rather than your everyday Ubuntu.
+On Windows, use the locked-down WSL distro (below) rather than your everyday Ubuntu; on a Mac, the
+bitbull VM ("On a Mac", below).
 `npm run dev` still works for UI development, with the agent's shell disabled.
 
 ## What runs where
@@ -153,7 +154,7 @@ What leaves the machine, and what doesn't:
   agent reads into it.
 - **GitHub** receives only what the agent commits and pushes.
 - **Hippius** receives everything you upload, encrypted on this machine first (AES-256-GCM)
-  and indexed in Ditto. Set it up in Settings → Configuration → Hippius storage, or in
+  and indexed in Ditto. Set it up in Settings → Integrations → Hippius storage, or in
   `.env`; see [docs/STORAGE.md](docs/STORAGE.md). With `STORAGE_MIRROR=off`, nothing is sent.
   Still back up `~/bitbull-data` for the database and workspaces (for example
   `wsl -d bitbull -u root -- tar -czf - -C /home/<you> bitbull-data > bitbull-data.tgz`): Hippius holds the
@@ -175,7 +176,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\start.ps1 -Stop
 
 ### The desktop app (no PowerShell, no browser tab)
 
-`desktop/` is a small Windows app (Tauri 2) that does the same with buttons: it checks WSL,
+`desktop/` is a small Windows and macOS app (Tauri 2) that does the same with buttons: it checks WSL,
 the `bitbull` distro, Docker and the containers, runs these scripts with a click and shows their
 output, then opens BitBull's UI in its own window once the stack answers, signed in with
 `APP_TOKEN` from `.env`. It lives in the tray; closing it leaves BitBull running. Build it once
@@ -212,6 +213,34 @@ It uses the same `.env`, so the same access token unlocks it, but its chats, wor
 settings are entirely separate (`~/bitbull-data-test` in the distro). `-Port` and `-Name` let you
 run more than one.
 
+## On a Mac
+
+macOS 13 (Ventura) or later, Apple Silicon or Intel. The same three containers as on Windows run
+in a Linux VM; `scripts/bitbull-mac/` does what `scripts/bitbull-wsl/` does there.
+
+```bash
+cp .env.example .env                                   # fill in APP_TOKEN, SAYGM_API_KEY, DITTO_API_KEY
+bash scripts/bitbull-mac/setup.sh                      # once: Colima VM "bitbull", first build, start
+bash scripts/bitbull-mac/setup.sh --runtime docker     # or: use the Docker Desktop / OrbStack you already run
+bash scripts/bitbull-mac/deploy.sh                     # ship code and .env changes, rebuild
+bash scripts/bitbull-mac/start.sh --install-at-login   # keep BitBull running; start it (and the app) at login
+bash scripts/bitbull-mac/start.sh --stop
+bash scripts/bitbull-mac/backup.sh --keep 10           # to ~/Documents/BitBull backups
+```
+
+- **The VM.** By default BitBull gets its own Colima VM (installed with Homebrew if missing), which
+  can only see BitBull's folder, `~/Library/Application Support/BitBull`: the deployed code
+  (`app/`), the data (`data/`, `/data` in the container) and linked folders (`links/`). The rest of
+  your Mac is not shared into it. With `--runtime docker` the containers run in your existing
+  engine instead, alongside whatever else it runs.
+- **Linked folders are copies.** Windows mounts a linked folder read-only; on a Mac the link helper
+  copies it into `links/` (leaving out keys and wallets unless you say otherwise) and the agent
+  reads the copy. Press **Refresh** in Settings → Folders after changing the original.
+- **The link helper is the app.** Linking folders, Open in Finder and unlocking the vault go
+  through the BitBull app (it stays in the menu bar); the vault key is kept in your login Keychain.
+- **The app.** The same launcher as on Windows, built as a universal `.dmg` by the `macos` GitHub
+  workflow. Unsigned for now: the first time, right-click BitBull → Open.
+
 ## Run with Docker (any server)
 
 ```bash
@@ -232,9 +261,11 @@ Cloudflare Tunnel) before exposing it: the agent can run shell commands in its w
 
 ## Keys and settings: `.env` or the UI
 
-`.env` is the base. Keys and settings marked **Edit** in Settings → Configuration (model
-keys, Ditto, GitHub, Atlas, 404, Taostats, default models, heritage policy, upload size)
-can also be set from the UI. They're saved on the server in `data/settings.local.json`
+`.env` is the base. Keys and settings marked **Edit** in Settings can also be set from the UI:
+the outside services (SayGM, Ditto, GitHub, Taostats, Atlas, 404, Hippius) under
+**Integrations**, one card each with its live status; BitBull's own workings (default engine and
+models, heritage policy, upload size, the vault, skills and subagents) under **Configuration**.
+**Status** shows every service at a glance. They're saved on the server in `data/settings.local.json`
 (mode 600, never in git), override `.env`, and apply immediately: no deploy or restart.
 **Use .env** removes an override. Each value shows where it comes from: `.env`,
 `set here` or `default`.

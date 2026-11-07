@@ -1,4 +1,4 @@
-# BitBull desktop (Windows)
+# BitBull desktop (Windows and macOS)
 
 A small Tauri 2 app that wraps the sandboxed stack so BitBull is a program you install and open,
 not a browser tab plus PowerShell. It does four things:
@@ -62,13 +62,40 @@ use **Choose folder…** if it guessed wrong. Then follow the "next step" line u
 it walks you through `.env`, WSL, setup, deploy and start in order. When BitBull answers, the BitBull
 window opens (or press **Open BitBull**).
 
+## On a Mac
+
+The same app and launcher window, built for macOS 13+ (universal: Apple Silicon and Intel).
+
+- **Checks** read from `scripts/bitbull-mac/status.sh`: the runtime (Colima, or the Docker Desktop /
+  OrbStack you chose at setup), the `bitbull` VM, Docker, the containers. The "distro" field is the
+  Colima profile (VM) name.
+- **Actions** run `scripts/bitbull-mac/*.sh` through `/usr/bin/env PATH=… BITBULL_PROFILE=…
+  BITBULL_PORT=… /bin/bash <script>`: argv only, with Homebrew's paths added because an app starts
+  with a bare PATH. Setup offers Colima (its own VM, recommended) or the engine you already run.
+- **It is the link helper** (`src-tauri/src/helper.rs`): BitBull's page talks to it on
+  `localhost:8790` exactly as it talks to `link-helper.ps1` on Windows. Folder picker and every
+  confirmation are native dialogs from the app; the vault key lives in the login Keychain
+  (service `io.bitbull.vault`), handed out only after you press Unlock. Everything but the dialogs,
+  the Keychain and the listeners is tested on any OS (`cargo test`).
+- **Build**: the `macos` GitHub workflow (`.github/workflows/macos.yml`) builds the universal `.dmg`
+  on GitHub's macOS runners, on a `v*` tag or by hand (Actions → macos → Run workflow). On a Mac
+  yourself: `xcode-select --install`, rustup with both Apple targets, then
+  `cd desktop && npm ci && npx tauri build --target universal-apple-darwin --bundles app,dmg`.
+- **Unsigned for now.** Gatekeeper blocks the first open ("Apple cannot check it"): right-click
+  BitBull → Open, once. Signing and notarising need an Apple Developer ID (CLIENTS.md 5.5); until
+  then each new build is a new identity to the Keychain, which may ask once to let it read the
+  vault key again.
+- Settings live in `~/Library/Application Support/io.bitbull.desktop/bitbull-desktop.json`.
+
 ## Not yet
 
 - Connection profiles for a remote BitBull (CLIENTS.md Phase 2 table): the launcher only knows the
   local stack. The BitBull window is an ordinary webview, so a remote URL is a small addition once
   per-device tokens (Phase 1) exist.
 - Notifications from turn events, native drag-and-drop into the upload API, keychain storage
-  for remote tokens, Linux and macOS packaging (the Rust side is portable; only the
-  PowerShell actions are Windows-specific).
-- Rust unit tests cover `stack.rs` (env parsing, argv shapes, output decoding, compose summary);
+  for remote tokens, Linux packaging.
+- Not yet run on a real Mac: the scripts are linted and the link copying tested on Linux, the
+  Rust side unit-tested, but the first real run is the test (CLIENTS.md Phase 6).
+- Rust unit tests cover `stack.rs` (env parsing, argv shapes for both platforms, output decoding,
+  compose summary, the Mac checks) and `helper.rs` (request parsing, origins, consent, paths);
   the window/tray glue in `lib.rs` is exercised by running the app.

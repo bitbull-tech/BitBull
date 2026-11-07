@@ -1,4 +1,4 @@
-# Clients: desktop, Linux and iOS
+# Clients: desktop (Windows, macOS), Linux and iOS
 
 Plan for installable clients on top of the sandboxed Docker stack, agreed with Tom on
 14 Oct 2026. The browser stays a first-class client throughout — the desktop and mobile
@@ -12,6 +12,7 @@ Decisions taken:
 | What the desktop app does | **Manages the local Docker stack and connects to remote BitBulls** |
 | iOS | **PWA first** (no Mac, no Apple account); native revisited after real use |
 | Auth | **Per-device tokens before anything leaves localhost** |
+| macOS (7 Nov 2026) | **macOS 13+, Apple Silicon and Intel; Colima VM by default, Docker Desktop / OrbStack if chosen** |
 
 ## The contract
 
@@ -294,6 +295,41 @@ squid allowlist proxy, the gateway bound to `127.0.0.1`, `/links` read-only — 
 differentiator, and none of it should be traded for an easier install. Nothing in Phase 5
 moves a wall; it only changes where the bytes come from and what the first screen asks for.
 
+## Phase 6 — macOS (written 7 Nov 2026, not yet run on a Mac)
+
+Same stack, same launcher, same web UI; only the layer that Windows gets from WSL changes.
+
+| | Windows | Mac |
+|---|---|---|
+| Where the containers run | the `bitbull` WSL distro, Docker with userns-remap | a Colima VM called `bitbull` (vz + virtiofs), or Docker Desktop / OrbStack if chosen at setup |
+| What that layer can see | no Windows drives, no interop | only `~/Library/Application Support/BitBull` (the one Colima mount) |
+| Scripts | `scripts/bitbull-wsl/*.ps1` | `scripts/bitbull-mac/*.sh` (bash 3.2, no Homebrew bash needed) |
+| Deployed code / data / links | `~/BitBull`, `~/bitbull-data`, `/srv/bitbull-links` in the distro | `app/`, `data/`, `links/` under BitBull's folder |
+| Linked folders | read-only bind mounts (live) | read-only **copies** (secrets left out unless chosen); Refresh to update |
+| Link helper | `link-helper.ps1`, started by `start.ps1` | built into the app (`desktop/src-tauri/src/helper.rs`), same HTTP API on `localhost:8790` |
+| Vault key | DPAPI file in `%LOCALAPPDATA%\BitBull` | login Keychain item `io.bitbull.vault`, owned by the app |
+| Start at login | Startup shortcut | LaunchAgent `io.bitbull.stack`, which also opens the app (for the helper) |
+| Installer | NSIS / MSI from `npm run tauri build` | universal `.dmg` from the `macos` workflow |
+
+Decisions and reasons:
+
+- **macOS 13 minimum.** Colima's `vz` driver and virtiofs need it; Docker Desktop only supports the
+  current and two previous releases; Homebrew lists 10.15–13 as Tier 3 (unsupported). Catalina
+  was asked about and is out: the sandbox has no maintained runtime there, and the OS itself has
+  had no security updates since 2022.
+- **Copies instead of mounts.** Colima's mounts are fixed when the VM starts; mounting each linked
+  folder would mean sharing far more of the Mac with the VM, or restarting it per link. A copy
+  in BitBull's own folder needs neither, and the agent still can't touch the original.
+- **The helper in the app.** macOS has no PowerShell, and a native app gets native dialogs and
+  Keychain access control (another program asking for the vault key gets the system's prompt).
+  The page's API is unchanged, so `web/` only needed wording (Finder, "this computer").
+- **Images for arm64.** CI publishes `linux/amd64,linux/arm64` (QEMU on the x86 runner). The local
+  deploy builds natively anyway; published images matter once installs stop building (5.1).
+
+Still to do: the first run on a real Mac (setup with each runtime, deploy, link, vault, start at
+login), whether the native dialogs come to the front over the browser on macOS 14+ (cooperative
+activation), signing and notarising (5.5), and a test-stack script like `test-stack.ps1`.
+
 ## Theming and white-labelling (done, 14 Oct 2026)
 
 Not in the original plan, but it belongs to the client work: every colour in the UI is a
@@ -315,6 +351,7 @@ for free because they load the same bundle. See [BRANDING.md](BRANDING.md).
 8. **Phase 3 Linux install** — mostly scripts, and much cheaper once 5.1 exists (same
    images, same compose file, no WSL layer).
 9. **Phase 4A PWA + tunnel** — iOS without a Mac.
+9a. **Phase 6 macOS** — written 7 Nov 2026; needs its first run on a Mac.
 10. Reassess 4B.
 
 ## Risks
