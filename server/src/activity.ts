@@ -41,7 +41,11 @@ const secrets = () =>
     config.storage.accessKey,
     config.storage.secretKey,
     config.storage.encryptionKey,
-  ].filter((s) => s && s.length > 6);
+  ]
+    // same floor as the sandbox guard plugin (bitbob-guard.js), and longest first: if one secret
+    // contains another, replacing the short one first would leave the long one half-visible
+    .filter((s) => s && s.length >= 8)
+    .sort((a, b) => b.length - a.length);
 export const redact = (s: string) => secrets().reduce((acc, k) => acc.split(k).join("[REDACTED]"), s);
 
 const buf: ActivityEvent[] = [];

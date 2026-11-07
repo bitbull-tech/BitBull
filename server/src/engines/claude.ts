@@ -85,7 +85,10 @@ export const claudeEngine: AgentEngine = {
       // No sandbox: no shell. File edits stay inside the workspace (acceptEdits).
       ...(shellAllowed() ? {} : { disallowedTools: ["Bash", "BashOutput", "KillShell"] }),
       ...(input.engineSessionId ? { resume: input.engineSessionId } : {}),
-      mcpServers: {
+      // Plan mode attaches no MCP servers at all, same rule as the OpenCode engine: plan mode is
+      // where agents read hostile content, and these tools write to memory or ask the owner for
+      // network access. Not attaching them beats disallowing tools by name. (2026-11 swarm.)
+      mcpServers: input.plan ? {} : {
         ...(config.ditto.apiKey ? { ditto: { type: "http" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders() } } : {}),
         ...Object.fromEntries(Object.entries(input.mcp).map(([k, v]) => [k, { type: "http" as const, ...v }])),
         // BitBob's own tools (network access requests); tagged with this chat

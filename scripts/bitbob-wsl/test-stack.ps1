@@ -24,6 +24,9 @@ param(
   [switch]$Live     # with -Check: check the live stack (bitbob-agent) instead of the test one
 )
 $ErrorActionPreference = "Stop"
+# -Name and -Distro reach a .cmd line and an sh -c string below: plain characters only.
+if ($Name -notmatch '^[a-z0-9-]{1,20}$') { throw "-Name must be lowercase letters, digits and '-' (got '$Name')" }
+if ($Distro -notmatch '^[A-Za-z0-9._-]{1,40}$') { throw "bad distro name: $Distro" }
 $env:WSL_UTF8 = "1"
 $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $dir = "~/BitBob-$Name"
@@ -109,9 +112,17 @@ Write-Host "==> Copying this checkout into $dir" -ForegroundColor Cyan
 $items = Get-ChildItem -Force -LiteralPath $Repo |
   Where-Object { $_.Name -notin @("data", "node_modules", "dist", ".git") } |
   ForEach-Object { $_.Name }
+# These names land in a .cmd line, and this script exists to try branches BEFORE they are
+# trusted: a contributor's file called `x & calc.exe` would otherwise run on the host the moment
+# the branch is tested. Same rule as deploy.ps1: plain characters, no leading dash, then quoted
+# with -- ending tar's options. (2026-11 swarm: qwen3.8-27b.)
+foreach ($n in $items) {
+  if ($n -notmatch '^[A-Za-z0-9 _.,()+\-]+$' -or $n.StartsWith("-")) { throw "Refusing to copy: top-level name '$n' is not safe in a .cmd line" }
+}
+$quotedItems = ($items | ForEach-Object { '"{0}"' -f $_ }) -join ' '
 $unpack = "rm -rf $dir.new && mkdir $dir.new && tar -xf - -C $dir.new && sed -i 's/\r`$//' $dir.new/.env $dir.new/egress/* && rm -rf $dir && mv $dir.new $dir"
 $cmdFile = Join-Path $env:TEMP "bitbob-$Name-copy.cmd"
-Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=node_modules --exclude=dist -C `"$Repo`" $($items -join ' ') | wsl.exe -d $Distro --exec sh -c `"$unpack`""
+Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=node_modules --exclude=dist -C `"$Repo`" -- $quotedItems | wsl.exe -d $Distro --exec sh -c `"$unpack`""
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
 

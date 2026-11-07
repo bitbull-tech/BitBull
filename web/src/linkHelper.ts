@@ -100,7 +100,9 @@ export async function openInExplorer(hostPath: string): Promise<{ ok: boolean; m
 export async function vaultKeyFromThisPc(): Promise<string | null> {
   if (!onThisPc()) return null
   try {
-    const r = await fetch(`${HELPER}/vault-key`, { signal: AbortSignal.timeout(2500) })
+    // The helper now shows a consent dialog and waits for a person to click OK. 2.5s aborted
+    // the request while they were still reading it (2026-11 swarm: deepseek). /status stays short.
+    const r = await fetch(`${HELPER}/vault-key`, { signal: AbortSignal.timeout(90_000) })
     if (!r.ok) return null
     const j = (await r.json()) as { ok: boolean; key?: string }
     return j.ok && j.key && /^[0-9a-f]{64}$/.test(j.key) ? j.key : null

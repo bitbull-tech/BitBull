@@ -38,7 +38,7 @@ if (config.agent.lsp) process.env.OPENCODE_EXPERIMENTAL_LSP_TOOL = "true";
 /** Read-only planning agent (OpenCode's built-in "plan" agent asks for approvals, which this UI can't answer). */
 const PLAN_AGENT = "bitbob-plan";
 const PLAN_PROMPT = [
-  "You are in PLAN MODE. Investigate with read-only tools (read, grep, glob, webfetch, memory search) and produce a plan.",
+  "You are in PLAN MODE. Investigate with read-only tools (read, grep, glob, webfetch) and produce a plan. Memory and other connected services are switched off in this mode.",
   "Do not edit files, write files or run commands that change anything.",
   "Finish with: the goal as you understand it, findings, a numbered step-by-step plan with the files involved, risks, and open questions for the user.",
 ].join(" ");
@@ -401,7 +401,7 @@ export const opencodeEngine: AgentEngine = {
             const hint = gatewayHint(String(st.message ?? ""), input.model);
             out.push({ type: "error", message: hint ?? `Model call failed, OpenCode retrying (attempt ${st.attempt}): ${st.message}` });
             // Billing/auth/model errors won't fix themselves: stop instead of retrying
-            if (hint || st.attempt >= 2) void s.client.session.abort({ path: { id: sid }, query: dir });
+            if (hint || st.attempt >= 2) s.client.session.abort({ path: { id: sid }, query: dir }).catch((e) => console.warn("[opencode] abort failed:", e));
           }
           break;
         }
@@ -469,7 +469,9 @@ export const opencodeEngine: AgentEngine = {
 
     if (!listeners.has(sid)) listeners.set(sid, new Set());
     listeners.get(sid)!.add(onEvent);
-    const onAbort = () => void s.client.session.abort({ path: { id: sid }, query: dir });
+    // never fire-and-forget: an unresponsive engine rejecting here is an unhandled rejection,
+    // which ends the Node process (2026-11 swarm: qwen)
+    const onAbort = () => s.client.session.abort({ path: { id: sid }, query: dir }).catch((e) => console.warn("[opencode] abort failed:", e));
     input.signal.addEventListener("abort", onAbort, { once: true });
     activeRuns++;
 
@@ -487,6 +489,15 @@ export const opencodeEngine: AgentEngine = {
             // Plan mode stays read-only: no subagents (some of them can edit)
             ...(input.plan ? { task: false } : {}),
             ...Object.fromEntries(integrations().filter((i) => !input.mcp[i.id]).map((i) => [`${i.id}_*`, false])),
+            // ...and no MCP tools at all. Denying edit and bash fences the filesystem, but MCP
+            // tools reach OUT: ditto_save_memory writes into long-term memory that every later
+            // chat trusts, and bitbob_request_network_access puts a consent card in front of the
+            // owner worded by whatever the agent just read. Plan mode is where agents read hostile
+            // things — swarm reviewers on contributor branches — so it gets none of them.
+            // (2026-11 swarm, confirmed by both reviewers; was residual R-list item since the merge.)
+            ...(input.plan
+              ? { "ditto_*": false, "bitbob_*": false, ...Object.fromEntries(integrations().map((i) => [`${i.id}_*`, false])) }
+              : {}),
           },
           parts: [{ type: "text", text: input.prompt }],
         },

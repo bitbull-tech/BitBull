@@ -200,9 +200,12 @@ numbering; "this branch" means the security branch, now merged.
 12. `swarm.ts`: reviewers run with full tools on hostile repos and their raw output is
     interpolated into the verdict prompt; the verdict turn can be silently dropped —
     scope reviewers read-only, fence report text, wait out a busy chat. Residual after the
-    fix: plan mode fences filesystem and shell only — reviewers still hold MCP tools
-    (`save_memory`, `request_network_access`), so out-of-sandbox effects stay prompt-driven
-    until tools are scoped per-mode.
+    fix: plan mode fenced filesystem and shell only — reviewers still held MCP tools
+    (`save_memory`, `request_network_access`). **Closed 7 Nov 2026** after both reviewers in the
+    second swarm reached it independently: plan mode now attaches no MCP servers on the Claude
+    engine and switches every `ditto_*`, `bitbob_*` and integration tool off per prompt on
+    OpenCode, so a hostile target can no longer write to long-term memory or word a network
+    consent card.
 
 **P1 — fast follow**: brand-asset realpath check; `repos/diff` symlink containment;
 `ditto.ts` archiving the user prompt verbatim; guard redaction floor alignment (8 vs 7
