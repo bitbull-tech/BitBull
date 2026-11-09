@@ -381,3 +381,21 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
 - Possible next: count QA Hound evidence per model into the record, and tag turns by kind of work
   (code / writing / research) so the record can say "good at code here" rather than overall.
 
+## Voice (9 Nov 2026)
+
+- Tom's choices: listening via a Gemini model on SayGM (SayGM has no audio models); speaking via
+  Piper in the container; all modes (mic button, read aloud, auto-speak when asked by voice,
+  hands-free); one BitBull voice; settings per computer; global push-to-talk shortcut.
+- Server: `server/src/voice.ts` (+ tests), routes `/api/voice`, `/api/voice/speak`,
+  `/api/voice/transcribe`, config `VOICE_STT_MODEL`. Dockerfile `voice` stage pulls Piper and two
+  voice packs, checked against `voice/piper.sha256`.
+- Web: `web/src/voice/` (prefs, text, mic, speaker, useVoice, VoicePanel); Chat.tsx wires mic,
+  hands-free, streaming speech and read aloud; Settings → Voice tab.
+- Desktop: `tauri-plugin-global-shortcut` (Ctrl/Cmd+Shift+Space → `bitbull:ptt` DOM event into the
+  BitBull window), `Info.plist` with the microphone prompt text. Cargo.lock updated.
+- Checked: server tests and Piper in the cloud; web tsc; recording, WAV encoding, transcription
+  call and the hands-free loop in headless Chromium with a fake microphone. **Not yet checked:**
+  Gemini transcription through SayGM for real, WebView2's mic prompt, and the shortcut on Windows/Mac.
+- Art: QA Hound dialog has the detective (`assets/qa-hound.webp`), Settings has the lab-coat
+  bulldog (`assets/settings-dog.webp`), both with transparent backgrounds so they follow the scheme.
+

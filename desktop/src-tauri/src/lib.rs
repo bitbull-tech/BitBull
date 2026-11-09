@@ -267,6 +267,8 @@ fn show_gm(app: &AppHandle) -> Result<(), String> {
         .title("BitBull")
         .inner_size(1360.0, 900.0)
         .min_inner_size(720.0, 480.0)
+        // tells the page that holding the shortcut works from anywhere (Settings → Voice says so)
+        .initialization_script("window.__BITBULL_DESKTOP={globalPtt:true};")
         .build()
         .map_err(|e| e.to_string())?;
     let app2 = app.clone();
@@ -349,10 +351,38 @@ impl AppHost {
     }
 }
 
+/// Voice push-to-talk: hold Ctrl+Shift+Space (Cmd+Shift+Space on a Mac) anywhere on the computer
+/// and BitBull listens; let go and what you said is sent. The BitBull window has no IPC, so the key
+/// state goes in as a DOM event with a fixed payload ("down" / "up"), nothing else.
+fn register_push_to_talk(app: &AppHandle) {
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+    let mods = if cfg!(target_os = "macos") { Modifiers::SUPER | Modifiers::SHIFT } else { Modifiers::CONTROL | Modifiers::SHIFT };
+    let ptt = Shortcut::new(Some(mods), Code::Space);
+    let plugin = tauri_plugin_global_shortcut::Builder::new()
+        .with_handler(move |app, shortcut, event| {
+            if shortcut != &ptt {
+                return;
+            }
+            let state = if event.state() == ShortcutState::Pressed { "down" } else { "up" };
+            if let Some(w) = app.get_webview_window("bitbull") {
+                let _ = w.eval(&format!("window.dispatchEvent(new CustomEvent('bitbull:ptt',{{detail:'{state}'}}))"));
+            }
+        })
+        .build();
+    if app.plugin(plugin).is_err() {
+        return;
+    }
+    // another app may own the combination already: voice still works from the mic button
+    if let Err(e) = app.global_shortcut().register(ptt) {
+        eprintln!("push-to-talk shortcut not available: {e}");
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            register_push_to_talk(app.handle());
             let file = app.path().app_config_dir().map(|d| d.join("bitbull-desktop.json")).unwrap_or_else(|_| PathBuf::from("bitbull-desktop.json"));
             carry_over_legacy_settings(&file);
             let mut settings = Settings::load(&file);

@@ -47,3 +47,7 @@ export const IconPlan = (p: P) => (<svg {...base(p)}><path d="M9 6h11M9 12h11M9 
 export const IconPlug = (p: P) => (<svg {...base(p)}><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4" /></svg>)
 export const IconChip = (p: P) => (<svg {...base(p)}><rect x="7" y="7" width="10" height="10" rx="2" /><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" /></svg>)
 export const IconBranch = (p: P) => (<svg {...base(p)}><circle cx="6" cy="4" r="2" /><circle cx="6" cy="20" r="2" /><circle cx="18" cy="8" r="2" /><path d="M6 6v12M18 10c0 4-12 2-12 8" /></svg>)
+export const IconMic = (p: P) => (<svg {...base(p)}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>)
+export const IconHeadset = (p: P) => (<svg {...base(p)}><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></svg>)
+export const IconSpeaker = (p: P) => (<svg {...base(p)}><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></svg>)
+export const IconSpeakerOff = (p: P) => (<svg {...base(p)}><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m16 9 5 5M21 9l-5 5" /></svg>)

@@ -7,8 +7,10 @@ import { BrandMark } from './BrandMark'
 import { NetworkPanel } from './network'
 import { FoldersPanel } from './Folders'
 import { HELPER_HINT, vaultKeyFromThisPc } from './linkHelper'
+import settingsArt from './assets/settings-dog.webp'
+import { VoicePanel } from './voice/VoicePanel'
 
-type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'appearance'
+type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'voice' | 'appearance'
 
 export function Settings({
   cfg,
@@ -70,7 +72,10 @@ export function Settings({
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-label="Settings">
+      <div className="modal settings-modal" role="dialog" aria-label="Settings">
+        <div className="settings-top">
+          <img className="settings-art" src={settingsArt} alt="" draggable={false} />
+          <div className="settings-top-main">
         <header className="modal-head">
           <h2>Settings</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -85,6 +90,7 @@ export function Settings({
               ['config', 'Configuration'],
               ['folders', 'Folders'],
               ['network', 'Network'],
+              ['voice', 'Voice'],
               ['appearance', 'Appearance'],
             ] as const
           ).map(([id, label]) => (
@@ -93,6 +99,8 @@ export function Settings({
             </button>
           ))}
         </nav>
+          </div>
+        </div>
 
         <div className="modal-body">
           {tab === 'status' && (
@@ -286,6 +294,8 @@ export function Settings({
               </dl>
             </>
           )}
+
+          {tab === 'voice' && <VoicePanel />}
 
           {tab === 'appearance' && (
             <>

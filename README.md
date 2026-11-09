@@ -571,6 +571,16 @@ Your record per model (turns, errors, stopped, cost, tokens, speed, last used) c
 turns and replies BitBull already stores: `GET /api/models/usage`, and the "Your use" column and
 panel in the model browser.
 
+## Voice
+
+Talk to BitBull and have it talk back: the **mic button** in the message bar (click, talk, click),
+**push-to-talk** (hold Ctrl+Shift+Space, or ⌘+Shift+Space on a Mac; from any app in the desktop app),
+**hands-free** (the headset button: talk, pause, hear the answer, talk over it to interrupt) and
+**read aloud** under any reply. Speech is written down by a Gemini model on SayGM and answered by
+the chat's own model; BitBull's voices (one UK, seven US) are generated in the container by Piper.
+Microphone, speaker, voice, speed and pause length are in Settings → Voice and kept per computer.
+Details, licences and privacy: [docs/VOICE.md](docs/VOICE.md).
+
 
 **QA Hound** — unleash multiple LLMs on your designated repo, folder or file to review, challenge
 each other and summarise a verdict and recommendations.

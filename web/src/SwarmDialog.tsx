@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type Model, type Project, type RepoInfo, type Session, type Swarm } from './api'
 import { IconX } from './icons'
 import { priceLabel } from './ModelPicker'
+import houndArt from './assets/qa-hound.webp'
 
 const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
   { id: 'attack-vectors', label: 'Attack vectors', hint: 'how a hostile input, contributor, dependency or prompt-injected agent could abuse it; entry point → impact' },
@@ -126,6 +127,9 @@ export function SwarmDialog({
           </button>
         </header>
         <div className="modal-body">
+          <div className="hound-intro">
+            <img className="hound-art" src={houndArt} alt="" draggable={false} />
+            <div>
           <p className="hound-lead">
             <b>QA Hound</b> - unleash multiple LLMs on your designated repo, folder or file to review, challenge each other and summarise a
             verdict and recommendations.
@@ -135,6 +139,8 @@ export function SwarmDialog({
             current model (<b>{primaryModel}</b>) weighs both and gives the verdict as its next reply in this chat. The reviewers' chats appear in
             the sidebar as "QA Hound · …" so you can read their working.
           </p>
+            </div>
+          </div>
           <label className="field">
             <span>Target (path in this workspace)</span>
             <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="my-repo, src/, uploads/script.py …" list="swarm-repos" />

@@ -2,7 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
-import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconLock, IconPlan, IconSend, IconShare, IconStop, IconTool, IconX } from './icons'
+import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconHeadset, IconLock, IconMic, IconPlan, IconSend, IconShare, IconSpeaker, IconSpeakerOff, IconStop, IconTool, IconX } from './icons'
+import { useSpeaking, useVoice } from './voice/useVoice'
+import { speaker } from './voice/speaker'
+import { chunk, speakable } from './voice/text'
 import { ModelDog } from './dogs'
 import { ModelAdvisor } from './ModelAdvisor'
 import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadItem } from './uploads'
@@ -11,6 +14,15 @@ import { FolderMenu } from './FolderMenu'
 import { BrandMark } from './BrandMark'
 import { getBrand } from './brand'
 import mascot from './assets/bitbull-arms-folded.webp'
+
+const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘⇧Space' : 'Ctrl+Shift+Space'
+const VOICE_HINT: Record<string, string> = {
+  listening: 'Listening… just talk',
+  hearing: 'Hearing you…',
+  transcribing: 'Writing it down…',
+  recording: 'Listening…',
+  off: 'Hands-free',
+}
 
 const greeting = () => {
   const h = new Date().getHours()
@@ -177,6 +189,7 @@ export function Chat({
   const onEvent = (ev: AgentEvent) => {
     switch (ev.type) {
       case 'text':
+        voice.onText(ev.delta)
         return patchLast((m) => ({ ...m, content: m.content + ev.delta }))
       case 'thinking':
         return patchLast((m) => ({ ...m, thinking: (m.thinking ?? '') + ev.delta }))
@@ -236,7 +249,7 @@ export function Chat({
     }
   }
 
-  const send = async (override?: string) => {
+  const send = async (override?: string, opts?: { voice?: boolean }) => {
     const text = (override ?? input).trim()
     if (!text || busy) return
     setNotice(null)
@@ -267,17 +280,25 @@ export function Chat({
       { id: `u-${Date.now()}`, role: 'user', content: text, tools: [], attachments: paths },
       { id: `a-${Date.now()}`, role: 'assistant', content: '', tools: [], model, streaming: true, plan },
     ])
+    voice.beginTurn(!!opts?.voice)
     try {
       await guard(api.run(s.id, { message: text, model, attachments: paths, plan }, onEvent, {
         onTurn: (turnId) => (followingRef.current = turnId),
       }))
     } finally {
       followingRef.current = null
+      voice.endTurn()
       patchLast((m) => ({ ...m, streaming: false }))
       setBusy(false)
       onTurnDone()
     }
   }
+
+  const voice = useVoice({ busy, send: (text, o) => send(text, o), setInput })
+  // a voice problem (no microphone, nothing heard, transcription failed) shows where other notices do
+  useEffect(() => {
+    if (voice.error) setNotice(voice.error), voice.clearError()
+  }, [voice.error])
 
   const empty = msgs.length === 0
 
@@ -454,9 +475,41 @@ export function Chat({
               </span>
             )}
             <span className="grow" />
-            <span className="hint">Enter to send · Shift+Enter for a new line</span>
+            <span className="hint">{voice.handsFree ? VOICE_HINT[voice.state] : 'Enter to send · Shift+Enter for a new line'}</span>
+            {voice.speaking && (
+              <button type="button" className="icon-btn voice-btn" onClick={voice.stopSpeaking} title="Stop speaking">
+                <IconSpeakerOff size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              className={`icon-btn voice-btn ${voice.handsFree ? 'on' : ''}`}
+              onClick={voice.toggleHandsFree}
+              title={voice.handsFree ? 'Hands-free is on: click to stop listening' : 'Hands-free: talk, and BitBull answers out loud. Talk over it to interrupt.'}
+              aria-pressed={voice.handsFree}
+            >
+              <IconHeadset size={16} />
+            </button>
+            {!voice.handsFree && (
+              <button
+                type="button"
+                className={`icon-btn voice-btn mic ${voice.state}`}
+                onClick={voice.toggleRecording}
+                disabled={voice.state === 'transcribing'}
+                title={
+                  voice.state === 'recording'
+                    ? 'Listening: click to stop'
+                    : voice.state === 'transcribing'
+                      ? 'Writing down what you said…'
+                      : `Speak your message (or hold ${SHORTCUT} to talk and send)`
+                }
+                style={{ ['--lvl' as string]: voice.level.toFixed(2) }}
+              >
+                <IconMic size={16} />
+              </button>
+            )}
             {busy ? (
-              <button type="button" className="send stop" onClick={() => session && void guard(api.abort(session.id))} aria-label="Stop">
+              <button type="button" className="send stop" onClick={() => (voice.abort(), session && void guard(api.abort(session.id)))} aria-label="Stop">
                 <IconStop />
               </button>
             ) : (
@@ -538,6 +591,19 @@ function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: str
   const [copied, copy] = useCopy()
   const [exported, setExported] = useState<'' | 'full' | 'short'>('')
   const [copiedX, copyExchange] = useCopy()
+  const [reading, setReading] = useState(false)
+  const speaking = useSpeaking()
+  useEffect(() => {
+    if (!speaking) setReading(false)
+  }, [speaking])
+  const readAloud = () => {
+    speaker.stop()
+    if (reading) return setReading(false)
+    const parts = chunk(speakable(m.content))
+    if (!parts.length) return
+    parts.forEach((c) => speaker.say(c))
+    setReading(true)
+  }
   if (m.role === 'user')
     return (
       <div className="msg user">
@@ -615,6 +681,11 @@ function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: str
             {m.content && (
               <button className="icon-btn sm" onClick={() => copy(m.content)} title="Copy reply">
                 {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+              </button>
+            )}
+            {m.content && (
+              <button className={`icon-btn sm ${reading ? 'on' : ''}`} onClick={readAloud} title={reading ? 'Stop reading' : 'Read aloud'}>
+                {reading ? <IconSpeakerOff size={13} /> : <IconSpeaker size={13} />}
               </button>
             )}
             {sessionId && !/^a-\d+$/.test(m.id) && (

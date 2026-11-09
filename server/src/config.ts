@@ -42,6 +42,7 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   SMALL_MODEL: {},
   ADVISOR_MODEL: {},
   ADVISOR_STRONG_MODEL: {},
+  VOICE_STT_MODEL: {},
   SUBAGENT_MODEL: {},
   OWNER_NAME: {},
   GITHUB_TOKEN: {},
@@ -153,6 +154,15 @@ function buildConfig() {
     anthropicBaseUrl: env("SAYGM_ANTHROPIC_BASE_URL", "https://api.saygm.com"),
     /** "api-key" -> x-api-key header, "bearer" -> Authorization: Bearer */
     anthropicAuth: env("SAYGM_ANTHROPIC_AUTH", "api-key") as "api-key" | "bearer",
+  },
+
+  /** Talking to BitBull (docs/VOICE.md): Piper speaks inside the container, a Gemini model on SayGM listens. */
+  voice: {
+    piperDir: env("PIPER_DIR", "/opt/piper"),
+    /** "" = the cheapest Gemini flash SayGM lists */
+    sttModel: env("VOICE_STT_MODEL", ""),
+    maxSeconds: 120,
+    maxChars: 4000,
   },
 
   ditto: {

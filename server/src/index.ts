@@ -26,6 +26,7 @@ import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
+import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
@@ -125,6 +126,30 @@ app.get("/api/config", async (c) =>
 app.get("/api/models", async (c) => c.json({ models: await publicModels(c.req.query("refresh") === "1") }));
 
 /** One model in full, including the gateway's raw record (the Models view). */
+// ---------- voice (docs/VOICE.md) ----------
+app.get("/api/voice", async (c) => c.json(await voiceStatus()));
+/** Text to speech with Piper, in this container: WAV back, nothing leaves the machine. */
+app.post("/api/voice/speak", bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "Too much text to speak at once" }, 413) }), async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { text?: unknown; voice?: unknown; speed?: unknown };
+  if (typeof body.text !== "string") return c.json({ error: "text required" }, 400);
+  try {
+    const wav = await speak(body.text, typeof body.voice === "string" ? body.voice : "", typeof body.speed === "number" ? body.speed : 1);
+    return c.body(new Uint8Array(wav), 200, { "content-type": "audio/wav", "cache-control": "no-store" });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+/** Speech to text: a WAV recording in, its words out (a Gemini model on SayGM). */
+app.post("/api/voice/transcribe", bodyLimit({ maxSize: 12 * 1024 * 1024, onError: (c) => c.json({ error: "Recording too long" }, 413) }), async (c) => {
+  try {
+    const r = await transcribe(Buffer.from(await c.req.arrayBuffer()));
+    logTranscription(r);
+    return c.json(r);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+
 /** Your usage per model (turns, errors, cost), from what BitBull already stores. */
 app.get("/api/models/usage", (c) => c.json({ usage: usageByModel() }));
 /** "Which model for this?": three picks from the live catalogue, by the advisor model. */

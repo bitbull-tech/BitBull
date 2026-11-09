@@ -310,6 +310,22 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** Errors from the server come back as {"error": "..."}: show the message, not the JSON. */
+async function failText(res: Response) {
+  const t = await res.text()
+  try {
+    return (JSON.parse(t) as { error?: string }).error ?? t
+  } catch {
+    return t
+  }
+}
+
+export interface VoiceInfo {
+  tts: { engine: 'piper'; available: boolean; voices: { id: string; name: string; accent: 'UK' | 'US'; gender: 'female' | 'male'; licence: string; available: boolean }[] }
+  stt: { model: string | null; price: { input: number; output: number } | null }
+  limits: { maxSeconds: number; maxChars: number }
+}
+
 export const api = {
   config: () => req<AppConfig>('/api/config'),
   models: (refresh = false) => req<{ models: Model[] }>(`/api/models${refresh ? '?refresh=1' : ''}`),
@@ -367,6 +383,25 @@ export const api = {
     req<NetworkState>('/api/network/approved', { method: 'POST', body: JSON.stringify({ host, scope }) }),
   revokeNetwork: (host: string, scope: 'host' | 'domain') =>
     req<NetworkState>(`/api/network/approved/${encodeURIComponent(host)}?scope=${scope}`, { method: 'DELETE' }),
+  voice: () => req<VoiceInfo>('/api/voice'),
+  /** WAV of the text in a Piper voice (server/src/voice.ts) */
+  speak: async (text: string, voice: string, speed = 1): Promise<Blob> => {
+    const res = await fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ text, voice, speed }),
+    })
+    if (res.status === 401) throw new Unauthorized('unauthorized')
+    if (!res.ok) throw new Error(await failText(res))
+    return res.blob()
+  },
+  /** A WAV recording → its words, by a Gemini model on SayGM */
+  transcribe: async (wav: Blob): Promise<{ text: string; model: string; seconds: number; costUsd?: number }> => {
+    const res = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'content-type': 'audio/wav', authorization: `Bearer ${getToken()}` }, body: wav })
+    if (res.status === 401) throw new Unauthorized('unauthorized')
+    if (!res.ok) throw new Error(await failText(res))
+    return res.json()
+  },
   modelUsage: () => req<{ usage: ModelUsage[] }>('/api/models/usage'),
   advise: (task: string, strong = false) => req<Advice>('/api/models/advise', { method: 'POST', body: JSON.stringify({ task, strong }) }),
   refreshModels: () => req<{ models: Model[] }>('/api/models/refresh', { method: 'POST' }),

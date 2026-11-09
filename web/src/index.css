@@ -572,6 +572,13 @@ code, pre, kbd { font-family: var(--mono); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 6px 22px; }
 .modal-head h2 { margin: 0; font-size: 18px; letter-spacing: -0.2px; }
 .tabs { margin: 6px 22px 0; align-self: flex-start; }
+/* Settings: the lab-coat bulldog presents the tabs. Transparent art, so the scheme's panel colour shows through. */
+.settings-top { display: flex; align-items: flex-end; gap: 0; padding-left: 14px; }
+.settings-top-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-bottom: 2px; }
+.settings-top-main .modal-head { padding-left: 10px; }
+.settings-top-main .tabs { margin-left: 10px; margin-right: 22px; flex-wrap: wrap; }
+.settings-art { height: 128px; width: auto; flex: none; margin-top: 10px; filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.18)); user-select: none; }
+@media (max-width: 560px) { .settings-art { display: none; } .settings-top { padding-left: 12px; } }
 .modal-body { overflow-y: auto; padding: 16px 22px 22px; }
 .modal-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 22px 0 10px; }
 .modal-body h3:first-child { margin-top: 4px; }
@@ -988,6 +995,11 @@ button.file-row:hover { background: var(--hover); }
 
 /* QA Hound (the swarm: code and API keep that name) */
 .swarm-modal { width: min(640px, 94vw); }
+/* the detective has a transparent background, so the modal's own (scheme-driven) colour shows through */
+.swarm-modal .hound-intro { display: flex; gap: 16px; align-items: center; margin-bottom: 4px; }
+.swarm-modal .hound-intro > div { min-width: 0; }
+.swarm-modal .hound-art { width: 112px; height: auto; flex: none; filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.18)); user-select: none; }
+@media (max-width: 520px) { .swarm-modal .hound-art { width: 76px; } }
 .hound-lead { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: var(--text); }
 .swarm-modal .field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .swarm-modal .field > span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
@@ -1119,3 +1131,27 @@ button.file-row:hover { background: var(--hover); }
   .sleuth .smoke circle { animation: none; opacity: 0; }
   .theatre-room .detective { transition: none; }
 }
+
+/* ---- voice (web/src/voice) ---- */
+.voice-btn { position: relative; }
+.voice-btn.on, .icon-btn.sm.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.voice-btn.mic.recording { color: #fff; background: var(--bad); }
+/* a ring that grows with your voice */
+.voice-btn.mic.recording::after {
+  content: ''; position: absolute; inset: -3px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 calc(var(--lvl, 0) * 7px) color-mix(in srgb, var(--bad) 35%, transparent);
+  transition: box-shadow 80ms linear;
+}
+.voice-btn.mic.transcribing { opacity: 0.6; animation: voice-pulse 1s ease-in-out infinite; }
+.voice-btn.on::after { content: ''; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: voice-pulse 1.4s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { opacity: 0.35; } }
+.voice-meter { height: 6px; border-radius: 3px; background: var(--hover); overflow: hidden; }
+.voice-meter > i { display: block; height: 100%; background: var(--accent); transition: width 80ms linear; }
+.voice-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.voice-row select { flex: 1 1 180px; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+.voice-row input[type='range'] { flex: 1 1 160px; accent-color: var(--accent); }
+.voice-row .voice-meter { flex: 1 0 100%; }
+.bad-text { color: var(--bad); }
+.voice-credits { margin-top: 14px; }
+kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; background: var(--panel-2); white-space: nowrap; }
+.cfg-val.small code { display: inline; padding: 1px 6px; }
