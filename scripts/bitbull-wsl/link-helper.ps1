@@ -155,7 +155,7 @@ function Do-Unlink([string]$name) {
 # exist. Nothing is changed, so no dialog. explorer.exe gets the path as one argument.
 function Do-Open([string]$p) {
   if ($p -notmatch '^/home/[a-z_][a-z0-9_-]{0,31}/bitbull-data(/[A-Za-z0-9 _.@+-]+)*/?$' -or $p -match '(^|/)\.\.(/|$)') {
-    return @{ ok = $false; message = "That path can't be opened from here (only folders under bitbull-data)." }
+    return @{ ok = $false; message = "That path can't be opened from here (only files and folders under bitbull-data)." }
   }
   $rel = ($p.TrimEnd('/') -replace '/', '\')
   $unc = "\\wsl.localhost\$Distro$rel"
@@ -163,11 +163,15 @@ function Do-Open([string]$p) {
   if (-not (Test-Path -LiteralPath $unc)) { return @{ ok = $false; message = "Not found or not readable from Windows: $unc. Run start.ps1 once after updating (it makes the data folder readable from this PC)." } }
   # The helper runs hidden, and Windows only lets the foreground process raise a new window:
   # take the foreground with the owner form first, then find the new Explorer window and raise it.
+  # a file: open its folder with the file selected
+  $isFile = Test-Path -LiteralPath $unc -PathType Leaf
   $owner = New-Owner
   try {
-    Start-Process explorer.exe -ArgumentList @("`"$unc`"")
+    if ($isFile) { Start-Process explorer.exe -ArgumentList @("/select,`"$unc`"") }
+    else { Start-Process explorer.exe -ArgumentList @("`"$unc`"") }
     $shell = New-Object -ComObject Shell.Application
-    $want = ($unc -replace '\\', '/').ToLower()
+    $folder = if ($isFile) { Split-Path -LiteralPath $unc -Parent } else { $unc }
+    $want = ($folder -replace '\\', '/').ToLower()
     for ($i = 0; $i -lt 30; $i++) {
       Start-Sleep -Milliseconds 150
       foreach ($w in @($shell.Windows())) {

@@ -19,6 +19,7 @@ import path from "node:path";
 import { config } from "./config.js";
 import { estimateCost, listModels, type ModelInfo } from "./models.js";
 import { record } from "./activity.js";
+import { DOG_PITCH, concat, dogify, laugh, readWav, splitLaughs, writeWav, type Pcm } from "./dogvoice.js";
 
 /* ---------------- voices ---------------- */
 
@@ -33,6 +34,8 @@ export interface Voice {
   speaker?: number;
   /** licence of the recordings the voice was trained on */
   licence: string;
+  /** a character voice built on top of the Piper voice (dogvoice.ts) */
+  character?: "dog";
 }
 
 /**
@@ -42,6 +45,8 @@ export interface Voice {
  * The LibriTTS speakers were picked by pitch and pace from the first 200 (docs/VOICE.md).
  */
 export const VOICES: Voice[] = [
+  // BitBull himself: an original cartoon-dog character (dogvoice.ts), with his own laugh
+  { id: "bitbull", name: "BitBull (cartoon dog)", accent: "US", gender: "male", model: "en-us-libritts-high", speaker: 54, licence: "CC BY 4.0 (LibriTTS), BitBull effects", character: "dog" },
   { id: "uk-female", name: "Southern English (UK)", accent: "UK", gender: "female", model: "en-gb-southern_english_female-low", licence: "CC BY-SA 4.0 (OpenSLR 83)" },
   { id: "us-female-warm", name: "Warm (US)", accent: "US", gender: "female", model: "en-us-libritts-high", speaker: 0, licence: "CC BY 4.0 (LibriTTS)" },
   { id: "us-female-clear", name: "Clear (US)", accent: "US", gender: "female", model: "en-us-libritts-high", speaker: 30, licence: "CC BY 4.0 (LibriTTS)" },
@@ -149,29 +154,49 @@ export async function speak(text: string, voiceId: string, speed = 1): Promise<B
   const say = speakableText(text);
   if (!say) throw new Error("Nothing to say");
   const rate = Math.min(2, Math.max(0.5, Number(speed) || 1));
-  return slot(async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "bitbull-tts-"));
-    const out = path.join(dir, "out.wav");
-    try {
-      const args = ["--model", modelFile(v), "--output_file", out, "--length_scale", (1 / rate).toFixed(3), "--quiet"];
-      if (v.speaker !== undefined) args.push("--speaker", String(v.speaker));
-      await new Promise<void>((resolve, reject) => {
-        const p = spawn(piperBin(), args, { stdio: ["pipe", "ignore", "pipe"], cwd: piperDir() });
-        let err = "";
-        p.stderr.on("data", (d) => (err = (err + d).slice(-500)));
-        const timer = setTimeout(() => p.kill("SIGKILL"), 60_000);
-        p.on("error", reject);
-        p.on("close", (code) => {
-          clearTimeout(timer);
-          code === 0 ? resolve() : reject(new Error(`piper exited ${code}: ${err.trim()}`));
-        });
-        p.stdin.end(say);
-      });
-      return readFileSync(out);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+  if (v.character === "dog") return speakDog(say, v, rate);
+  return slot(() => piper(say, v, 1 / rate));
+}
+
+/** BitBull's character voice: Piper a little faster, then made bigger and gruffer, laughing where the reply laughs. */
+async function speakDog(say: string, v: Voice, rate: number): Promise<Buffer> {
+  const parts: Pcm[] = [];
+  let laughs = 0;
+  for (const part of splitLaughs(say)) {
+    if ("laugh" in part) {
+      parts.push(laugh(22050, laughs++));
+      continue;
     }
-  });
+    const wav = await slot(() => piper(part.say, v, DOG_PITCH / rate));
+    parts.push(dogify(readWav(wav)));
+  }
+  if (!parts.length) parts.push(laugh(22050)); // nothing but laughing
+  return writeWav(concat(parts));
+}
+
+/** One run of Piper. `lengthScale` < 1 is faster. Text on stdin; argv only from fixed values. */
+async function piper(say: string, v: Voice, lengthScale: number): Promise<Buffer> {
+  const dir = mkdtempSync(path.join(tmpdir(), "bitbull-tts-"));
+  const out = path.join(dir, "out.wav");
+  try {
+    const args = ["--model", modelFile(v), "--output_file", out, "--length_scale", lengthScale.toFixed(3), "--quiet"];
+    if (v.speaker !== undefined) args.push("--speaker", String(v.speaker));
+    await new Promise<void>((resolve, reject) => {
+      const p = spawn(piperBin(), args, { stdio: ["pipe", "ignore", "pipe"], cwd: piperDir() });
+      let err = "";
+      p.stderr.on("data", (d) => (err = (err + d).slice(-500)));
+      const timer = setTimeout(() => p.kill("SIGKILL"), 60_000);
+      p.on("error", reject);
+      p.on("close", (code) => {
+        clearTimeout(timer);
+        code === 0 ? resolve() : reject(new Error(`piper exited ${code}: ${err.trim()}`));
+      });
+      p.stdin.end(say);
+    });
+    return readFileSync(out);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /* ---------------- what the UI shows ---------------- */

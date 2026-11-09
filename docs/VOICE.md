@@ -24,7 +24,7 @@ Kept on **this computer only** (browser storage), so a laptop and a desktop each
   Chromium-based browser or the Windows app (WebView2); elsewhere the system default is used.
 - **Voice engine**: *BitBull voices* (Piper, generated in the container, nothing leaves your
   machine) or *This computer's* (the operating system's built-in voices).
-- **Voice**: one UK and seven US voices, **Speed** and **Speak replies** (read out the answer when you
+- **Voice**: BitBull's own cartoon-dog voice (the default), plus one UK and seven US voices, **Speed** and **Speak replies** (read out the answer when you
   asked by voice; always on in hands-free).
 - **Hands-free pause**: how long a silence ends what you are saying.
 - **Listening model**: shown here, chosen under Configuration → *Voice: listening model*.
@@ -55,6 +55,16 @@ browser: sentences ─► POST /api/voice/speak ─► Piper in the container �
 - On a Mac, macOS asks once for the microphone (`NSMicrophoneUsageDescription` in
   `desktop/src-tauri/Info.plist`).
 
+## BitBull's own voice
+
+The default voice is BitBull himself: an original cartoon-dog character, a big, gruff,
+good-natured voice with his own huffing chuckle. It is not modelled on any existing character.
+`server/src/dogvoice.ts` has Piper speak a little faster, then lowers pitch and formants together
+(so it sounds like a bigger animal rather than a slowed tape), adds gravel (a fast flutter and soft
+saturation) and some bass. When a reply laughs ("haha", "lol", 😂, *laughs*), he laughs instead of
+reading it out. The laugh is synthesised from scratch (voice source, vowel resonances and breath),
+so there is no recording behind it.
+
 ## Privacy
 
 What you say is sent to SayGM (and from there to Google's Gemini) to be written down, the same
@@ -66,6 +76,7 @@ button shows a pulsing dot).
 
 | Voice | Source | Licence |
 | --- | --- | --- |
+| **BitBull** (cartoon dog, the default) | LibriTTS speaker 54, reshaped in `server/src/dogvoice.ts` | CC BY 4.0; the effects and the laugh are BitBull's own |
 | Southern English (UK), female | OpenSLR 83 | CC BY-SA 4.0 |
 | Warm, Clear, Bright (US), female; Deep, Calm, Steady, Bright (US), male | LibriTTS speakers 0, 30, 53, 42, 97, 16, 54 | CC BY 4.0 |
 

@@ -164,15 +164,15 @@ pub fn data_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| Path::new(&h).join("Library/Application Support/BitBull/data"))
 }
 
-/// A folder the page may open in Finder: an existing directory inside BitBull's data folder,
-/// after resolving links and `..`, so nothing outside it can be named.
+/// A folder (opened) or file (revealed) the page may show in Finder: an existing path inside
+/// BitBull's data folder, after resolving links and `..`, so nothing outside it can be named.
 pub fn openable(requested: &str, data: &Path) -> Option<PathBuf> {
     if requested.is_empty() || requested.len() > 1024 || requested.contains('\0') {
         return None;
     }
     let root = data.canonicalize().ok()?;
     let p = Path::new(requested).canonicalize().ok()?;
-    (p.starts_with(&root) && p.is_dir()).then_some(p)
+    (p.starts_with(&root) && (p.is_dir() || p.is_file())).then_some(p)
 }
 
 /// What the helper needs from the app: where the scripts are, and the dialogs. A trait so the
@@ -495,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn only_folders_inside_the_data_folder_open() {
+    fn only_paths_inside_the_data_folder_open() {
         let base = std::env::temp_dir().join(format!("bitbull-helper-open-{}", std::process::id()));
         let data = base.join("data");
         std::fs::create_dir_all(data.join("workspace")).unwrap();
@@ -503,7 +503,7 @@ mod tests {
         std::fs::create_dir_all(base.join("outside")).unwrap();
         assert!(openable(data.join("workspace").to_str().unwrap(), &data).is_some());
         assert!(openable(&format!("{}/workspace/../../outside", data.display()), &data).is_none());
-        assert!(openable(data.join("file.txt").to_str().unwrap(), &data).is_none());
+        assert!(openable(data.join("file.txt").to_str().unwrap(), &data).is_some()); // files are revealed
         assert!(openable(base.join("outside").to_str().unwrap(), &data).is_none());
         #[cfg(unix)]
         {

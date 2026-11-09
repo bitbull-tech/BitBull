@@ -86,6 +86,9 @@ if (!cols.includes("project_id")) db.exec("ALTER TABLE sessions ADD COLUMN proje
 const pcols = (db.prepare("PRAGMA table_info(projects)").all() as Array<{ name: string }>).map((c) => c.name);
 if (!pcols.includes("ditto_sync")) db.exec("ALTER TABLE projects ADD COLUMN ditto_sync INTEGER NOT NULL DEFAULT 0");
 if (!pcols.includes("ditto_synced_at")) db.exec("ALTER TABLE projects ADD COLUMN ditto_synced_at INTEGER");
+// Archive: set = moved to the sidebar's Archive section (nothing is deleted; NULL = in use)
+if (!pcols.includes("archived_at")) db.exec("ALTER TABLE projects ADD COLUMN archived_at INTEGER");
+if (!cols.includes("archived_at")) db.exec("ALTER TABLE sessions ADD COLUMN archived_at INTEGER");
 
 // Engine sessions are tied to absolute workspace paths. If the workspace root moved
 // (e.g. host → Docker), drop them; the next turn replays history instead.
@@ -114,6 +117,8 @@ export interface ProjectRow {
   ditto_sync: number;
   /** last time a seed/sync run was started */
   ditto_synced_at: number | null;
+  /** when it was archived; null = in use */
+  archived_at?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -156,6 +161,11 @@ export const projects = {
     ).run({ ...row });
     return row;
   },
+  /** Into the Archive (true) or back out. Doesn't touch updated_at, so it keeps its place. */
+  setArchived(id: string, archived: boolean) {
+    db.prepare("UPDATE projects SET archived_at = ? WHERE id = ?").run(archived ? Date.now() : null, id);
+    return projects.get(id);
+  },
   update(id: string, patch: { name?: string; description?: string; instructions?: string; color?: string; integrations?: string[]; dittoSync?: boolean; dittoSyncedAt?: number }) {
     const cur = projects.get(id);
     if (!cur) return;
@@ -196,6 +206,8 @@ export interface SessionRow {
   model: string;
   engine_session_id: string | null;
   project_id: string | null;
+  /** when it was archived; null = in use */
+  archived_at?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -234,6 +246,11 @@ export const sessions = {
       "INSERT INTO sessions (id,title,engine,model,engine_session_id,project_id,created_at,updated_at) VALUES (@id,@title,@engine,@model,@engine_session_id,@project_id,@created_at,@updated_at)",
     ).run({ ...row });
     return row;
+  },
+  /** Into the Archive (true) or back out. Doesn't touch updated_at, so it keeps its place. */
+  setArchived(id: string, archived: boolean) {
+    db.prepare("UPDATE sessions SET archived_at = ? WHERE id = ?").run(archived ? Date.now() : null, id);
+    return sessions.get(id);
   },
   update(id: string, patch: Partial<Pick<SessionRow, "title" | "model" | "engine_session_id" | "project_id">>) {
     const cur = sessions.get(id);
@@ -355,6 +372,10 @@ export interface TurnRow {
 export const turns = {
   get(id: string): TurnRow | undefined {
     return db.prepare("SELECT * FROM turns WHERE id = ?").get(id) as unknown as TurnRow | undefined;
+  },
+  /** A chat's turns, oldest first (what "files from this reply" is measured against). */
+  forSession(sessionId: string): TurnRow[] {
+    return db.prepare("SELECT * FROM turns WHERE session_id = ? ORDER BY started_at").all(sessionId) as unknown as TurnRow[];
   },
   /** Most recent turn of a session, whatever its status. */
   latest(sessionId: string): TurnRow | undefined {

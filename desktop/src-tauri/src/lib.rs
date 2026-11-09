@@ -338,7 +338,12 @@ impl helper::Host for AppHost {
         helper::keychain_vault_key()
     }
     fn open_in_finder(&self, p: &std::path::Path) -> Result<(), String> {
-        let st = std::process::Command::new("/usr/bin/open").arg(p).status().map_err(|e| e.to_string())?;
+        // a file is revealed (its folder opens with it selected); a folder opens
+        let mut cmd = std::process::Command::new("/usr/bin/open");
+        if p.is_file() {
+            cmd.arg("-R");
+        }
+        let st = cmd.arg(p).status().map_err(|e| e.to_string())?;
         if st.success() { Ok(()) } else { Err(format!("open {} failed", p.display())) }
     }
 }

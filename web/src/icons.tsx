@@ -51,3 +51,6 @@ export const IconMic = (p: P) => (<svg {...base(p)}><rect x="9" y="3" width="6" 
 export const IconHeadset = (p: P) => (<svg {...base(p)}><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></svg>)
 export const IconSpeaker = (p: P) => (<svg {...base(p)}><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></svg>)
 export const IconSpeakerOff = (p: P) => (<svg {...base(p)}><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m16 9 5 5M21 9l-5 5" /></svg>)
+export const IconArchive = (p: P) => (<svg {...base(p)}><rect x="3" y="4" width="18" height="5" rx="1" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" /></svg>)
+export const IconUnarchive = (p: P) => (<svg {...base(p)}><rect x="3" y="4" width="18" height="5" rx="1" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M12 18v-6M9.5 14.5 12 12l2.5 2.5" /></svg>)
+export const IconDownload = (p: P) => (<svg {...base(p)}><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 19h14" /></svg>)

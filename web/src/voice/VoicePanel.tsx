@@ -8,7 +8,7 @@ import { allowMic, audioDevices, Mic } from './mic'
 import { setVoicePrefs, voicePrefs, type VoicePrefs } from './prefs'
 import { canChooseSpeaker, speaker } from './speaker'
 
-const SAMPLE = "Hello, I'm BitBull. This is how I'll sound when I read my replies to you."
+const SAMPLE = "Hey there, I'm BitBull! Haha! This is how I'll sound when I read my replies to you."
 const isMac = /Mac/.test(navigator.platform)
 const SHORTCUT = isMac ? '⌘ Cmd + Shift + Space' : 'Ctrl + Shift + Space'
 const desktop = !!(window as unknown as { __BITBULL_DESKTOP?: { globalPtt?: boolean } }).__BITBULL_DESKTOP?.globalPtt
@@ -187,10 +187,17 @@ export function VoicePanel() {
           <div className="cfg-val voice-row">
             {prefs.engine === 'piper' ? (
               <select value={prefs.voice} onChange={(e) => set({ voice: e.target.value })}>
+                {piper?.voices
+                  .filter((v) => v.id === 'bitbull')
+                  .map((v) => (
+                    <option key={v.id} value={v.id} disabled={!v.available}>
+                      {v.name}
+                    </option>
+                  ))}
                 {(['female', 'male'] as const).map((g) => (
                   <optgroup key={g} label={g === 'female' ? 'Female' : 'Male'}>
                     {piper?.voices
-                      .filter((v) => v.gender === g)
+                      .filter((v) => v.gender === g && v.id !== 'bitbull')
                       .map((v) => (
                         <option key={v.id} value={v.id} disabled={!v.available}>
                           {v.name}
@@ -276,7 +283,7 @@ export function VoicePanel() {
       </div>
       {msg && <p className="bad-text small">{msg}</p>}
       <p className="muted small voice-credits">
-        Voices: Piper (MIT). Southern English from OpenSLR 83 (CC BY-SA 4.0); US voices from LibriTTS (CC BY 4.0).
+        Voices: Piper (MIT). BitBull's own voice and laugh are original effects on a LibriTTS speaker. Southern English from OpenSLR 83 (CC BY-SA 4.0); US voices from LibriTTS (CC BY 4.0).
       </p>
     </>
   )

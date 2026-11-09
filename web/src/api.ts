@@ -9,6 +9,8 @@ export interface Session {
   model: string
   engine_session_id: string | null
   project_id: string | null
+  /** set = in the sidebar's Archive */
+  archived_at?: number | null
   created_at: number
   updated_at: number
 }
@@ -26,6 +28,8 @@ export interface Project {
   /** Ditto is kept current for this project: seeded from its uploads, agent saves durable facts */
   dittoSync: boolean
   dittoSyncedAt: number | null
+  /** set = in the sidebar's Archive (with its chats) */
+  archived_at?: number | null
   created_at: number
   updated_at: number
 }
@@ -151,6 +155,32 @@ export interface SettingGroup {
   title: string
   rows: SettingRow[]
 }
+/** A file a chat's reply created or changed (server/src/outputs.ts). */
+export interface OutputFile {
+  path: string
+  size: number
+  mtime: number
+  turn: { start: number; end: number }
+}
+
+/** Save a response as a download, named as the server says. */
+async function saveResponse(res: Response, fallback: string) {
+  const blob = await res.blob()
+  const cd = res.headers.get('content-disposition') ?? ''
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1]
+  const plain = /filename="([^"]+)"/i.exec(cd)?.[1]
+  const name = star ? decodeURIComponent(star) : plain ?? fallback
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return name
+}
+
 export interface FileEntry {
   name: string
   dir: boolean
@@ -338,6 +368,10 @@ export const api = {
   moveSession: (id: string, projectId: string | null) =>
     req<{ session: Session }>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ projectId }) }),
   projects: () => req<{ projects: Project[] }>('/api/projects'),
+  archiveProject: (id: string, archived: boolean) =>
+    req<{ project: Project }>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
+  archiveSession: (id: string, archived: boolean) =>
+    req<{ session: Session }>(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
   createProject: (p: ProjectInput) => req<{ project: Project }>('/api/projects', { method: 'POST', body: JSON.stringify(p) }),
   dittoSyncNow: (id: string) => req<{ sessionId: string; turnId: string }>(`/api/projects/${id}/ditto-sync`, { method: 'POST' }),
   updateProject: (id: string, p: Partial<ProjectInput>) =>
@@ -434,6 +468,16 @@ export const api = {
   retryStored: (id: string) => req<{ ok: boolean }>(`/api/stored/${id}/retry`, { method: 'POST' }),
   newStorageKey: () => req<{ key: string }>('/api/storage/key', { method: 'POST' }),
 
+  /** Files this chat's replies made or changed, newest first */
+  outputs: (sessionId: string) => req<{ projectId: string; files: OutputFile[]; host: string | null }>(`/api/sessions/${sessionId}/outputs`),
+  /** Download workspace paths: one file as itself, a folder or several paths as a .zip. Resolves to the saved name. */
+  download: async (projectId: string, paths: string[]): Promise<string> => {
+    const q = (paths.length ? paths : ['']).map((p) => `path=${encodeURIComponent(p)}`).join('&')
+    const res = await fetch(`/api/projects/${projectId}/download?${q}`, { headers: { authorization: `Bearer ${getToken()}` } })
+    if (res.status === 401) throw new Unauthorized('unauthorized')
+    if (!res.ok) throw new Error(await failText(res))
+    return saveResponse(res, paths.length === 1 ? paths[0].split('/').pop() || 'download' : 'bitbull-files.zip')
+  },
   projectFiles: (projectId: string, dir = '') =>
     req<{ dir: string; entries: FileEntry[]; container: string; host: string | null }>(`/api/projects/${projectId}/files?dir=${encodeURIComponent(dir)}`),
 

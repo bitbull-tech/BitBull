@@ -22,7 +22,8 @@ import {
   type TurnRecord,
   type TurnStatus,
 } from "./turns.js";
-import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
+import { messages, projects, sessions, storedFiles, turns, workspaceFor } from "./db.js";
+import { collect, contentType, disposition, insideReal, outputsDuring, zip } from "./outputs.js";
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
@@ -392,8 +393,11 @@ app.post("/api/projects", async (c) => {
 });
 
 app.patch("/api/projects/:id", async (c) => {
-  const body = ProjectSchema.partial().parse(await c.req.json());
-  const p = projects.update(c.req.param("id"), body);
+  const raw = await c.req.json();
+  const body = ProjectSchema.partial().parse(raw);
+  const { archived } = z.object({ archived: z.boolean().optional() }).parse(raw);
+  if (archived !== undefined && !projects.setArchived(c.req.param("id"), archived)) return c.json({ error: "not found" }, 404);
+  const p = Object.keys(body).length ? projects.update(c.req.param("id"), body) : projects.get(c.req.param("id"));
   return p ? c.json({ project: projectOut(p) }) : c.json({ error: "not found" }, 404);
 });
 
@@ -474,10 +478,11 @@ app.get("/api/sessions/:id", (c) => {
 
 app.patch("/api/sessions/:id", async (c) => {
   const body = z
-    .object({ title: z.string().min(1).optional(), projectId: z.string().nullable().optional() })
+    .object({ title: z.string().min(1).optional(), projectId: z.string().nullable().optional(), archived: z.boolean().optional() })
     .parse(await c.req.json());
-  const cur = sessions.get(c.req.param("id"));
+  let cur = sessions.get(c.req.param("id"));
   if (!cur) return c.json({ error: "not found" }, 404);
+  if (body.archived !== undefined) cur = sessions.setArchived(cur.id, body.archived) ?? cur;
   const patch: Parameters<typeof sessions.update>[1] = {};
   if (body.title) patch.title = body.title;
   if (body.projectId !== undefined && body.projectId !== cur.project_id) {
@@ -486,7 +491,7 @@ app.patch("/api/sessions/:id", async (c) => {
     // New workspace = new engine session; the next turn replays history as context
     patch.engine_session_id = null;
   }
-  return c.json({ session: sessions.update(cur.id, patch) });
+  return c.json({ session: Object.keys(patch).length ? sessions.update(cur.id, patch) : cur });
 });
 
 app.delete("/api/sessions/:id", (c) => {
@@ -823,8 +828,7 @@ app.get("/api/projects/:id/files", (c) => {
   // Where this folder really is, for anyone who wants to open it outside BitBull: inside the
   // container, and (when BitBull's data is a mounted host folder) the host's path to the same place.
   const container = abs;
-  const hostData = process.env.BITBULL_HOST_DATA_DIR || "";
-  const host = hostData && abs.startsWith(config.dataDir) ? hostData.replace(/[\\/]+$/, "") + abs.slice(config.dataDir.length) : null;
+  const host = hostPathOf(abs);
   if (!existsSync(abs)) return c.json({ dir: rel, entries: [], container, host });
   const entries = readdirSync(abs, { withFileTypes: true })
     .filter((d) => !(rel === "" && (d.name === ".claude" || d.name === ".opencode")))
@@ -843,6 +847,61 @@ app.get("/api/projects/:id/files", (c) => {
     })
     .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   return c.json({ dir: rel, entries, container, host });
+});
+
+/** Where a path inside BitBull's data is on the host (the distro / the Mac folder), when that is known. */
+function hostPathOf(abs: string): string | null {
+  const hostData = process.env.BITBULL_HOST_DATA_DIR || "";
+  return hostData && abs.startsWith(config.dataDir) ? hostData.replace(/[\\/]+$/, "") + abs.slice(config.dataDir.length) : null;
+}
+
+/**
+ * Files a chat's replies created or changed: anything in its workspace last written while one of
+ * its turns ran (so files made by scripts count too, not only the agent's write tool).
+ */
+app.get("/api/sessions/:id/outputs", (c) => {
+  const s = sessions.get(c.req.param("id"));
+  if (!s) return c.json({ error: "not found" }, 404);
+  const projectId = s.project_id ?? "general";
+  const ws = workspaceOf(projectId);
+  if (!ws) return c.json({ projectId, files: [], host: null });
+  const now = Date.now();
+  const windows = turns.forSession(s.id).map((t) => ({ start: t.started_at, end: t.ended_at ?? now }));
+  return c.json({ projectId, files: outputsDuring(ws, windows), host: hostPathOf(ws) });
+});
+
+/**
+ * Download from a workspace: one file as itself; a folder, or several paths, as one .zip.
+ * Always an attachment, never rendered: what the agent wrote must not run on BitBull's origin.
+ */
+app.get("/api/projects/:id/download", (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const rels = c.req.queries("path") ?? [""];
+  const clean = rels.map((r) => safeRel(r));
+  if (clean.some((r) => r === null) || clean.length > 500) return c.json({ error: "invalid path" }, 400);
+  const safe = { "x-content-type-options": "nosniff", "content-security-policy": "sandbox; default-src 'none'", "cache-control": "no-store" };
+  try {
+    if (clean.length === 1) {
+      const abs = insideReal(ws, clean[0]!);
+      if (!abs) return c.json({ error: "not found" }, 404);
+      const st = statSync(abs);
+      if (st.isFile()) {
+        if (st.size > 1024 * 1024 * 1024) return c.json({ error: "Over 1 GB: open it in Explorer instead" }, 413);
+        const name = path.basename(abs);
+        return new Response(new Uint8Array(readFileSync(abs)), { headers: { ...safe, "content-type": contentType(name), "content-disposition": disposition(name) } });
+      }
+    }
+    const files = collect(ws, clean as string[]);
+    if (!files.length) return c.json({ error: "Nothing to download there" }, 404);
+    // named after the folder (or the folder the files share), else the date
+    const dirs = clean.map((r) => (clean.length === 1 ? r! : path.posix.dirname(r!)));
+    const shared = dirs.every((d) => d === dirs[0]) && dirs[0] !== "." ? path.posix.basename(dirs[0]!) : "";
+    const base = shared || (clean.length === 1 ? projects.get(c.req.param("id"))?.name ?? "workspace" : `bitbull-files-${new Date().toISOString().slice(0, 10)}`);
+    return new Response(new Uint8Array(zip(files)), { headers: { ...safe, "content-type": "application/zip", "content-disposition": disposition(`${base}.zip`) } });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
 });
 
 /** Upload files into the agent's workspace so any engine/model can read them with its tools. */

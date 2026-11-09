@@ -20,6 +20,7 @@ export function speakable(md: string): string {
   t = t.replace(/^\s{0,3}>\s?/gm, '') // quotes
   t = t.replace(/^\s*([-*+]|\d+[.)])\s+/gm, '') // list markers
   t = t.replace(/^\s*([-*_]\s*){3,}$/gm, ' ') // rules
+  t = t.replace(/[*_(](laughs?|chuckles?)[*_)]/gi, ' haha ') // stage directions: BitBull's voice laughs at "haha"
   t = t.replace(/(\*\*|__|\*|_|~~)(?=\S)([^*_~]+?)\1/g, '$2') // emphasis
   t = t.replace(/[*_~#|]+/g, ' ')
   t = t.replace(/\s*\n\s*\n\s*/g, '. ').replace(/\s*\n\s*/g, ' ')

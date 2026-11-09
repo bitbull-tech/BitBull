@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
+import { ReplyFiles } from './ReplyFiles'
+import { api, type OutputFile, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconHeadset, IconLock, IconMic, IconPlan, IconSend, IconShare, IconSpeaker, IconSpeakerOff, IconStop, IconTool, IconX } from './icons'
 import { useSpeaking, useVoice } from './voice/useVoice'
 import { speaker } from './voice/speaker'
@@ -41,6 +42,8 @@ interface ViewMessage {
   error?: string
   streaming?: boolean
   plan?: boolean
+  /** when the reply was saved (server time); none while it is still streaming */
+  at?: number
 }
 
 function toView(m: Message): ViewMessage {
@@ -61,7 +64,7 @@ function toView(m: Message): ViewMessage {
   } catch {
     usage = undefined
   }
-  return { id: m.id, role: m.role, content: m.content, model: m.model, tools, attachments, usage }
+  return { id: m.id, role: m.role, content: m.content, model: m.model, tools, attachments, usage, at: m.created_at }
 }
 
 const PROJECT_SUGGESTIONS = [
@@ -108,6 +111,15 @@ export function Chat({
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [plan, setPlan] = useState(false)
+  // files the agent made or changed in this chat, shown under the reply that made them
+  const [outputs, setOutputs] = useState<{ projectId: string; files: OutputFile[]; host: string | null } | null>(null)
+  const loadOutputs = (id: string | undefined) => {
+    if (!id) return setOutputs(null)
+    void api.outputs(id).then(
+      (r) => sessionRef.current?.id === id && setOutputs(r),
+      () => {},
+    )
+  }
   // Folders dropped on the chat are uploaded right away; their paths go with the next message
   const [folders, setFolders] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -126,8 +138,10 @@ export function Chat({
     if (!session) {
       setMsgs([])
       setBusy(false)
+      setOutputs(null)
       return
     }
+    loadOutputs(session.id)
     setEngine(session.engine)
     if (createdHere.current === session.id) return
     void guard(api.session(session.id)).then((r) => {
@@ -219,6 +233,7 @@ export function Chat({
       if (followingRef.current === turnId) followingRef.current = null
       patchLast((m) => ({ ...m, streaming: false }))
       setBusy(false)
+      loadOutputs(sessionRef.current?.id)
       onTurnDone()
     }
   }
@@ -290,6 +305,7 @@ export function Chat({
       voice.endTurn()
       patchLast((m) => ({ ...m, streaming: false }))
       setBusy(false)
+      loadOutputs(sessionRef.current?.id)
       onTurnDone()
     }
   }
@@ -299,6 +315,19 @@ export function Chat({
   useEffect(() => {
     if (voice.error) setNotice(voice.error), voice.clearError()
   }, [voice.error])
+
+  // which reply made which files: the first saved reply at or after the turn started; anything
+  // newer than every saved reply belongs to the latest one (just finished, not reloaded yet)
+  const filesByMsg = (() => {
+    const m = new Map<string, OutputFile[]>()
+    if (!outputs?.files.length) return m
+    const replies = msgs.filter((x) => x.role === 'assistant' && !x.streaming)
+    for (const f of outputs.files) {
+      const r = replies.find((x) => x.at !== undefined && x.at >= f.turn.start) ?? replies[replies.length - 1]
+      if (r) m.set(r.id, [...(m.get(r.id) ?? []), f])
+    }
+    return m
+  })()
 
   const empty = msgs.length === 0
 
@@ -371,7 +400,14 @@ export function Chat({
         ) : (
           <div className="thread">
             {msgs.map((m, i) => (
-              <MessageView key={m.id} m={m} sessionId={session?.id} prompt={m.role === 'assistant' ? prevUserMsg(msgs, i) : undefined} />
+              <MessageView
+                key={m.id}
+                m={m}
+                sessionId={session?.id}
+                prompt={m.role === 'assistant' ? prevUserMsg(msgs, i) : undefined}
+                files={filesByMsg.get(m.id)}
+                filesAt={outputs}
+              />
             ))}
           </div>
         )}
@@ -587,7 +623,19 @@ function exchangeMarkdown(prompt: ViewMessage, m: ViewMessage): string {
   ].join('\n\n')
 }
 
-function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: string; prompt?: ViewMessage }) {
+function MessageView({
+  m,
+  sessionId,
+  prompt,
+  files,
+  filesAt,
+}: {
+  m: ViewMessage
+  sessionId?: string
+  prompt?: ViewMessage
+  files?: OutputFile[]
+  filesAt?: { projectId: string; host: string | null } | null
+}) {
   const [copied, copy] = useCopy()
   const [exported, setExported] = useState<'' | 'full' | 'short'>('')
   const [copiedX, copyExchange] = useCopy()
@@ -676,6 +724,7 @@ function MessageView({ m, sessionId, prompt }: { m: ViewMessage; sessionId?: str
           ) : null}
         </div>
         {m.error && <div className="error">{m.error}</div>}
+        {!m.streaming && files && filesAt && <ReplyFiles files={files} projectId={filesAt.projectId} host={filesAt.host} />}
         {!m.streaming && (
           <div className="msg-foot">
             {m.content && (

@@ -6,7 +6,7 @@ import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
 import { SwarmTheatre } from './SwarmTheatre'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip} from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { ReposDialog } from './ReposDialog'
@@ -362,6 +362,21 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     await guard(api.renameSession(id, t))
   }
 
+  // Archive: out of Projects / Chats into the collapsed Archive section at the bottom; nothing is deleted
+  const archiveChat = async (id: string, archived: boolean) => {
+    setSessions((all) => all.map((s) => (s.id === id ? { ...s, archived_at: archived ? Date.now() : null } : s)))
+    const r = await guard(api.archiveSession(id, archived))
+    if (r) setSessions((all) => all.map((s) => (s.id === id ? r.session : s)))
+    else void refreshSessions()
+  }
+  const archiveProject = async (p: Project, archived: boolean) => {
+    setProjects((all) => all.map((x) => (x.id === p.id ? { ...x, archived_at: archived ? Date.now() : null } : x)))
+    const r = await guard(api.archiveProject(p.id, archived))
+    if (!r) return void refreshProjects()
+    setProjects((all) => all.map((x) => (x.id === p.id ? r.project : x)))
+    if (archived) setExpand('archive', true)
+  }
+
   const move = async (id: string, projectId: string | null) => {
     const r = await guard(api.moveSession(id, projectId))
     if (!r) return
@@ -378,59 +393,23 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   }, [sessions])
   const unfiled = useMemo(() => {
     return groupBy(
-      sessions.filter((s) => !(s.project_id && projects.some((p) => p.id === s.project_id)) && matches(s)),
+      sessions.filter((s) => !s.archived_at && !(s.project_id && projects.some((p) => p.id === s.project_id)) && matches(s)),
       groupLabel,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, projects, filter])
 
+  const liveProjects = projects.filter((p) => !p.archived_at)
+  const archivedProjects = projects.filter((p) => p.archived_at)
+  // archived chats that aren't inside an archived project (those travel with their project)
+  const archivedChats = sessions.filter((s) => s.archived_at && !archivedProjects.some((p) => p.id === s.project_id))
+
   const resolved = theme === 'system' ? (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme
 
-  const row = (s: Session) => (
-    <SessionRow
-      key={s.id}
-      s={s}
-      active={s.id === activeId}
-      editing={editingId === s.id}
-      projects={projects}
-      onOpen={() => openSession(s)}
-      onEdit={() => setEditingId(s.id)}
-      onRename={(t) => void rename(s.id, t)}
-      onCancel={() => setEditingId(null)}
-      onMove={(pid) => void move(s.id, pid)}
-      onDelete={() => {
-        if (confirm(`Delete “${s.title}”?`)) void remove(s.id)
-      }}
-    />
-  )
-
-  return (
-    <div className={`shell ${navOpen ? 'nav-open' : ''}`} style={{ ['--side-w' as string]: `${side.width}px` }}>
-      <aside className="sidebar">
-        {/* the logo and name take you home: the opening screen, outside any project */}
-        <button type="button" className="brand brand-home" onClick={() => newChat(null)} title="Home" aria-label="Home: back to the start screen">
-          <BrandMark onDark />
-          <div>
-            <div className="brand-name">{getBrand().name}</div>
-            <div className="brand-sub">{getBrand().tagline}</div>
-          </div>
-        </button>
-        <button className="btn primary block new-chat" onClick={() => newChat(null)}>
-          <IconPlus size={16} /> New chat
-        </button>
-        <label className="side-search">
-          <IconSearch size={14} />
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search chats" />
-        </label>
-        <nav className="sessions">
-          <div className="section-head">
-            <span>Projects</span>
-            <button className="icon-btn sm" title="New project" onClick={() => setProjectDialog('new')}>
-              <IconPlus size={14} />
-            </button>
-          </div>
-          {projects.map((p) => {
-            const list = (byProject.get(p.id) ?? []).filter(matches)
+  /** A project and its chats, in Projects or (archived) in the Archive section. */
+  const projectBlock = (p: Project) => {
+    const archived = !!p.archived_at
+    const list = (byProject.get(p.id) ?? []).filter((s) => matches(s) && (archived || !s.archived_at))
             const open = expanded[p.id] || (!!f && list.length > 0)
             if (f && !list.length && !p.name.toLowerCase().includes(f)) return null
             return (
@@ -451,7 +430,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                       ◆
                     </span>
                   )}
-                  <span className="count">{byProject.get(p.id)?.length ?? 0}</span>
+                  <span className="count">{(byProject.get(p.id) ?? []).filter((s) => archived || !s.archived_at).length}</span>
                   <span className="session-actions">
                     <button
                       className="icon-btn sm"
@@ -483,6 +462,16 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                       }}
                     >
                       <IconBranch size={13} />
+                    </button>
+                    <button
+                      className="icon-btn sm"
+                      title={archived ? `Unarchive ${p.name}: back to Projects` : `Archive ${p.name}: move it and its chats to the Archive`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void archiveProject(p, !archived)
+                      }}
+                    >
+                      {archived ? <IconUnarchive size={13} /> : <IconArchive size={13} />}
                     </button>
                     <button
                       className="icon-btn sm"
@@ -521,8 +510,55 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
                 )}
               </div>
             )
-          })}
-          {!projects.length && (
+          
+  }
+
+  const row = (s: Session) => (
+    <SessionRow
+      key={s.id}
+      s={s}
+      active={s.id === activeId}
+      editing={editingId === s.id}
+      projects={liveProjects}
+      onArchive={(a) => void archiveChat(s.id, a)}
+      onOpen={() => openSession(s)}
+      onEdit={() => setEditingId(s.id)}
+      onRename={(t) => void rename(s.id, t)}
+      onCancel={() => setEditingId(null)}
+      onMove={(pid) => void move(s.id, pid)}
+      onDelete={() => {
+        if (confirm(`Delete “${s.title}”?`)) void remove(s.id)
+      }}
+    />
+  )
+
+  return (
+    <div className={`shell ${navOpen ? 'nav-open' : ''}`} style={{ ['--side-w' as string]: `${side.width}px` }}>
+      <aside className="sidebar">
+        {/* the logo and name take you home: the opening screen, outside any project */}
+        <button type="button" className="brand brand-home" onClick={() => newChat(null)} title="Home" aria-label="Home: back to the start screen">
+          <BrandMark onDark />
+          <div>
+            <div className="brand-name">{getBrand().name}</div>
+            <div className="brand-sub">{getBrand().tagline}</div>
+          </div>
+        </button>
+        <button className="btn primary block new-chat" onClick={() => newChat(null)}>
+          <IconPlus size={16} /> New chat
+        </button>
+        <label className="side-search">
+          <IconSearch size={14} />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search chats" />
+        </label>
+        <nav className="sessions">
+          <div className="section-head">
+            <span>Projects</span>
+            <button className="icon-btn sm" title="New project" onClick={() => setProjectDialog('new')}>
+              <IconPlus size={14} />
+            </button>
+          </div>
+          {liveProjects.map(projectBlock)}
+          {!liveProjects.length && (
             <button className="empty-project" onClick={() => setProjectDialog('new')}>
               <IconFolder size={13} /> Group chats, files and instructions into a project
             </button>
@@ -551,6 +587,30 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             )
           })}
           {!sessions.length && <p className="muted small pad">Your chats will appear here.</p>}
+
+          {(archivedProjects.length > 0 || archivedChats.length > 0) &&
+            (() => {
+              const shownProjects = archivedProjects.filter((p) => !f || p.name.toLowerCase().includes(f) || (byProject.get(p.id) ?? []).some(matches))
+              const shownChats = archivedChats.filter(matches)
+              if (f && !shownProjects.length && !shownChats.length) return null
+              const isOpen = !!f || !!expanded.archive
+              return (
+                <div className="archive">
+                  <button className="section-head archive-head" aria-expanded={isOpen} onClick={() => setExpand('archive', !isOpen)} title={isOpen ? 'Collapse' : 'Show archived projects and chats'}>
+                    <IconChevronRight size={12} className={`chev ${isOpen ? 'open' : ''}`} />
+                    <IconArchive size={13} />
+                    <span>Archive</span>
+                    <span className="count">{archivedProjects.length + archivedChats.length}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="archive-body">
+                      {shownProjects.map(projectBlock)}
+                      {shownChats.length > 0 && <div className="group-chats">{shownChats.map(row)}</div>}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
         </nav>
         <footer className="side-foot">
           <button className="status-line" onClick={() => setSettingsOpen(true)} title="Connection status">
@@ -772,6 +832,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             </button>
           )}
           <div className="sep" />
+          <button onClick={() => (setCtx(null), void archiveProject(ctx.p, !ctx.p.archived_at))}>
+            {ctx.p.archived_at ? <IconUnarchive size={14} /> : <IconArchive size={14} />} {ctx.p.archived_at ? 'Unarchive project' : 'Archive project'}
+          </button>
           <button onClick={() => (setCtx(null), setProjectDialog(ctx.p))}>
             <IconSettings size={14} /> Project settings
           </button>
@@ -837,6 +900,7 @@ function SessionRow({
   onRename,
   onCancel,
   onMove,
+  onArchive,
   onDelete,
 }: {
   s: Session
@@ -848,6 +912,7 @@ function SessionRow({
   onRename: (t: string) => void
   onCancel: () => void
   onMove: (projectId: string | null) => void
+  onArchive: (archived: boolean) => void
   onDelete: () => void
 }) {
   const [menu, setMenu] = useState(false)
@@ -894,6 +959,9 @@ function SessionRow({
                 <span className="pdot" /> No project
               </button>
               <div className="menu-sep" />
+              <button onClick={() => (setMenu(false), onArchive(!s.archived_at))}>
+                {s.archived_at ? <IconUnarchive size={13} /> : <IconArchive size={13} />} {s.archived_at ? 'Unarchive' : 'Archive'}
+              </button>
               <button className="danger" onClick={() => (setMenu(false), onDelete())}>
                 <IconTrash size={13} /> Delete
               </button>

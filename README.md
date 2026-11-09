@@ -333,6 +333,14 @@ and **Download JSON** (everything, untruncated).
 
 Keys and tokens are replaced with `[REDACTED]` in every export.
 
+## Archive
+
+Finished with a project or a chat but don't want to delete it? **Archive** it: the archive
+button on a project row (or right-click → Archive project), or **⋯ → Archive** on a chat. It moves
+into the collapsed **Archive** section at the bottom of the sidebar, a project with all its chats.
+Nothing is deleted or changed; archived chats still open, still turn up in search, and
+**Unarchive** puts them back where they were.
+
 ## Subagents
 
 The agent can start specialists in parallel, like Claude Code's Task tool: `reviewer`,
@@ -537,6 +545,23 @@ button; rows show `vault` as their source. The vault is **at-rest** protection: 
 values live in server memory and engines are spawned without them in their environment — but
 server and agent share a uid, so `/proc` is not a hard wall (see docs/THREAT-MODEL.md R1).
 
+## Getting files out (no command line)
+
+Whatever the agent writes, a brief, an image, a script, a whole folder, can be taken out without a shell:
+
+- **Under each reply**, *N files from this reply* lists what that reply created or changed in the
+  workspace, including files made by scripts it ran. Each file has **Download** and **Show in
+  Explorer** (Finder on a Mac: the folder opens with the file selected); **Download all** saves
+  them as one .zip and **Open in Explorer** opens the folder they're in.
+- **Files** (the folder button on a project, or the workspace) has the same per file, plus
+  **Download folder (.zip)** for whatever folder you are in.
+
+Downloads go wherever your browser (or the desktop app) saves files, normally Downloads. They are
+always saved, never opened inside BitBull, so nothing an agent writes can run in the page. Showing
+in Explorer needs the link helper (started by `start.ps1`; the BitBull app on a Mac) and works on the
+computer BitBull runs on. Endpoints: `GET /api/sessions/:id/outputs`, `GET /api/projects/:id/download?path=…`
+(repeat `path` for several; folders and several files come as a .zip, up to 5,000 files / 512 MB).
+
 ## Opening folders in Explorer
 
 The Files view shows each folder's path inside the container and inside the `bitbull` distro;
@@ -577,7 +602,7 @@ Talk to BitBull and have it talk back: the **mic button** in the message bar (cl
 **push-to-talk** (hold Ctrl+Shift+Space, or ⌘+Shift+Space on a Mac; from any app in the desktop app),
 **hands-free** (the headset button: talk, pause, hear the answer, talk over it to interrupt) and
 **read aloud** under any reply. Speech is written down by a Gemini model on SayGM and answered by
-the chat's own model; BitBull's voices (one UK, seven US) are generated in the container by Piper.
+the chat's own model; BitBull's own gruff cartoon-dog voice (with his own laugh), plus one UK and seven US voices, is generated in the container by Piper.
 Microphone, speaker, voice, speed and pause length are in Settings → Voice and kept per computer.
 Details, licences and privacy: [docs/VOICE.md](docs/VOICE.md).
 

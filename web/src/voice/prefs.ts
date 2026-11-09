@@ -26,7 +26,7 @@ export const DEFAULT_PREFS: VoicePrefs = {
   micId: '',
   speakerId: '',
   engine: 'piper',
-  voice: 'uk-female',
+  voice: 'bitbull',
   systemVoice: '',
   speed: 1,
   autoSpeak: true,

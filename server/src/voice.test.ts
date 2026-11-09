@@ -66,3 +66,21 @@ test("Piper speaks, when it is here", { skip: !process.env.BITBULL_TEST_PIPER ||
   }
   await assert.rejects(() => speak("   ", VOICES[0].id), /Nothing to say/);
 });
+
+test("BitBull laughs where a reply laughs, and only once per burst", async () => {
+  const { splitLaughs, laugh, readWav, writeWav, concat } = await import("./dogvoice.js");
+  assert.deepEqual(splitLaughs("Haha, that's a good one. lol"), [{ laugh: true }, { say: "that's a good one." }, { laugh: true }]);
+  assert.deepEqual(splitLaughs("Ha ha hah! Nice"), [{ laugh: true }, { say: "Nice" }]);
+  assert.deepEqual(splitLaughs("Hello there"), [{ say: "Hello there" }]);
+  assert.deepEqual(splitLaughs("The hash is ha"), [{ say: "The hash is ha" }]);
+  const l = laugh(22050);
+  assert.ok(l.samples.length / l.rate > 0.5 && l.samples.length / l.rate < 1.5);
+  const round = readWav(writeWav(concat([l, laugh(16000, 1)])));
+  assert.equal(round.rate, 22050);
+});
+
+test("BitBull's own voice speaks, when Piper is here", { skip: !process.env.BITBULL_TEST_PIPER || !existsSync(process.env.BITBULL_TEST_PIPER) }, async () => {
+  const out = await speak("Hey there, I'm BitBull. Haha! Let's dig into that repo.", "bitbull", 1);
+  assert.equal(out.toString("ascii", 0, 4), "RIFF");
+  assert.ok(checkWav(out).seconds > 2);
+});

@@ -399,3 +399,25 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
 - Art: QA Hound dialog has the detective (`assets/qa-hound.webp`), Settings has the lab-coat
   bulldog (`assets/settings-dog.webp`), both with transparent backgrounds so they follow the scheme.
 
+## BitBull's own voice, and the sidebar Archive (9 Nov 2026)
+
+- Tom asked for a Scooby-Doo-like voice with Muttley's laugh; declined as a sound-alike and built
+  an original character instead (Tom agreed): `server/src/dogvoice.ts`. LibriTTS speaker 54, Piper
+  run at 0.8× length, then resampled (pitch and formants × 0.8), flutter + saturation + bass.
+  Laughs in a reply ("haha", "lol", 😂, *laughs*) become a synthesised huffing chuckle (no
+  recording). Voice id `bitbull`, now the default. Samples were sent to Tom; tune `DOG_PITCH`,
+  `growl()` depth and `laugh()` if he wants it different.
+- Archive: `archived_at` on projects and sessions (migration in db.ts), PATCH `{archived}` on
+  `/api/projects/:id` and `/api/sessions/:id` (doesn't bump updated_at), sidebar Archive section
+  (App.tsx `projectBlock`), archive button on project rows, menu items. Test: archive.test.ts.
+
+## Getting files out without a CLI (9 Nov 2026)
+
+- Prompted by a reply that wrote `cartoon-dog-voice/voice-brief.md` with no way to reach it but a shell.
+- `server/src/outputs.ts` (+ tests): files written during a chat's turns (mtime inside a turn's
+  window, skipping engine state/deps), a small zip writer (deflate, UTF-8 names), path checks via
+  realpath. Routes `GET /api/sessions/:id/outputs` and `GET /api/projects/:id/download` (attachment,
+  nosniff, CSP sandbox). `turns.forSession` in db.ts.
+- Web: `ReplyFiles.tsx` under each reply; Files dialog gets per-file Download / Show and a folder
+  .zip. Link helpers now reveal files too (`explorer /select,` on Windows, `open -R` on a Mac).
+

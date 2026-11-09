@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type FileEntry, type Project, type StoredFile } from './api'
 import { fileManager, isMac, onThisPc, openInExplorer } from './linkHelper'
-import { IconCheck, IconChevronRight, IconCopy, IconFile, IconFolder, IconRefresh, IconX } from './icons'
+import { IconCheck, IconChevronRight, IconCopy, IconDownload, IconFile, IconFolder, IconRefresh, IconX } from './icons'
 import { filterItems, fmtBytes, fromDrop, fromInput, SKIP_DIRS, uploadItems, type UploadItem } from './uploads'
 
 /** Whether a file has reached Hippius yet. Nothing is shown when storage is switched off. */
@@ -171,6 +171,13 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
                   )}
                 </>
               )}
+              <button
+                className="btn sm"
+                title="This folder and everything in it as one .zip, saved to your Downloads"
+                onClick={() => void api.download(pid, [dir]).catch((e) => setMsg(e instanceof Error ? e.message : String(e)))}
+              >
+                <IconDownload size={13} /> Download {dir ? 'folder' : 'everything'} (.zip)
+              </button>
             </div>
           )}
           <div className="files-list">
@@ -203,6 +210,24 @@ export function FilesDialog({ project, onClose, startDir = '' }: { project: Proj
                   {storage && <BackupMark file={stored.get(dir ? `${dir}/${e.name}` : e.name)} />}
                   <span className="muted small col-when">{when(e.mtime)}</span>
                   <span className="muted small col-size">{fmtBytes(e.size)}</span>
+                  <span className="file-actions">
+                    <button
+                      className="icon-btn sm"
+                      title={`Download ${e.name}`}
+                      onClick={() => void api.download(pid, [dir ? `${dir}/${e.name}` : e.name]).catch((err) => setMsg(err instanceof Error ? err.message : String(err)))}
+                    >
+                      <IconDownload size={13} />
+                    </button>
+                    {where?.host && onThisPc() && (
+                      <button
+                        className="icon-btn sm"
+                        title={`Show ${e.name} in ${fileManager}`}
+                        onClick={() => void openInExplorer(`${where.host}/${e.name}`).then((r) => !r.ok && setMsg(r.message ?? `Could not open ${fileManager}`))}
+                      >
+                        <IconFolder size={13} />
+                      </button>
+                    )}
+                  </span>
                 </div>
               ),
             )}
