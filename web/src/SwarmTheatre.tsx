@@ -229,6 +229,17 @@ export function SwarmTheatre({
           </button>
         </header>
         <p className="theatre-phase">{PHASE_LINE[s.phase]}</p>
+        {s.options && (
+          <div className="theatre-meter" title="Spend so far against the run's hard budget (the reviewers stop at 75%, the rest is for the verdict)">
+            <div className="voice-meter">
+              <i style={{ width: `${Math.min(100, (100 * (s.spentUsd ?? 0)) / s.options.budgetUsd)}%` }} />
+            </div>
+            <span className="muted small">
+              ${(s.spentUsd ?? 0).toFixed(3)} of ${s.options.budgetUsd.toFixed(2)} · limit {s.options.maxMinutes} min
+              {s.stopped ? ` · stopped: ${s.stopped}` : ''}
+            </span>
+          </div>
+        )}
 
         <div className={`theatre-room phase-${s.phase}`}>
           {s.reviewers.map((r, slot) => {
@@ -271,6 +282,21 @@ export function SwarmTheatre({
           </span>
           {s.error && <span className="error small">{s.error}</span>}
         </div>
+        {s.findings && (
+          <div className="theatre-findings small">
+            <b>{s.findings.filter((f) => f.shown).length} finding{s.findings.filter((f) => f.shown).length === 1 ? '' : 's'} shown</b>
+            {s.findings.some((f) => !f.shown) && <span className="muted"> · {s.findings.filter((f) => !f.shown).length} held back</span>}
+            {s.pr && (
+              <>
+                {' · '}
+                <a href={s.pr.url} target="_blank" rel="noreferrer">
+                  {s.pr.event === 'APPROVE' ? 'approved' : s.pr.event === 'REQUEST_CHANGES' ? 'changes requested' : 'commented'} on PR #{s.pr.number}
+                </a>
+              </>
+            )}
+            {s.prError && <span className="error"> · PR not posted: {s.prError}</span>}
+          </div>
+        )}
       </div>
     </div>
   )

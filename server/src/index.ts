@@ -27,6 +27,7 @@ import { collect, contentType, disposition, insideReal, outputsDuring, zip } fro
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
+import { routerBackground, routerModels } from "./router.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
@@ -38,7 +39,8 @@ import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused } from "./egress.js";
 import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, mcpTokenOk } from "./mcp.js";
 import { linksAvailable, listLinks } from "./links.js";
-import { listRepos, repoDiffStat, syncRepo } from "./repos.js";
+import { inspectRepo, listRepos, repoDiffStat, syncRepo } from "./repos.js";
+import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
@@ -193,6 +195,8 @@ app.put("/api/settings", async (c) => {
   if (!body.values || typeof body.values !== "object") return c.json({ error: "values required" }, 400);
   try {
     const changed = await updateSettings(body.values);
+    // the Router's model details go into OpenCode's config, so fetch them before it restarts
+    if (routerBackground()) await routerModels(true).catch(() => {});
     void reloadOpencode().catch(() => {}); // restarts now if idle, otherwise before the next turn
     return c.json({ changed, groups: describeSettings() });
   } catch (e) {
@@ -200,6 +204,17 @@ app.put("/api/settings", async (c) => {
   }
 });
 app.get("/api/status", async (c) => c.json(await status()));
+
+/** Ditto Router's models (for Configuration → Background work), and whether background work is on it. */
+app.get("/api/router/models", async (c) => {
+  const base = { configured: !!config.router.key, background: config.router.background, model: config.router.model, active: !!routerBackground() };
+  if (!config.router.key) return c.json({ ...base, models: [] });
+  try {
+    return c.json({ ...base, models: await routerModels(c.req.query("refresh") === "1") });
+  } catch (e) {
+    return c.json({ ...base, models: [], error: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 // ---------- network access (egress approvals) ----------
 // Asked by squid's external ACL helper for every host not on egress/allowlist.txt.
@@ -720,6 +735,19 @@ const SwarmSchema = z.object({
   target: z.string().min(1).max(400),
   models: z.array(z.string().min(1).max(120)).min(1).max(2),
   focus: z.array(z.enum(FOCUS)).optional(),
+  // budget, time, thresholds, scope, PR verdict: checked and clamped in hound.ts
+  options: z
+    .object({
+      budgetUsd: z.number().optional(),
+      maxMinutes: z.number().optional(),
+      minSeverity: z.string().max(20).optional(),
+      minConfidence: z.number().optional(),
+      include: z.array(z.string().max(200)).max(30).optional(),
+      exclude: z.array(z.string().max(200)).max(30).optional(),
+      pr: z.boolean().optional(),
+      prBlocking: z.string().max(20).optional(),
+    })
+    .optional(),
 });
 app.post("/api/swarm", async (c) => {
   const body = SwarmSchema.parse(await c.req.json());
@@ -799,6 +827,33 @@ app.post("/api/projects/:id/repos/sync", async (c) => {
   const r = await syncRepo(ws, rel || ".", body.fetchOnly === true);
   record({ level: r.ok ? "info" : "warn", source: "server", message: `repo sync ${rel || "."}: ${r.message}` });
   return c.json({ ...r, repos: await listRepos(ws) });
+});
+
+/**
+ * Ditto Review for a branch: find its open pull request on GitHub and comment "@ditto review"
+ * there (Ditto's GitHub app picks it up). No PR yet: say so, with the link that opens one.
+ */
+app.post("/api/projects/:id/repos/ditto-review", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const rel = safeRel(typeof body.repo === "string" ? body.repo : "");
+  if (rel === null) return c.json({ error: "invalid path" }, 400);
+  const info = await inspectRepo(ws, rel || ".");
+  const gh = parseGithubRemote(info.remote);
+  if (!gh) return c.json({ error: "This clone's origin isn't on GitHub, so Ditto Review can't see it" }, 400);
+  // a remote branch shows as origin/name; the PR head is the bare name
+  const branch = String(typeof body.branch === "string" && body.branch ? body.branch : info.branch ?? "").replace(/^origin\//, "");
+  if (!branch) return c.json({ error: "No branch" }, 400);
+  try {
+    const pr = await openPrFor(gh, branch);
+    if (!pr) return c.json({ ok: false, needsPr: true, message: `${branch} has no open pull request on ${gh.owner}/${gh.repo}. Open one, then ask again.`, compareUrl: compareUrl(gh, branch) });
+    const comment = await requestDittoReview(gh, pr.number);
+    record({ level: "info", source: "server", message: `Ditto Review requested on ${gh.owner}/${gh.repo}#${pr.number} (${branch})` });
+    return c.json({ ok: true, message: `Asked Ditto Review to review #${pr.number} “${pr.title}”. It replies on the pull request.`, prUrl: pr.url, commentUrl: comment });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
 });
 
 app.get("/api/projects/:id/repos/diff", async (c) => {
@@ -1122,6 +1177,8 @@ if (existsSync(config.webDist)) {
 resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
+// background work on Ditto Router: have its model details ready for OpenCode's config
+if (routerBackground()) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });

@@ -10,6 +10,8 @@ export type AgentEvent =
   | { type: "tool_start"; id: string; name: string; input?: unknown; parent?: string }
   | { type: "tool_end"; id: string; output?: string; isError?: boolean; parent?: string }
   | { type: "done"; engineSessionId: string; usage?: Usage }
+  // running total so far, while the turn is still going (lets QA Hound enforce a budget mid-turn)
+  | { type: "usage"; usage: Usage }
   | { type: "error"; message: string };
 
 export interface Usage {

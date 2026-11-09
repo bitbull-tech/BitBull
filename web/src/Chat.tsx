@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
+import { HoundFindings, parseHoundBlock } from './HoundFindings'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ReplyFiles } from './ReplyFiles'
@@ -597,6 +598,10 @@ function MdImage({ src, alt }: { src?: string; alt?: string }) {
 function CodeBlock({ children }: { children?: ReactNode }) {
   const ref = useRef<HTMLPreElement>(null)
   const [copied, copy] = useCopy()
+  // QA Hound's findings block renders as its table once it is complete JSON
+  const code = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children.props : null
+  if (code?.className?.includes('language-qa-hound') && typeof code.children === 'string' && parseHoundBlock(code.children))
+    return <HoundFindings text={code.children} />
   return (
     <div className="code">
       <button className="code-copy" onClick={() => copy(ref.current?.innerText ?? '')} aria-label="Copy code">

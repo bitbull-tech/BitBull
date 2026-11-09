@@ -24,6 +24,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 export const VAULT_KEYS = new Set([
   "SAYGM_API_KEY",
   "DITTO_API_KEY",
+  "DITTO_ROUTER_KEY",
   "GITHUB_TOKEN",
   "ATLAS_API_KEY",
   "FOUR04_API_KEY",

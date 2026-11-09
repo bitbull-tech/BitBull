@@ -21,6 +21,19 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
   const [showRemote, setShowRemote] = useState(false)
   const [syncing, setSyncing] = useState<string | null>(null)
   const [synced, setSynced] = useState<{ path: string; ok: boolean; message: string } | null>(null)
+  // Ditto Review per branch: what happened, keyed by repo + branch
+  const [ditto, setDitto] = useState<Record<string, { busy?: boolean; ok?: boolean; message?: string; url?: string; openPr?: string }>>({})
+  const askDitto = async (r: RepoInfo, branch: string) => {
+    const key = `${r.path}:${branch}`
+    setDitto((d) => ({ ...d, [key]: { busy: true } }))
+    try {
+      const res = await api.dittoReview(pid, r.path, branch)
+      setDitto((d) => ({ ...d, [key]: { ok: res.ok, message: res.message, url: res.prUrl, openPr: res.compareUrl } }))
+    } catch (e) {
+      setDitto((d) => ({ ...d, [key]: { ok: false, message: e instanceof Error ? e.message.replace(/^\d+ /, '').replace(/^\{"error":"(.*)"\}$/, '$1') : String(e) } }))
+    }
+  }
+  const onGithub = (r: RepoInfo) => !!r.remote && /github\.com[:/]/.test(r.remote)
 
   const load = () => {
     setErr(null)
@@ -223,6 +236,16 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                                 </span>
                               ) : null}
                               <span className="muted small grow">{b.last}</span>
+                              {onGithub(r) && (
+                                <button
+                                  className="link small"
+                                  disabled={ditto[`${r.path}:${b.name}`]?.busy}
+                                  title="Ask Ditto Review to review this branch's open pull request (comments @ditto review on it, as you)"
+                                  onClick={() => void askDitto(r, b.name)}
+                                >
+                                  {ditto[`${r.path}:${b.name}`]?.busy ? 'asking Ditto…' : 'Ditto review'}
+                                </button>
+                              )}
                               {!b.current && (
                                 <>
                                   <button className="link small" onClick={() => ask(`In ${where(r)}: switch to branch \`${b.name}\`${b.remote ? ' (track it locally)' : ''}. If there are uncommitted changes, stop and tell me first.`)}>
@@ -232,6 +255,21 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                                     compare
                                   </button>
                                 </>
+                              )}
+                              {ditto[`${r.path}:${b.name}`]?.message && (
+                                <div className={`ditto-note small ${ditto[`${r.path}:${b.name}`]?.ok ? 'ok' : ''}`}>
+                                  {ditto[`${r.path}:${b.name}`]!.message}{' '}
+                                  {ditto[`${r.path}:${b.name}`]?.url && (
+                                    <a href={ditto[`${r.path}:${b.name}`]!.url} target="_blank" rel="noreferrer">
+                                      Open the pull request
+                                    </a>
+                                  )}
+                                  {ditto[`${r.path}:${b.name}`]?.openPr && (
+                                    <a href={ditto[`${r.path}:${b.name}`]!.openPr} target="_blank" rel="noreferrer">
+                                      Open a pull request on GitHub
+                                    </a>
+                                  )}
+                                </div>
                               )}
                             </li>
                           ))}

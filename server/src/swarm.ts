@@ -3,9 +3,13 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { paths, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type SessionRow } from "./db.js";
-import { activeTurnId, collectTurn, snapshot, startTurn } from "./turns.js";
+import { abortTurn, activeTurnId, collectTurn, snapshot, startTurn } from "./turns.js";
 import { record } from "./activity.js";
-import type { AgentEvent } from "./engines/types.js";
+import type { AgentEvent, Usage } from "./engines/types.js";
+import { estimateCost } from "./models.js";
+import { findRepos, inspectRepo } from "./repos.js";
+import { openPrFor, parseGithubRemote, postReview } from "./github.js";
+import { FINDINGS_FENCE, houndOptions, parseFindings, prBody, prEvent, type Finding, type HoundOptions, type Verdict } from "./hound.js";
 
 /**
  * QA Hound: up to two reviewer models go over a repo, folder or file in the sandbox, each in
@@ -68,7 +72,24 @@ export interface Swarm {
   startedAt: number;
   finishedAt?: number;
   error?: string;
+  /** budget, time limit, thresholds, scope, PR verdict (hound.ts) */
+  options: HoundOptions;
+  /** what the run has cost so far, live (reviewers and verdict) */
+  spentUsd: number;
+  /** why it stopped early: the budget or the time limit */
+  stopped?: string;
+  verdict?: Verdict;
+  /** the handler's findings, each shown or held back with the reason */
+  findings?: Finding[];
+  /** the review posted on the pull request, or why not */
+  pr?: { url: string; event: string; number: number; note?: string };
+  prError?: string;
 }
+
+/** Reviewers may use this share of the budget; the rest is kept for the verdict. */
+const REVIEWER_SHARE = 0.75;
+/** …and this share of the time. */
+const REVIEWER_TIME = 0.8;
 
 const swarms = new Map<string, Swarm>();
 const KEEP_MS = 6 * 60 * 60 * 1000;
@@ -244,10 +265,19 @@ function reviewPrompt(s: Swarm, others: string[]) {
     // A glob that skips dot-directories made one reviewer report .github/ as "absent" when it had
     // existed since the first commit, and the other was then marked down for reading it (2026-11).
     `File discovery can hide things: glob and directory listings may skip dot-files and dot-directories. Before saying anything is missing, read it by its exact path — in particular \`.github/\` (CI, permissions, action pins), \`.gitattributes\`, \`.dockerignore\`, \`.gitignore\` and \`.env.example\`. "I could not find X" and "X does not exist" are different claims; only make the second after a direct read fails.`,
+    ...scopeLines(s.options),
     `Assess it on: ${s.focus.map((f) => FOCUS_TEXT[f]).join(" ")}`,
     `Write the report in Markdown with exactly these sections: ## Summary (5 lines max) · ## Findings (a table: severity critical/high/medium/low, area, location, what, evidence, fix) · ${s.focus.map((f) => `## ${FOCUS_LABEL[f]}`).join(" · ")} (score 1–5 each with one paragraph) · ## What I could not verify · ## Questions for the other reviewers.`,
     `Be concrete and sceptical. Mark anything you suspect but could not confirm as "unverified".`,
   ].join("\n\n");
+}
+
+/** The scope filters, said plainly to reviewers and the handler. */
+function scopeLines(o: HoundOptions): string[] {
+  const out: string[] = [];
+  if (o.include.length) out.push(`Scope: review only paths (relative to the target) matching ${o.include.map((g) => `\`${g}\``).join(", ")}.`);
+  if (o.exclude.length) out.push(`Leave out paths matching ${o.exclude.map((g) => `\`${g}\``).join(", ")}: don't review or report on them.`);
+  return out;
 }
 
 function challengePrompt(s: Swarm, me: SwarmReviewer, others: SwarmReviewer[]) {
@@ -281,12 +311,20 @@ function finalPrompt(s: Swarm) {
     `A QA Hound review just finished on \`${s.target}\` (${s.focus.map((f) => FOCUS_LABEL[f]).join(", ")}). ${s.reviewers.length} reviewer(s) on other models reviewed it independently and then challenged each other; their full chats are in the sidebar as "QA Hound · …". You are the primary handler: weigh their work and give the owner a verdict.`,
     FENCE_NOTE,
     `A reviewer's authority comes from what it opened, not how it writes: a confident report produced from one or two tool calls is not evidence, and saying so is more useful to the owner than summarising it. Weigh the reports by the evidence line above each one.`,
+    ...scopeLines(s.options),
     `Produce, in Markdown: **1. Per reviewer**, 3–6 bullets each: their strongest verified findings, what the other side refuted, where they were wrong. **2. Verified issues**, one table ranked by severity (severity, location, what, who found it, status: confirmed by both / disputed / only one saw it). For any disputed item that matters, check the code yourself before ruling, read-only. **3. Overall recommendation**: use as is / fix first / do not use, with the 3–5 fixes to do first and why. **4. Blind spots**: what no reviewer covered. Keep the owner's time: lead with the verdict.`,
+    [
+      `End your reply with this block, valid JSON, exactly once (BitBull reads it to filter and to post the verdict; the owner sees it as a table):`,
+      "```" + FINDINGS_FENCE,
+      `{"verdict":"use | fix-first | do-not-use","minSeverity":"${s.options.minSeverity}","minConfidence":${s.options.minConfidence},"findings":[{"severity":"critical | high | medium | low","confidence":0,"path":"file path relative to the repository root","line":0,"title":"one line","detail":"what and why, briefly","fix":"the fix, briefly","foundBy":["model id"],"status":"confirmed | disputed | single"}]}`,
+      "```",
+      `List every issue you verified or that is still open, at any severity: BitBull applies the thresholds. **confidence** is your own score, 0–100, that the finding is real after checking: 90+ only when you confirmed it in the code yourself; 70–89 when a reviewer gave concrete evidence and nobody refuted it; under 70 when it is disputed, unverified, or rests on thin evidence. Omit "line" when you don't know it. Copy minSeverity and minConfidence as given.`,
+    ].join("\n"),
     ...parts,
   ].join("\n\n");
 }
 
-export function startSwarm(input: { sessionId: string; target: string; models: string[]; focus?: Focus[] }): Swarm {
+export function startSwarm(input: { sessionId: string; target: string; models: string[]; focus?: Focus[]; options?: Partial<Record<keyof HoundOptions, unknown>> }): Swarm {
   const session = sessions.get(input.sessionId);
   if (!session) throw new Error("unknown session");
   const project = session.project_id ? projects.get(session.project_id) : null;
@@ -319,10 +357,55 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
     })),
     phase: "review",
     startedAt: Date.now(),
+    options: houndOptions(input.options),
+    spentUsd: 0,
   };
   swarms.set(s.id, s);
   setTimeout(() => swarms.delete(s.id), KEEP_MS).unref();
-  record({ level: "info", source: "swarm", sessionId: session.id, message: `QA Hound started on ${target}: ${models.join(" vs ")} · ${focus.join(", ")}` });
+  record({
+    level: "info",
+    source: "swarm",
+    sessionId: session.id,
+    message: `QA Hound started on ${target}: ${models.join(" vs ")} · ${focus.join(", ")} · budget $${s.options.budgetUsd.toFixed(2)}, ${s.options.maxMinutes} min`,
+  });
+
+  // Spend and time, enforced while turns run: every turn's running cost is read from its event
+  // log (usage events as it goes, done at the end); over the line, the turns are stopped.
+  const o = s.options;
+  const watched = new Map<string, { model: string; seq: number; cost: number }>();
+  const track = (turnId: string, model: string) => watched.has(turnId) || watched.set(turnId, { model, seq: 0, cost: 0 });
+  const stopReviewers = (why: string) => {
+    s.stopped ??= why;
+    for (const r of s.reviewers) if (r.turnId) abortTurn(r.sessionId);
+  };
+  let ticking = false;
+  const tick = async () => {
+    if (ticking) return;
+    ticking = true;
+    try {
+      for (const [id, w] of watched) {
+        const snap = snapshot(id, w.seq);
+        if (!snap) continue;
+        let last: Usage | undefined;
+        for (const { event: ev } of snap.events) if ((ev.type === "usage" || ev.type === "done") && ev.usage) last = ev.usage;
+        w.seq = Math.max(w.seq, snap.lastSeq);
+        if (last) w.cost = last.costUsd || (await estimateCost(w.model, last.inputTokens, last.outputTokens, last.cacheReadTokens)) || w.cost;
+      }
+      s.spentUsd = [...watched.values()].reduce((a, w) => a + w.cost, 0);
+      const elapsed = Date.now() - s.startedAt;
+      if (s.phase === "review" || s.phase === "challenge") {
+        if (s.spentUsd >= o.budgetUsd * REVIEWER_SHARE) stopReviewers(`the reviewers used their share of the $${o.budgetUsd.toFixed(2)} budget`);
+        else if (elapsed >= o.maxMinutes * 60_000 * REVIEWER_TIME) stopReviewers(`the reviewers ran out of their share of the ${o.maxMinutes}-minute limit`);
+      } else if (s.phase === "final" && (s.spentUsd >= o.budgetUsd || elapsed >= o.maxMinutes * 60_000)) {
+        s.stopped ??= s.spentUsd >= o.budgetUsd ? `the $${o.budgetUsd.toFixed(2)} budget ran out during the verdict` : `the ${o.maxMinutes}-minute limit was reached during the verdict`;
+        abortTurn(session.id);
+      }
+    } finally {
+      ticking = false;
+    }
+  };
+  const timer = setInterval(() => void tick(), 2000);
+  timer.unref();
 
   void (async () => {
     try {
@@ -332,13 +415,14 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
           const rs = sessions.get(r.sessionId)!;
           r.status = "reviewing";
           const others = s.reviewers.filter((x) => x !== r).map((x) => x.model);
-          const out = await runIn(rs, reviewPrompt(s, others), r.model, (id) => (r.turnId = id));
+          const out = await runIn(rs, reviewPrompt(s, others), r.model, (id) => (track(id, r.model), (r.turnId = id)));
           forgetTally(r.turnId);
           r.turnId = undefined; // its totals are folded in below; don't count the same turn twice
           r.toolCalls += out.effort.tools;
           r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
           r.report = out.text;
-          if (!out.ok || !out.text) {
+          // stopped by the budget or time limit: a partial report is still evidence
+          if (!out.text || (!out.ok && !s.stopped)) {
             r.status = "error";
             r.error = out.error ?? "no output";
             record({ level: "warn", source: "swarm", sessionId: session.id, message: `Reviewer ${r.model} failed in the review round: ${r.error}` });
@@ -347,26 +431,29 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       );
       // 2. challenge round: each reads the others (skipped with a single reviewer)
       const alive = s.reviewers.filter((r) => r.status !== "error");
-      if (alive.length > 1) {
+      await tick();
+      if (alive.length > 1 && !s.stopped) {
         s.phase = "challenge";
         await Promise.all(
           alive.map(async (r) => {
             const rs = sessions.get(r.sessionId)!;
             r.status = "challenging";
-            const out = await runIn(rs, challengePrompt(s, r, alive.filter((x) => x !== r)), r.model, (id) => (r.turnId = id));
+            const out = await runIn(rs, challengePrompt(s, r, alive.filter((x) => x !== r)), r.model, (id) => (track(id, r.model), (r.turnId = id)));
             forgetTally(r.turnId);
             r.turnId = undefined;
             r.toolCalls += out.effort.tools;
             r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
             r.rebuttal = out.text;
-            r.status = out.ok && out.text ? "done" : "error";
+            r.status = out.text && (out.ok || s.stopped) ? "done" : "error";
             if (r.status === "error") r.error = out.error ?? "no output";
           }),
         );
       } else {
         for (const r of alive) r.status = "done";
       }
-      if (!s.reviewers.some((r) => r.report)) throw new Error("every reviewer failed; nothing to summarise");
+      if (!s.reviewers.some((r) => r.report)) throw new Error(s.stopped ? `stopped before any report: ${s.stopped}` : "every reviewer failed; nothing to summarise");
+      await tick();
+      if (s.spentUsd >= o.budgetUsd * 0.95) throw new Error(`the $${o.budgetUsd.toFixed(2)} budget was used up before the verdict`);
       // 3. the primary handler's verdict, in the chat the swarm came from
       s.phase = "final";
       const primary = sessions.get(session.id);
@@ -387,18 +474,54 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       // the request is recorded as a user message so the chat reads naturally and history replays it
       messages.add({ session_id: primary.id, role: "user", content: `QA Hound on \`${target}\` (${models.join(" vs ")}): summarise and recommend.`, model: null, tools_json: null, usage_json: null });
       s.finalTurnId = turnId;
-      const { status } = await collectTurn(turnId);
+      track(turnId, s.primaryModel);
+      const { status, events } = await collectTurn(turnId);
+      await tick();
+      const parsed = parseFindings(textOf(events), s.options);
+      s.verdict = parsed.verdict;
+      s.findings = parsed.findings;
       s.phase = status === "done" ? "done" : "error";
-      if (status !== "done") s.error = `final turn ${status}`;
+      if (status !== "done") s.error = s.stopped ? `verdict cut short: ${s.stopped}` : `final turn ${status}`;
+      if (s.options.pr) await postToPr(s, ws).catch((e) => (s.prError = e instanceof Error ? e.message : String(e)));
     } catch (e) {
       s.phase = "error";
       s.error = e instanceof Error ? e.message : String(e);
       record({ level: "error", source: "swarm", sessionId: session.id, message: `QA Hound failed: ${s.error}` });
     } finally {
+      clearInterval(timer);
+      await tick().catch(() => {});
       s.finishedAt = Date.now();
-      record({ level: "info", source: "swarm", sessionId: session.id, message: `QA Hound on ${target} ${s.phase === "done" ? "finished" : "ended with errors"} (${Math.round((s.finishedAt - s.startedAt) / 1000)}s)` });
+      record({
+        level: "info",
+        source: "swarm",
+        sessionId: session.id,
+        message: `QA Hound on ${target} ${s.phase === "done" ? "finished" : "ended with errors"} (${Math.round((s.finishedAt - s.startedAt) / 1000)}s, $${s.spentUsd.toFixed(3)} of $${s.options.budgetUsd.toFixed(2)}${s.stopped ? `; stopped: ${s.stopped}` : ""}${s.pr ? `; ${s.pr.event} on PR #${s.pr.number}` : s.prError ? `; PR not posted: ${s.prError}` : ""})`,
+      });
     }
   })();
 
   return s;
+}
+
+/**
+ * The verdict on the pull request: the target's repository, its current branch, that branch's
+ * open PR. Request changes / approve by the findings shown (hound.ts prEvent); a partial run
+ * only comments.
+ */
+async function postToPr(s: Swarm, ws: string) {
+  const repos = findRepos(ws).sort((a, b) => b.length - a.length);
+  const repo = repos.find((r) => r === "." || s.target === r || s.target.startsWith(`${r}/`));
+  if (!repo) throw new Error(`${s.target} isn't inside a git clone`);
+  const info = await inspectRepo(ws, repo);
+  const gh = parseGithubRemote(info.remote);
+  if (!gh) throw new Error(`${repo}'s origin isn't on GitHub`);
+  if (!info.branch || info.detached) throw new Error(`${repo} isn't on a branch`);
+  const pr = await openPrFor(gh, info.branch);
+  if (!pr) throw new Error(`${info.branch} has no open pull request on ${gh.owner}/${gh.repo}`);
+  const findings = s.findings ?? [];
+  const complete = s.phase === "done" && !s.stopped && findings !== undefined;
+  const event = prEvent(findings, s.options, complete);
+  const body = prBody({ target: s.target, models: s.reviewers.map((r) => r.model), verdict: s.verdict, findings, spentUsd: s.spentUsd, partial: s.stopped ?? (s.phase !== "done" ? s.error : undefined) });
+  const res = await postReview(gh, pr.number, event, body, pr.headSha);
+  s.pr = { url: res.url, event: res.event, number: pr.number, note: res.note };
 }

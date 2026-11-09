@@ -9,6 +9,7 @@ import { FoldersPanel } from './Folders'
 import { HELPER_HINT, vaultKeyFromThisPc } from './linkHelper'
 import settingsArt from './assets/settings-dog.webp'
 import { VoicePanel } from './voice/VoicePanel'
+import { RouterPanel } from './RouterPanel'
 
 type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'voice' | 'appearance'
 
@@ -234,6 +235,10 @@ export function Settings({
               </p>
               <VaultPanel />
               {saveMsg && <p className={`small ${saveMsg.ok ? '' : 'lv-error-text'}`}>{saveMsg.text}</p>}
+              <RouterPanel
+                smallModel={String(groups?.flatMap((g) => g.rows).find((r) => r.env === 'SMALL_MODEL')?.value ?? '')}
+                onSaved={onRowSaved}
+              />
               {!groups && <p className="muted">Loading…</p>}
               {groups
                 ?.filter((g) => !SERVICES.some((svc) => svc.id === g.id))

@@ -86,6 +86,8 @@ export interface AdvicePick {
   cons: string[]
   estCostUsd?: number
   usage?: ModelUsage
+  /** the same model on Ditto Router, when a Router key is set */
+  router?: { id: string; price?: { input: number; output: number } }
 }
 export interface Advice {
   task: string
@@ -95,6 +97,8 @@ export interface Advice {
   needs: { vision: boolean }
   costUsd?: number
   considered: number
+  /** where "Use for background work" puts a pick */
+  background: { via: 'saygm' | 'ditto-router'; model: string }
 }
 
 export interface ToolCall {
@@ -234,6 +238,8 @@ export type AgentEvent =
   | { type: 'tool_end'; id: string; output?: string; isError?: boolean }
   | { type: 'done'; engineSessionId: string; usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number }; messageId?: string }
   | { type: 'error'; message: string }
+  /** running cost while a turn goes on (QA Hound budgets) */
+  | { type: 'usage'; usage: { inputTokens?: number; outputTokens?: number; costUsd?: number } }
   /** The stream ended because the turn did — not because the connection dropped. */
   | { type: 'end'; status: TurnStatus; seq: number }
 
@@ -290,6 +296,50 @@ export interface Swarm {
   startedAt: number
   finishedAt?: number
   error?: string
+  options: HoundOptions
+  /** live: what the run has cost so far */
+  spentUsd: number
+  /** why it stopped early (budget or time) */
+  stopped?: string
+  verdict?: 'use' | 'fix-first' | 'do-not-use'
+  findings?: HoundFinding[]
+  pr?: { url: string; event: string; number: number; note?: string }
+  prError?: string
+}
+
+export type Severity = 'low' | 'medium' | 'high' | 'critical'
+/** QA Hound's run settings (server/src/hound.ts) */
+export interface HoundOptions {
+  budgetUsd: number
+  maxMinutes: number
+  minSeverity: Severity
+  minConfidence: number
+  include: string[]
+  exclude: string[]
+  pr: boolean
+  prBlocking: Severity
+}
+export interface HoundFinding {
+  severity: Severity
+  confidence: number
+  path: string
+  line?: number
+  title: string
+  detail?: string
+  fix?: string
+  foundBy: string[]
+  status: 'confirmed' | 'disputed' | 'single'
+  shown: boolean
+  heldBecause?: string
+}
+
+/** A model on Ditto Router (server/src/router.ts) */
+export interface RouterModel {
+  id: string
+  name: string
+  price?: { input: number; output: number }
+  contextLength?: number
+  owner?: string
 }
 
 export interface RepoInfo {
@@ -405,7 +455,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo, fetchOnly }),
     }),
-  startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus'] }) =>
+  routerModels: (refresh = false) =>
+    req<{ configured: boolean; background: 'saygm' | 'ditto-router'; model: string; active: boolean; models: RouterModel[]; error?: string }>(
+      `/api/router/models${refresh ? '?refresh=1' : ''}`,
+    ),
+  /** Ask Ditto Review to review a branch's open PR ("@ditto review" on GitHub) */
+  dittoReview: (projectId: string, repo: string, branch: string) =>
+    req<{ ok: boolean; message: string; prUrl?: string; needsPr?: boolean; compareUrl?: string }>(`/api/projects/${projectId}/repos/ditto-review`, {
+      method: 'POST',
+      body: JSON.stringify({ repo, branch }),
+    }),
+  startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus']; options?: Partial<HoundOptions> }) =>
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
   swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),
   swarms: (sessionId: string) => req<{ swarms: Swarm[] }>(`/api/swarm?sessionId=${encodeURIComponent(sessionId)}`),

@@ -622,6 +622,16 @@ is inspectable and exportable. Different model families catch different things; 
 from one family mostly share blind spots. `POST /api/swarm` starts one from outside (the code and
 API keep the name *swarm*).
 
+**Limits and filters** (QA Hound dialog): a hard **budget** for the whole run and a **time limit**
+(the reviewers stop at 75% of the budget and 80% of the time, the rest is kept for the verdict, which
+stops at the limit; a run that hits a cap ends with what it has, marked partial), a **minimum
+severity** and a **minimum confidence**: the verdict scores every finding 0–100 for how sure it is,
+after checking, that it is real, and anything under the thresholds is listed as held back with the
+reason. **Only these paths / Never these** scope the review with globs. **Post the verdict on the
+pull request** puts it on the open PR of the target repo's current branch: request changes when a
+shown finding is at or above the blocking severity, approve when none is, comment when the run was
+partial (and comment, saying so, on your own PR, which GitHub won't let you approve).
+
 ## Repositories
 
 **Repos** (top bar), the branch icon on a project, or right-click a project → **Repositories**
@@ -631,6 +641,13 @@ of the uncommitted changes. **Browse files** opens the Files view at that clone.
 reads; every other button (explain changes, fetch and compare, pull, review and propose a
 commit, new branch, switch, compare) puts a request in the chat for the agent, so git actions
 run in the sandbox where you can see them and the reviewer can check them.
+
+## Ditto Router and Ditto Review
+
+Optional: run background work (titles, compaction) on a model from Ditto Router instead of SayGM's
+small model, choose it from the Router's live model list, let the advisor's picks go straight to
+background work, and ask Ditto Review to review any branch's pull request from Repositories. See
+[docs/ROUTER.md](docs/ROUTER.md).
 
 ## GitHub
 

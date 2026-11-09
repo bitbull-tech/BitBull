@@ -31,6 +31,30 @@ export function ModelAdvisor({ current, onUse }: { current: string; onUse: (id: 
   const [busy, setBusy] = useState<false | 'ask' | 'strong'>(false)
   const [advice, setAdvice] = useState<Advice | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [bgMsg, setBgMsg] = useState<string | null>(null)
+
+  /**
+   * "Use for background work": the pick becomes the model for titles, compaction and other
+   * housekeeping. On Ditto Router when background work runs there (and the Router has it),
+   * otherwise SayGM's small model.
+   */
+  const useForBackground = async (p: AdvicePick) => {
+    if (!advice) return
+    setBgMsg(null)
+    try {
+      const viaRouter = advice.background.via === 'ditto-router'
+      if (viaRouter && !p.router) throw new Error(`${p.id} isn't on Ditto Router, which runs background work now (Settings → Configuration).`)
+      const key = viaRouter ? 'DITTO_ROUTER_MODEL' : 'SMALL_MODEL'
+      const id = viaRouter ? p.router!.id : p.id
+      await api.updateSettings({ [key]: id })
+      setAdvice({ ...advice, background: { ...advice.background, model: id } })
+      setBgMsg(`Background work now runs on ${id}${viaRouter ? ' via Ditto Router' : ' (SayGM)'}.`)
+    } catch (e) {
+      setBgMsg(e instanceof Error ? e.message.replace(/^\d+ /, '') : String(e))
+    }
+  }
+  const isBackground = (p: AdvicePick) =>
+    !!advice && (advice.background.via === 'ditto-router' ? p.router?.id === advice.background.model : p.id === advice.background.model)
 
   const ask = async (strong: boolean) => {
     if (task.trim().length < 3 || busy) return
@@ -96,18 +120,43 @@ export function ModelAdvisor({ current, onUse }: { current: string; onUse: (id: 
                   ))}
                 </ul>
                 <p className="advisor-history">{history(p)}</p>
-                {p.id === current ? (
-                  <span className="advisor-using">
-                    <IconCheck size={13} /> In use
-                  </span>
-                ) : (
-                  <button className="btn sm" onClick={() => onUse(p.id)}>
-                    Use this model
-                  </button>
+                {p.router && (
+                  <p className="advisor-router muted small" title={`On Ditto Router as ${p.router.id}`}>
+                    Also on Ditto Router{p.router.price ? ` · $${p.router.price.input}/$${p.router.price.output} per M` : ''}
+                  </p>
                 )}
+                <div className="advisor-actions">
+                  {p.id === current ? (
+                    <span className="advisor-using">
+                      <IconCheck size={13} /> In use
+                    </span>
+                  ) : (
+                    <button className="btn sm" onClick={() => onUse(p.id)}>
+                      Use this model
+                    </button>
+                  )}
+                  {isBackground(p) ? (
+                    <span className="advisor-using" title="Titles, compaction and other housekeeping run on it">
+                      <IconCheck size={13} /> Background
+                    </span>
+                  ) : (
+                    <button
+                      className="btn sm"
+                      onClick={() => void useForBackground(p)}
+                      title={
+                        advice.background.via === 'ditto-router'
+                          ? 'Run titles, compaction and other housekeeping on this model, via Ditto Router'
+                          : 'Make this SayGM’s small model: titles, compaction and other housekeeping'
+                      }
+                    >
+                      Use for background work
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
+          {bgMsg && <p className="small advisor-bgmsg">{bgMsg}</p>}
           <div className="advisor-foot muted small">
             <span>
               Picked by <code>{advice.advisor}</code> from {advice.considered} models that can do it

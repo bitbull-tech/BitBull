@@ -105,7 +105,11 @@ export function describeSettings() {
       rows: [
         row("DEFAULT_ENGINE", "Default engine", config.agent.defaultEngine, { hint: "opencode = any model natively; claude = Claude Agent SDK" }),
         row("DEFAULT_MODEL", "Default model", config.agent.defaultModel),
-        row("SMALL_MODEL", "Small / background model", config.agent.smallModel, { hint: "Used for titles and cheap background work" }),
+        row("SMALL_MODEL", "Small / background model", config.agent.smallModel, { hint: "Used for titles and cheap background work (on SayGM)" }),
+        row("BACKGROUND_VIA", "Background work runs on", config.router.background, {
+          hint: "saygm = the small model above. ditto-router = the Ditto Router model chosen below (needs a Router key under Integrations → Ditto). Only the OpenCode engine's background calls move; chats stay on SayGM.",
+        }),
+        row("DITTO_ROUTER_MODEL", "Ditto Router background model", config.router.model, { hint: "Pick from the Router's model list below." }),
         row("ADVISOR_MODEL", "Advisor model", config.agent.advisorModel, { hint: "Answers \"Which model for this?\" on the home screen, from the live catalogue and your usage. A cheap model is enough; defaults to the small model." }),
         row("VOICE_STT_MODEL", "Voice: listening model", config.voice.sttModel || "(cheapest Gemini flash)", { hint: "A Gemini model on SayGM turns what you say into text. Empty: the cheapest flash model in the catalogue." }),
         row("ADVISOR_STRONG_MODEL", "Stronger advisor", config.agent.advisorStrongModel, { hint: "Used by \"Ask a stronger model\". Defaults to the default model." }),
@@ -144,6 +148,11 @@ export function describeSettings() {
         row("DITTO_MCP_URL", "MCP server", config.ditto.mcpUrl),
         row("DITTO_ARCHIVE", "Archive every turn", config.ditto.archive, { hint: "turn = save each exchange; off = only facts the agent saves" }),
         row("DITTO_SOURCE", "Source label", config.ditto.source),
+        row("DITTO_ROUTER_KEY", "Router key (ditto_inf_…)", config.router.key, {
+          secret: true,
+          hint: "A key from developer.heyditto.ai → Endpoints → your endpoint → API keys. Used only for background work when Configuration → Background work runs on = ditto-router.",
+        }),
+        row("DITTO_ROUTER_BASE_URL", "Router base URL", config.router.baseUrl),
       ],
     },
     {

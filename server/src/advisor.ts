@@ -16,6 +16,7 @@ import { config } from "./config.js";
 import { db } from "./db.js";
 import { estimateCost, listModels, type ModelInfo } from "./models.js";
 import { record } from "./activity.js";
+import { routerBackground, routerModels, sameModel, type RouterModel } from "./router.js";
 
 /* ---------------- your usage ---------------- */
 
@@ -144,6 +145,8 @@ export interface Pick {
   cons: string[];
   estCostUsd?: number;
   usage?: ModelUsage;
+  /** the same model on Ditto Router, when a Router key is set (for "Use for background work") */
+  router?: { id: string; price?: { input: number; output: number } };
 }
 
 export interface Advice {
@@ -155,6 +158,8 @@ export interface Advice {
   /** what asking cost */
   costUsd?: number;
   considered: number;
+  /** where "Use for background work" puts a pick: the Router model, or SayGM's small model */
+  background: { via: "saygm" | "ditto-router"; model: string };
 }
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
@@ -307,10 +312,13 @@ export async function advise(task: string, strong = false): Promise<Advice> {
   const reply = await complete(advisor, system, user);
   const { picks, estimate } = parseAdvice(reply.text, allowed);
 
+  // which picks Ditto Router also serves (nothing is fetched without a Router key)
+  const onRouter = config.router.key ? await routerModels().catch(() => [] as RouterModel[]) : [];
   const withCost: Pick[] = picks.map((p) => {
     const m = allowed.get(p.id)!;
     const est = m.price ? (estimate.inputTokens * m.price.input + estimate.outputTokens * m.price.output) / 1e6 : undefined;
-    return { ...p, estCostUsd: est, usage: usage.get(p.id) };
+    const r = onRouter.find((x) => sameModel(x.id, p.id));
+    return { ...p, estCostUsd: est, usage: usage.get(p.id), ...(r ? { router: { id: r.id, price: r.price } } : {}) };
   });
   const costUsd = await estimateCost(advisor.id, reply.inputTokens, reply.outputTokens);
   record({
@@ -318,5 +326,8 @@ export async function advise(task: string, strong = false): Promise<Advice> {
     source: "saygm",
     message: `Model advice from ${advisor.id} (${short.length} models considered): ${withCost.map((p) => `${p.role} ${p.id}`).join(", ")}${costUsd ? ` · $${costUsd.toFixed(4)}` : ""}`,
   });
-  return { task, advisor: advisor.id, picks: withCost, estimate, needs, costUsd, considered: short.length };
+  const background = routerBackground()
+    ? { via: "ditto-router" as const, model: config.router.model }
+    : { via: "saygm" as const, model: config.agent.smallModel };
+  return { task, advisor: advisor.id, picks: withCost, estimate, needs, costUsd, considered: short.length, background };
 }

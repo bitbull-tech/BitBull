@@ -40,6 +40,10 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   DEFAULT_ENGINE: { options: ["opencode", "claude"] },
   DEFAULT_MODEL: {},
   SMALL_MODEL: {},
+  // Ditto Router for background work only (docs/ROUTER.md); the base URL stays .env-only
+  DITTO_ROUTER_KEY: {},
+  BACKGROUND_VIA: { options: ["saygm", "ditto-router"] },
+  DITTO_ROUTER_MODEL: {},
   ADVISOR_MODEL: {},
   ADVISOR_STRONG_MODEL: {},
   VOICE_STT_MODEL: {},
@@ -163,6 +167,19 @@ function buildConfig() {
     sttModel: env("VOICE_STT_MODEL", ""),
     maxSeconds: 120,
     maxChars: 4000,
+  },
+
+  /**
+   * Ditto Router (router.heyditto.ai), an OpenAI-compatible inference service. Optional and only
+   * for background work (titles, compaction and other housekeeping the engines do on their
+   * small model): chats keep running on SayGM. BACKGROUND_VIA picks which one does that work.
+   */
+  router: {
+    key: env("DITTO_ROUTER_KEY", ""),
+    baseUrl: env("DITTO_ROUTER_BASE_URL", "https://router.heyditto.ai/v1"),
+    background: (env("BACKGROUND_VIA", "saygm") === "ditto-router" ? "ditto-router" : "saygm") as "saygm" | "ditto-router",
+    /** the model background work runs on, as the Router names it (e.g. z-ai/glm-5.3-flash), or an endpoint's slug */
+    model: env("DITTO_ROUTER_MODEL", ""),
   },
 
   ditto: {

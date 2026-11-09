@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Model, type Project, type RepoInfo, type Session, type Swarm } from './api'
+import { api, type HoundOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm } from './api'
 import { IconX } from './icons'
 import { priceLabel } from './ModelPicker'
 import houndArt from './assets/qa-hound.webp'
@@ -11,6 +11,19 @@ const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
   { id: 'performance', label: 'Performance', hint: 'hot spots, waste, memory/I-O, scalability, leaks' },
   { id: 'user-experience', label: 'User experience', hint: 'fit for purpose, first-run and everyday workflows, error messages, docs, real-world use' },
 ]
+
+const SEVERITY: Severity[] = ['low', 'medium', 'high', 'critical']
+const OPTS_KEY = 'bitbull-hound-options'
+const DEFAULTS: HoundOptions = { budgetUsd: 2, maxMinutes: 45, minSeverity: 'low', minConfidence: 70, include: [], exclude: [], pr: false, prBlocking: 'high' }
+/** The last settings used, per browser: a convenience, the server checks them again. */
+function savedOptions(): HoundOptions {
+  try {
+    return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(OPTS_KEY) ?? '{}') as Partial<HoundOptions>) }
+  } catch {
+    return DEFAULTS
+  }
+}
+const lines = (t: string) => t.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
 
 /**
  * QA swarm: pick a repo, folder or file in the workspace and up to two other models. Each
@@ -40,6 +53,10 @@ export function SwarmDialog({
   const [focus, setFocus] = useState<Swarm['focus']>(['attack-vectors', 'correctness', 'code-quality', 'performance', 'user-experience'])
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [opts, setOpts] = useState<HoundOptions>(savedOptions)
+  const [include, setInclude] = useState(opts.include.join('\n'))
+  const [exclude, setExclude] = useState(opts.exclude.join('\n'))
+  const set = (patch: Partial<HoundOptions>) => setOpts((o) => ({ ...o, ...patch }))
 
   useEffect(() => {
     void api
@@ -109,7 +126,13 @@ export function SwarmDialog({
     if (!focus.length) return setErr('Tick at least one thing to look at.')
     setBusy(true)
     try {
-      const r = await api.startSwarm({ sessionId: session.id, target: target.trim(), models: chosen, focus })
+      const options: HoundOptions = { ...opts, include: lines(include), exclude: lines(exclude) }
+      try {
+        localStorage.setItem(OPTS_KEY, JSON.stringify(options))
+      } catch {
+        /* private window */
+      }
+      const r = await api.startSwarm({ sessionId: session.id, target: target.trim(), models: chosen, focus, options })
       onStarted(r.swarm)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -197,6 +220,72 @@ export function SwarmDialog({
                 </label>
               ))}
             </div>
+          </div>
+          <div className="hound-opts">
+            <div className="hound-opts-title">Limits and filters</div>
+            <div className="row3">
+              <label className="field">
+                <span>Budget for the whole run (USD)</span>
+                <input type="number" min={0.05} max={100} step={0.05} value={opts.budgetUsd} onChange={(e) => set({ budgetUsd: Number(e.target.value) })} />
+              </label>
+              <label className="field">
+                <span>Time limit (minutes)</span>
+                <input type="number" min={5} max={120} step={5} value={opts.maxMinutes} onChange={(e) => set({ maxMinutes: Number(e.target.value) })} />
+              </label>
+              <label className="field">
+                <span>Minimum severity</span>
+                <select value={opts.minSeverity} onChange={(e) => set({ minSeverity: e.target.value as Severity })}>
+                  {SEVERITY.map((x) => (
+                    <option key={x} value={x}>
+                      {x === 'low' ? 'low and above (all)' : x === 'critical' ? 'critical only' : `${x} and above`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="muted small">
+              Hard caps: the reviewers stop at 75% of the budget and 80% of the time, the rest is kept for the verdict, and the verdict stops at the
+              limit. A run that hits a cap ends with what it has, marked partial.
+            </p>
+            <label className="field">
+              <span>
+                Minimum confidence: <b>{opts.minConfidence}%</b>
+              </span>
+              <input type="range" min={0} max={100} step={5} value={opts.minConfidence} onChange={(e) => set({ minConfidence: Number(e.target.value) })} />
+              <span className="muted small">
+                Your model scores every finding 0–100 for how sure it is, after checking, that it is real. Below this a finding is still listed,
+                as held back, but not counted in the verdict or posted to the PR.
+              </span>
+            </label>
+            <div className="row2">
+              <label className="field">
+                <span>Only these paths (one glob a line)</span>
+                <textarea rows={2} value={include} onChange={(e) => setInclude(e.target.value)} placeholder={'src/**\nserver/**/*.ts'} />
+              </label>
+              <label className="field">
+                <span>Never these</span>
+                <textarea rows={2} value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder={'**/*.test.ts\ndocs/**'} />
+              </label>
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={opts.pr} onChange={(e) => set({ pr: e.target.checked })} />
+              Post the verdict on the pull request
+            </label>
+            {opts.pr && (
+              <div className="hound-pr">
+                <span className="muted small">
+                  The target's repo, its current branch's open PR on GitHub (your GitHub token). Request changes when a shown finding is
+                </span>
+                <select value={opts.prBlocking} onChange={(e) => set({ prBlocking: e.target.value as Severity })}>
+                  {SEVERITY.map((x) => (
+                    <option key={x} value={x}>
+                      {x} or worse
+                    </option>
+                  ))}
+                </select>
+                <span className="muted small">, approve when none is, just comment when the run was partial.</span>
+              </div>
+            )}
           </div>
           <p className="muted small">
             Different model families catch different things; two reviewers from the same family mostly share blind spots. Cost: three to five

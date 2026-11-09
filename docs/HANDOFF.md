@@ -421,3 +421,19 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
 - Web: `ReplyFiles.tsx` under each reply; Files dialog gets per-file Download / Show and a folder
   .zip. Link helpers now reveal files too (`explorer /select,` on Windows, `open -R` on a Mac).
 
+## Ditto Router, Ditto Review, QA Hound limits (9 Nov 2026)
+
+- Ditto Router = provider routing for a model you choose, not a task-aware picker; the advisor stays
+  the picker. Background work only, opt-in (`BACKGROUND_VIA`, `DITTO_ROUTER_KEY`,
+  `DITTO_ROUTER_MODEL`; `server/src/router.ts`, `RouterPanel.tsx`). Advisor picks carry `router`
+  and "Use for background work".
+- Ditto Review per branch: `POST /api/projects/:id/repos/ditto-review` (`server/src/github.ts`)
+  comments `@ditto review` on the branch's open PR.
+- QA Hound: `server/src/hound.ts` (options, globs, findings parse/judge, PR event/body, tests);
+  swarm.ts enforces budget/time from live `usage` events (new AgentEvent emitted by the OpenCode
+  engine every few seconds), parses the verdict's ```qa-hound``` JSON block, posts to the PR.
+  Chat renders that block as a findings table (`HoundFindings.tsx`).
+- Tom's Ditto endpoint "Ditto Review" (developer.heyditto.ai) has two model routes,
+  openai/gpt-6-luna → gm/gpt-6-luna and z-ai/glm-5.3-flash → gm/glm-5.3-flash (his SayGM key on
+  Ditto), while billing is set to the Ditto balance. Raised with Tom; not changed.
+

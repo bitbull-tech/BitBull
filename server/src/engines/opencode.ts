@@ -10,6 +10,7 @@ import { LINKS_ROOT, linksAvailable } from "../links.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
 import { listModels, type ModelApi, type ModelInfo } from "../models.js";
 import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
+import { cachedRouterModels, routerBackground } from "../router.js";
 
 /**
  * Engine 2: OpenCode (open source, provider-agnostic agent runtime).
@@ -26,6 +27,8 @@ const PROVIDERS: Record<ModelApi, { id: string; npm: string; name: string; baseU
   google: { id: "saygm-google", npm: "@ai-sdk/google", name: "SayGM · Google", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1beta` },
   chat: { id: "saygm", npm: "@ai-sdk/openai-compatible", name: "SayGM", baseURL: () => config.saygm.openaiBaseUrl },
 };
+
+const ROUTER_PROVIDER = "ditto-router";
 
 // Make the bundled `opencode` binary resolvable and keep its state in DATA_DIR.
 process.env.PATH = `${path.join(ROOT, "server", "node_modules", ".bin")}${path.delimiter}${process.env.PATH ?? ""}`;
@@ -82,6 +85,24 @@ export function buildConfig(models: ModelInfo[]) {
     if (!byProvider[p.id]) continue;
     provider[p.id] = { npm: p.npm, name: p.name, options: { baseURL: p.baseURL(), apiKey: config.saygm.apiKey }, models: byProvider[p.id] };
   }
+  // Background work on Ditto Router (Configuration → Background work runs on): only the small
+  // model moves; chats and subagents keep their SayGM models (server/src/router.ts)
+  const viaRouter = routerBackground();
+  if (viaRouter) {
+    const rm = cachedRouterModels().find((m) => m.id === viaRouter.model);
+    provider[ROUTER_PROVIDER] = {
+      npm: "@ai-sdk/openai-compatible",
+      name: "Ditto Router",
+      options: { baseURL: config.router.baseUrl, apiKey: config.router.key },
+      models: {
+        [viaRouter.model]: {
+          name: rm?.name ?? viaRouter.model,
+          ...(rm?.contextLength ? { limit: { context: rm.contextLength, output: Math.min(32000, rm.contextLength) } } : {}),
+          ...(rm?.price ? { cost: { input: rm.price.input, output: rm.price.output } } : {}),
+        },
+      },
+    };
+  }
   return {
     $schema: "https://opencode.ai/config.json",
     autoupdate: false,
@@ -89,7 +110,7 @@ export function buildConfig(models: ModelInfo[]) {
     plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "bitbull-guard.js")).href],
     share: "disabled" as const,
     model: def ? `${providerFor(def)}/${def.id}` : undefined,
-    small_model: small ? `${providerFor(small)}/${small.id}` : undefined,
+    small_model: viaRouter ? `${ROUTER_PROVIDER}/${viaRouter.model}` : small ? `${providerFor(small)}/${small.id}` : undefined,
     enabled_providers: Object.keys(provider),
     provider,
     mcp: {
@@ -177,7 +198,7 @@ function freePort(preferred: number): Promise<number> {
  * keys applyOverrides() put into process.env — stays out. GITHUB_TOKEN/TAOSTATS_API_KEY stay
  * by design (the agent gets them on purpose). Brief window: env is restored right after spawn.
  */
-const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|ATLAS_API_KEY|FOUR04_API_KEY|HIPPIUS_.*)$/;
+const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|ATLAS_API_KEY|FOUR04_API_KEY|HIPPIUS_.*)$/;
 
 async function withScrubbedEnv<T>(fn: () => Promise<T>): Promise<T> {
   const saved: Record<string, string | undefined> = {};
@@ -344,6 +365,30 @@ export const opencodeEngine: AgentEngine = {
       out.push(kind === "reasoning" ? { type: "thinking", delta } : { type: "text", delta });
     };
 
+    // the running total (this message plus subagents'), sent at most every few seconds
+    let lastUsageAt = 0;
+    let lastUsageOut = -1;
+    const runningTotal = (): Usage => {
+      let total = usage;
+      for (const u of childUsage.values()) {
+        total = {
+          inputTokens: (total.inputTokens ?? 0) + (u.inputTokens ?? 0),
+          cacheReadTokens: (total.cacheReadTokens ?? 0) + (u.cacheReadTokens ?? 0),
+          outputTokens: (total.outputTokens ?? 0) + (u.outputTokens ?? 0),
+          costUsd: (total.costUsd ?? 0) + (u.costUsd ?? 0),
+        };
+      }
+      return total;
+    };
+    const reportUsage = () => {
+      const t = runningTotal();
+      const now = Date.now();
+      if (now - lastUsageAt < 3000 || (t.outputTokens ?? 0) === lastUsageOut) return;
+      lastUsageAt = now;
+      lastUsageOut = t.outputTokens ?? 0;
+      out.push({ type: "usage", usage: t });
+    };
+
     const onEvent: Listener = (ev) => {
       const p = ev.properties ?? {};
       switch (ev.type) {
@@ -359,6 +404,7 @@ export const opencodeEngine: AgentEngine = {
               outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
               costUsd: m.cost,
             };
+            reportUsage();
             if (m.error) {
               const raw = String(m.error.data?.message ?? m.error.name ?? "Model error");
               out.push({ type: "error", message: gatewayHint(raw, input.model) ?? raw });
@@ -411,16 +457,7 @@ export const opencodeEngine: AgentEngine = {
           break;
         }
         case "session.idle": {
-          let total = usage;
-          for (const u of childUsage.values()) {
-            total = {
-              inputTokens: (total.inputTokens ?? 0) + (u.inputTokens ?? 0),
-              cacheReadTokens: (total.cacheReadTokens ?? 0) + (u.cacheReadTokens ?? 0),
-              outputTokens: (total.outputTokens ?? 0) + (u.outputTokens ?? 0),
-              costUsd: (total.costUsd ?? 0) + (u.costUsd ?? 0),
-            };
-          }
-          out.push({ type: "done", engineSessionId: sid, usage: total });
+          out.push({ type: "done", engineSessionId: sid, usage: runningTotal() });
           out.close();
           break;
         }
@@ -444,6 +481,7 @@ export const opencodeEngine: AgentEngine = {
               outputTokens: (t.output ?? 0) + (t.reasoning ?? 0),
               costUsd: m.cost ?? 0,
             });
+            reportUsage();
           }
           return;
         }

@@ -215,15 +215,44 @@ fn stop_and_quit(app: &AppHandle) {
             let _ = app.emit_to("main", "bitbull-log", LogLine { run: 0, line: format!("! {e}") });
             return;
         }
-        // let the stop script finish before this process goes away (it is what brings the stack down)
+        if let Some(t) = app.tray_by_id(TRAY_ID) {
+            let _ = t.set_tooltip(Some("BitBull: stopping…"));
+        }
+        // let the stop script finish before this process goes away (it is what brings the stack
+        // down), but never hang here: after 2 minutes stop waiting and end it
         let state = app.state::<AppState>();
-        for _ in 0..900 {
+        let mut finished = false;
+        for _ in 0..600 {
             if state.child.lock().map(|c| c.is_none()).unwrap_or(true) {
+                finished = true;
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        app.exit(0);
+        if !finished {
+            if let Ok(mut g) = state.child.lock() {
+                if let Some(c) = g.as_mut() {
+                    let _ = c.kill();
+                }
+                *g = None;
+            }
+        }
+        quit_app(&app);
+    });
+}
+
+const TRAY_ID: &str = "bitbull-tray";
+
+/// Leave for good: take the tray icon down first, then exit, both on the main thread. Exiting from
+/// a worker thread (the stop path) can leave Windows showing a dead icon until it is hovered.
+fn quit_app(app: &AppHandle) {
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(t) = app2.remove_tray_by_id(TRAY_ID) {
+            let _ = t.set_visible(false);
+            drop(t);
+        }
+        app2.exit(0);
     });
 }
 
@@ -407,7 +436,7 @@ pub fn run() {
             let stop = MenuItem::with_id(app, "stop", "Stop BitBull and quit", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit (BitBull keeps running)", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &launcher, &PredefinedMenuItem::separator(app)?, &stop, &quit])?;
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id(TRAY_ID)
                 .icon(app.default_window_icon().cloned().expect("icon"))
                 .tooltip("BitBull")
                 .menu(&menu)
@@ -416,7 +445,7 @@ pub fn run() {
                     "open" => show_gm_later(app),
                     "launcher" => show_launcher(app.clone()),
                     "stop" => stop_and_quit(app),
-                    "quit" => app.exit(0),
+                    "quit" => quit_app(app),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, ev| {
