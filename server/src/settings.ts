@@ -106,6 +106,8 @@ export function describeSettings() {
         row("DEFAULT_ENGINE", "Default engine", config.agent.defaultEngine, { hint: "opencode = any model natively; claude = Claude Agent SDK" }),
         row("DEFAULT_MODEL", "Default model", config.agent.defaultModel),
         row("SMALL_MODEL", "Small / background model", config.agent.smallModel, { hint: "Used for titles and cheap background work" }),
+        row("ADVISOR_MODEL", "Advisor model", config.agent.advisorModel, { hint: "Answers \"Which model for this?\" on the home screen, from the live catalogue and your usage. A cheap model is enough; defaults to the small model." }),
+        row("ADVISOR_STRONG_MODEL", "Stronger advisor", config.agent.advisorStrongModel, { hint: "Used by \"Ask a stronger model\". Defaults to the default model." }),
         row("BITBULL_SANDBOX", "Sandbox", config.sandbox.kind === "none" ? "none (running on host)" : config.sandbox.kind, { hint: "Set automatically inside the Docker image" }),
         row("HTTPS_PROXY", "Outbound traffic", config.sandbox.egressProxy ? `allowlist proxy (${config.sandbox.egressProxy})` : "open (no proxy)", { hint: "docker compose routes the agent through egress/allowlist.txt" }),
         row("ALLOW_HOST_SHELL", "Allow shell on host", config.sandbox.allowHostShell, { hint: "Only matters outside the sandbox. Leave false." }),

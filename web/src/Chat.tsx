@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { api, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconLock, IconPlan, IconSend, IconShare, IconStop, IconTool, IconX } from './icons'
 import { ModelDog } from './dogs'
+import { ModelAdvisor } from './ModelAdvisor'
 import { filterItems, fromDrop, fromInput, hasFolder, uploadItems, type UploadItem } from './uploads'
 import { reportLocal } from './activity'
 import { FolderMenu } from './FolderMenu'
@@ -74,6 +75,7 @@ export function Chat({
   guard,
   onCreate,
   onTurnDone,
+  onPickModel,
 }: {
   session: Session | null
   project: Project | null
@@ -83,6 +85,8 @@ export function Chat({
   guard: <T>(p: Promise<T>) => Promise<T | undefined>
   onCreate: (engine: EngineId) => Promise<Session | undefined>
   onTurnDone: () => void
+  /** "Use this model" from the home screen's advisor */
+  onPickModel?: (id: string) => void
 }) {
   const [msgs, setMsgs] = useState<ViewMessage[]>([])
   const [input, setInput] = useState('')
@@ -323,6 +327,7 @@ export function Chat({
                 </div>
               </div>
             )}
+            {onPickModel && <ModelAdvisor current={model} onUse={onPickModel} />}
             <div className="suggest-label">Try a starting point</div>
             <div className="suggest">
               {(project ? PROJECT_SUGGESTIONS : SUGGESTIONS).map((s) => (

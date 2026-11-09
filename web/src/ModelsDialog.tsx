@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type Model, type ModelDetail } from './api'
+import { api, type Model, type ModelDetail, type ModelUsage } from './api'
 import { IconSearch, IconX } from './icons'
 import { ModelDog } from './dogs'
 
@@ -13,7 +13,7 @@ const money = (n?: number) => (typeof n === 'number' ? (n >= 10 ? `$${n.toFixed(
 const ctx = (n?: number) => (typeof n === 'number' ? (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)) : '—')
 const API_LABEL: Record<Model['api'], string> = { anthropic: 'Messages', responses: 'Responses', google: 'generateContent', chat: 'chat.completions' }
 
-type Key = 'name' | 'provider' | 'api' | 'contextLength' | 'in' | 'out' | 'savingsPct'
+type Key = 'name' | 'provider' | 'api' | 'contextLength' | 'in' | 'out' | 'savingsPct' | 'yours'
 const COLS: { key: Key; label: string; num?: boolean; title?: string }[] = [
   { key: 'name', label: 'Model' },
   { key: 'provider', label: 'Maker' },
@@ -22,10 +22,13 @@ const COLS: { key: Key; label: string; num?: boolean; title?: string }[] = [
   { key: 'in', label: 'In', num: true, title: 'USD per million input tokens' },
   { key: 'out', label: 'Out', num: true, title: 'USD per million output tokens' },
   { key: 'savingsPct', label: 'Saving', num: true, title: 'Below list price, blended 3:1 input:output' },
+  { key: 'yours', label: 'Your use', num: true, title: 'Turns you have run on it here, and what one costs on average' },
 ]
 
-const valueOf = (m: Model, k: Key): string | number => {
+const valueOf = (m: Model, k: Key, usage?: Map<string, ModelUsage>): string | number => {
   switch (k) {
+    case 'yours':
+      return usage?.get(m.id)?.turns ?? 0
     case 'in':
       return m.price?.input ?? Infinity
     case 'out':
@@ -48,6 +51,14 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
   const [sel, setSel] = useState<string | null>(current ?? null)
   const [detail, setDetail] = useState<ModelDetail | null>(null)
   const [detailErr, setDetailErr] = useState<string | null>(null)
+  const [usage, setUsage] = useState<Map<string, ModelUsage>>(new Map())
+
+  useEffect(() => {
+    void api
+      .modelUsage()
+      .then((r) => setUsage(new Map(r.usage.map((u) => [u.id, u]))))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -79,12 +90,12 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
       return `${m.id} ${m.name} ${m.provider ?? ''} ${m.family} ${m.tier ?? ''}`.toLowerCase().includes(needle)
     })
     return list.sort((a, b) => {
-      const x = valueOf(a, sort.key)
-      const y = valueOf(b, sort.key)
+      const x = valueOf(a, sort.key, usage)
+      const y = valueOf(b, sort.key, usage)
       const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))
       return c * sort.dir
     })
-  }, [models, q, only, sort])
+  }, [models, q, only, sort, usage])
 
   const picked = detail ?? models.find((m) => m.id === sel) ?? null
 
@@ -145,6 +156,7 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
                     <td className="num">{money(m.price?.input)}</td>
                     <td className="num">{money(m.price?.output)}</td>
                     <td className="num">{m.savingsPct ? `−${m.savingsPct}%` : '—'}</td>
+                    <td className="num">{yours(usage.get(m.id))}</td>
                   </tr>
                 ))}
                 {!rows.length && (
@@ -193,6 +205,8 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
                   <dt>Saving</dt>
                   <dd>{picked.savingsPct ? `−${picked.savingsPct}% blended` : '—'}</dd>
                 </dl>
+                <h4>Your use here</h4>
+                <UsageBlock u={usage.get(picked.id)} />
                 {onPick && picked.id !== current && (
                   <button className="btn primary" onClick={() => onPick(picked.id)}>
                     Use this model in this chat
@@ -217,5 +231,50 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
         </div>
       </div>
     </div>
+  )
+}
+
+const usd = (n: number) => (n < 0.01 ? `$${n.toFixed(4)}` : n < 1 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`)
+
+function yours(u?: ModelUsage) {
+  if (!u?.turns) return '—'
+  return u.avgCostUsd !== undefined ? `${u.turns} · ${usd(u.avgCostUsd)}` : String(u.turns)
+}
+
+/** Turns, errors and cost for one model, from what BitBull has stored (nothing extra is recorded). */
+function UsageBlock({ u }: { u?: ModelUsage }) {
+  if (!u || (!u.turns && !u.replies)) return <p className="muted small">Not used here yet.</p>
+  return (
+    <dl>
+      <dt>Turns</dt>
+      <dd>
+        {u.turns} · {u.done} finished{u.errors ? ` · ${u.errors} error${u.errors === 1 ? '' : 's'}` : ''}
+        {u.stopped ? ` · ${u.stopped} stopped` : ''}
+      </dd>
+      <dt>Cost</dt>
+      <dd>
+        {usd(u.totalCostUsd)} in all{u.avgCostUsd !== undefined ? ` · ${usd(u.avgCostUsd)} a reply` : ''}
+      </dd>
+      {u.avgInputTokens !== undefined && (
+        <>
+          <dt>Tokens</dt>
+          <dd>
+            {u.avgInputTokens.toLocaleString()} in / {(u.avgOutputTokens ?? 0).toLocaleString()} out a reply
+          </dd>
+        </>
+      )}
+      {u.avgSeconds !== undefined && (
+        <>
+          <dt>Speed</dt>
+          <dd>{u.avgSeconds}s a turn</dd>
+        </>
+      )}
+      {u.lastUsed && (
+        <>
+          <dt>Last used</dt>
+          <dd>{new Date(u.lastUsed).toLocaleString()}</dd>
+        </>
+      )}
+    </dl>
   )
 }

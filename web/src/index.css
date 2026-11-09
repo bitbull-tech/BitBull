@@ -410,6 +410,32 @@ code, pre, kbd { font-family: var(--mono); }
   color: var(--muted); margin-bottom: 8px;
 }
 .suggest { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; }
+/* "Which model for this?" on the home screen */
+.advisor { width: 100%; text-align: left; margin-bottom: 26px; }
+.advisor-ask { display: flex; gap: 8px; }
+.advisor-ask input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--panel); color: var(--text); }
+.advisor-ask input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.advisor-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.advisor-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.advisor-card.role-best-value { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.advisor-role { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.advisor-card.role-best-value .advisor-role { color: var(--accent); }
+.advisor-head { display: flex; align-items: center; gap: 10px; }
+.advisor-head b { display: block; font-size: 14px; line-height: 1.2; }
+.advisor-head code { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.advisor-cost { font-family: var(--mono); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.advisor .advisor-why { margin: 0; max-width: none; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+.advisor-pc { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; line-height: 1.4; }
+.advisor-pc li { padding-left: 16px; position: relative; }
+.advisor-pc li::before { position: absolute; left: 0; font-weight: 700; }
+.advisor-pc li.pro::before { content: '+'; color: var(--ok); }
+.advisor-pc li.con::before { content: '−'; color: var(--bad); }
+.advisor .advisor-history { margin: 0; max-width: none; font-size: 11.5px; color: var(--muted); margin-top: auto; }
+.advisor-card .btn { align-self: flex-start; }
+.advisor-using { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ok); }
+.advisor-foot .link { white-space: nowrap; }
+.advisor .error { margin: 8px 0 0; max-width: none; }
+.advisor-foot { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-top: 8px; }
 .suggest-card {
   text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 14px 16px;
   display: flex; flex-direction: column; gap: 5px; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
@@ -621,6 +647,8 @@ code, pre, kbd { font-family: var(--mono); }
   .hero-intro { gap: 16px; }
   .hero-mascot { width: 96px; }
   .suggest { grid-template-columns: 1fr; }
+  .advisor-picks { grid-template-columns: 1fr; }
+  .advisor-foot { flex-direction: column; }
   .status-grid, .theme-pick, .scheme-grid { grid-template-columns: 1fr; }
   .cfg-row { grid-template-columns: 1fr; gap: 6px; }
   .msg.assistant { grid-template-columns: 1fr; }

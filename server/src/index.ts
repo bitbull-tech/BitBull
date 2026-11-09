@@ -25,6 +25,7 @@ import {
 import { messages, projects, sessions, storedFiles, workspaceFor } from "./db.js";
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset, saveScheme } from "./brand.js";
+import { advise, usageByModel } from "./advisor.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
@@ -124,6 +125,18 @@ app.get("/api/config", async (c) =>
 app.get("/api/models", async (c) => c.json({ models: await publicModels(c.req.query("refresh") === "1") }));
 
 /** One model in full, including the gateway's raw record (the Models view). */
+/** Your usage per model (turns, errors, cost), from what BitBull already stores. */
+app.get("/api/models/usage", (c) => c.json({ usage: usageByModel() }));
+/** "Which model for this?": three picks from the live catalogue, by the advisor model. */
+app.post("/api/models/advise", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { task?: unknown; strong?: unknown };
+  if (typeof body.task !== "string") return c.json({ error: "task required" }, 400);
+  try {
+    return c.json(await advise(body.task, body.strong === true));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
 app.get("/api/models/:id", async (c) => {
   const m = await modelDetail(c.req.param("id"));
   if (!m) return c.json({ error: "not found" }, 404);

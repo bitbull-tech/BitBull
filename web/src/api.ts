@@ -58,6 +58,41 @@ export interface IntegrationStatus {
   tools?: string[]
 }
 
+/** Your usage of one model here, from stored turns and replies (server/src/advisor.ts). */
+export interface ModelUsage {
+  id: string
+  turns: number
+  done: number
+  errors: number
+  stopped: number
+  replies: number
+  totalCostUsd: number
+  avgCostUsd?: number
+  avgInputTokens?: number
+  avgOutputTokens?: number
+  avgSeconds?: number
+  lastUsed?: number
+}
+export interface AdvicePick {
+  id: string
+  name: string
+  role: 'best-value' | 'best-quality' | 'cheapest'
+  why: string
+  pros: string[]
+  cons: string[]
+  estCostUsd?: number
+  usage?: ModelUsage
+}
+export interface Advice {
+  task: string
+  advisor: string
+  picks: AdvicePick[]
+  estimate: { inputTokens: number; outputTokens: number; turns: number }
+  needs: { vision: boolean }
+  costUsd?: number
+  considered: number
+}
+
 export interface ToolCall {
   id: string
   name: string
@@ -332,6 +367,8 @@ export const api = {
     req<NetworkState>('/api/network/approved', { method: 'POST', body: JSON.stringify({ host, scope }) }),
   revokeNetwork: (host: string, scope: 'host' | 'domain') =>
     req<NetworkState>(`/api/network/approved/${encodeURIComponent(host)}?scope=${scope}`, { method: 'DELETE' }),
+  modelUsage: () => req<{ usage: ModelUsage[] }>('/api/models/usage'),
+  advise: (task: string, strong = false) => req<Advice>('/api/models/advise', { method: 'POST', body: JSON.stringify({ task, strong }) }),
   refreshModels: () => req<{ models: Model[] }>('/api/models/refresh', { method: 'POST' }),
   async upload(id: string, files: File[]): Promise<Uploaded[]> {
     const fd = new FormData()

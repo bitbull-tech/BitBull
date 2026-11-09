@@ -665,6 +665,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           guard={guard}
           onCreate={createSession}
           onTurnDone={refreshSessions}
+          onPickModel={setModel}
         />
         <ActivityDock sessionId={active?.id} onOpenFull={() => (clearToasts(), setActivityOpen(true))} />
       </main>

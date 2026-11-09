@@ -363,3 +363,21 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
   `link.sh` was exercised on Linux; the Rust side has unit tests for both platforms' argv and the
   helper's routing, but the macOS-only lines (Keychain, `AppHandle::show`) were not compiled here.
 
+## Model advisor and your usage history (9 Nov 2026)
+
+- `server/src/advisor.ts`: `usageByModel()` aggregates `turns` (count, done, error, stopped,
+  average duration of finished turns, last used) and assistant `messages.usage_json` (cost, tokens)
+  per model. Nothing new is recorded; history goes back as far as the database does.
+  `advise(task, strong)`: `needsOf` (vision from the wording) → `shortlist` (tools required, priced,
+  your models first, then cheapest, capped at 150) → a table with prices and your record → one
+  plain call on the advisor's native API (`complete`: Messages / generateContent / Responses /
+  chat.completions, tested against a mock of each) → `parseAdvice` (JSON only, ids from the
+  shortlist only, one per role, sizes clamped) → cost per pick from live prices × the advisor's
+  size estimate. Logged to the activity log under saygm with what it cost.
+- Routes: `GET /api/models/usage`, `POST /api/models/advise {task, strong?}` (signed in; each call
+  costs a little). Settings: `ADVISOR_MODEL`, `ADVISOR_STRONG_MODEL` (editable, Configuration).
+- Web: `ModelAdvisor.tsx` on the home screen above the starting points; "Your use" column and
+  panel in `ModelsDialog.tsx`. Tests: `advisor.test.ts` (aggregation, shortlist, parsing).
+- Possible next: count QA Hound evidence per model into the record, and tag turns by kind of work
+  (code / writing / research) so the record can say "good at code here" rather than overall.
+

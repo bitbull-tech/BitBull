@@ -556,7 +556,21 @@ before answering about the project, and save durable facts at the end of a turn.
 now** re-runs the seed (safe: it merges). This is the right way to bring imported projects into
 memory, since a chat can only read its own project's workspace.
 
-## QA Hound
+## Which model for this?
+
+On the home screen: describe a job and BitBull suggests three models from SayGM's live catalogue,
+best value, best quality and the cheapest that will still do it, each with pros and cons, an
+estimated cost for the whole task, and how that model has done for you here. **Use this model**
+sets it for the chat. Code first keeps only models that can do the job (tools; vision when the
+task involves images); the advisor model then chooses from that table with today's prices and
+your record, so it never relies on what it remembers about models. The advisor is
+`ADVISOR_MODEL` (default: the small model; a cheap one is enough) and **Ask a stronger model** uses
+`ADVISOR_STRONG_MODEL` (default: the default model), both in Settings → Configuration.
+
+Your record per model (turns, errors, stopped, cost, tokens, speed, last used) comes from the
+turns and replies BitBull already stores: `GET /api/models/usage`, and the "Your use" column and
+panel in the model browser.
+
 
 **QA Hound** — unleash multiple LLMs on your designated repo, folder or file to review, challenge
 each other and summarise a verdict and recommendations.

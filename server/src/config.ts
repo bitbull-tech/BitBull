@@ -40,6 +40,8 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   DEFAULT_ENGINE: { options: ["opencode", "claude"] },
   DEFAULT_MODEL: {},
   SMALL_MODEL: {},
+  ADVISOR_MODEL: {},
+  ADVISOR_STRONG_MODEL: {},
   SUBAGENT_MODEL: {},
   OWNER_NAME: {},
   GITHUB_TOKEN: {},
@@ -247,6 +249,10 @@ function buildConfig() {
     defaultModel: env("DEFAULT_MODEL", "claude-sonnet-4-5"),
     /** Cheap model for titles / background work. */
     smallModel: env("SMALL_MODEL", env("DEFAULT_MODEL", "claude-sonnet-4-5")),
+    /** "Which model for this?" on the home screen: a cheap model choosing from the live catalogue. */
+    advisorModel: env("ADVISOR_MODEL", env("SMALL_MODEL", env("DEFAULT_MODEL", "claude-sonnet-4-5"))),
+    /** Its "Ask a stronger model" button. */
+    advisorStrongModel: env("ADVISOR_STRONG_MODEL", env("DEFAULT_MODEL", "claude-sonnet-4-5")),
     permissionMode: env("AGENT_PERMISSION_MODE", "bypassPermissions"),
     /** Route Claude models in OpenCode through SayGM's Anthropic endpoint (native caching/thinking). */
     opencodeClaudeNative: bool(env("OPENCODE_CLAUDE_NATIVE", "true")),
