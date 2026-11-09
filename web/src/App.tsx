@@ -407,13 +407,14 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   return (
     <div className={`shell ${navOpen ? 'nav-open' : ''}`} style={{ ['--side-w' as string]: `${side.width}px` }}>
       <aside className="sidebar">
-        <div className="brand">
+        {/* the logo and name take you home: the opening screen, outside any project */}
+        <button type="button" className="brand brand-home" onClick={() => newChat(null)} title="Home" aria-label="Home: back to the start screen">
           <BrandMark onDark />
           <div>
             <div className="brand-name">{getBrand().name}</div>
             <div className="brand-sub">{getBrand().tagline}</div>
           </div>
-        </div>
+        </button>
         <button className="btn primary block new-chat" onClick={() => newChat(null)}>
           <IconPlus size={16} /> New chat
         </button>

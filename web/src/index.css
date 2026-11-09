@@ -291,6 +291,9 @@ code, pre, kbd { font-family: var(--mono); }
   border: 1px solid var(--line); background: var(--panel-2); border-radius: var(--radius);
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 2px 6px 16px; }
+.brand-home { font: inherit; color: inherit; text-align: left; background: none; border: 0; cursor: pointer; width: 100%; border-radius: var(--radius-sm); margin-bottom: 10px; padding: 6px; transition: background 0.15s; }
+.brand-home:hover { background: var(--hover); }
+.brand-home:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .brand-name { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: -0.02em; line-height: 1.2; }
 .brand-sub { font-size: 11.5px; color: var(--muted); }
 .new-chat { padding: 9px 14px; }
