@@ -924,7 +924,18 @@ function SessionRow({
     return () => document.removeEventListener('mousedown', close)
   }, [menu])
   return (
-    <div ref={ref} className={`session ${active ? 'active' : ''} ${menu ? 'menu-open' : ''}`} onClick={() => !editing && onOpen()}>
+    <div
+      ref={ref}
+      className={`session ${active ? 'active' : ''} ${menu ? 'menu-open' : ''}`}
+      onClick={() => !editing && onOpen()}
+      // right-click: the same menu as ⋯ (rename, move, archive, delete)
+      onContextMenu={(e) => {
+        if (editing) return
+        e.preventDefault()
+        e.stopPropagation()
+        setMenu(true)
+      }}
+    >
       {editing ? (
         <RenameInput initial={s.title} onDone={onRename} onCancel={onCancel} />
       ) : (

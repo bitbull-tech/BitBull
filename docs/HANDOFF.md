@@ -437,3 +437,16 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
   openai/gpt-6-luna → gm/gpt-6-luna and z-ai/glm-5.3-flash → gm/glm-5.3-flash (his SayGM key on
   Ditto), while billing is set to the Ditto balance. Raised with Tom; not changed.
 
+## Window and page review, model picker makers and speed (10 Nov 2026)
+
+- Window: `web/src/screen.ts` (getDisplayMedia, PNG frame ≤1920 wide) + Chat.tsx button/chip; a
+  fresh frame goes with each send while shared. Headless test can't open a share picker: untested
+  on a real desktop.
+- Extension: `browser-extension/` (MV3; activeTab, scripting, storage; host localhost/127.0.0.1).
+  Posts to `POST /api/captures` with APP_TOKEN; `server/src/captures.ts` holds it in memory and
+  builds the Markdown brief; the open page polls `GET /api/captures/next` every 3 s and attaches
+  screenshot + .md. Not yet loaded in a real Chrome.
+- Speed: `turns.first_token_at` (migration) set on the first text/thinking event; advisor.ts
+  `usageByModel` gives `firstTokenSeconds` (median of last 50). Picker: maker checkboxes
+  (`makerOf`), sort Maker/Cheapest/Fastest.
+

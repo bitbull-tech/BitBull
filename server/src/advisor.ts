@@ -35,6 +35,10 @@ export interface ModelUsage {
   avgInputTokens?: number;
   avgOutputTokens?: number;
   avgSeconds?: number;
+  /** typical time to the first word of a reply (median of your recent turns), seconds */
+  firstTokenSeconds?: number;
+  /** how many turns that figure is based on */
+  speedSamples?: number;
   lastUsed?: number;
 }
 
@@ -73,6 +77,22 @@ export function usageByModel(): ModelUsage[] {
     if (!u) out.set(id, (u = { id, turns: 0, done: 0, errors: 0, stopped: 0, replies: 0, totalCostUsd: 0 }));
     return u;
   };
+  // Time to first token, per model: the median of the last 50 finished turns that measured it
+  // (a median, because one cold start or a long tool call before any text would skew a mean)
+  const ttftRows = db
+    .prepare(
+      `SELECT model, first_token_at - started_at AS ms FROM turns
+        WHERE first_token_at IS NOT NULL AND status = 'done' AND first_token_at >= started_at
+        ORDER BY started_at DESC LIMIT 5000`,
+    )
+    .all() as Array<{ model: string; ms: number }>;
+  const ttft = new Map<string, number[]>();
+  for (const r of ttftRows) {
+    const list = ttft.get(r.model) ?? [];
+    if (list.length < 50) list.push(r.ms);
+    ttft.set(r.model, list);
+  }
+
   for (const r of turnRows) {
     const u = get(r.model);
     u.turns = r.turns;
@@ -81,6 +101,12 @@ export function usageByModel(): ModelUsage[] {
     u.stopped = r.stopped ?? 0;
     if (r.last_used) u.lastUsed = r.last_used;
     if (r.avg_ms) u.avgSeconds = Math.round(r.avg_ms / 100) / 10;
+    const samples = ttft.get(r.model);
+    if (samples?.length) {
+      const sorted = [...samples].sort((a, b) => a - b);
+      u.firstTokenSeconds = Math.round(sorted[Math.floor(sorted.length / 2)] / 100) / 10;
+      u.speedSamples = sorted.length;
+    }
   }
   for (const r of msgRows) {
     const u = get(r.model);

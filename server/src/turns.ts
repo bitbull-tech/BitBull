@@ -45,6 +45,8 @@ interface LiveTurn {
   timer: NodeJS.Timeout | null;
   watchers: Set<Watcher>;
   aborted: boolean;
+  /** the first text/thinking has been seen (response speed is measured to it) */
+  firstToken?: boolean;
 }
 
 const live = new Map<string, LiveTurn>();
@@ -81,6 +83,14 @@ function flush(t: LiveTurn) {
 }
 
 function emit(t: LiveTurn, event: AgentEvent & { messageId?: string }) {
+  if (!t.firstToken && (event.type === "text" || event.type === "thinking")) {
+    t.firstToken = true;
+    try {
+      turns.firstToken(t.id, Date.now());
+    } catch {
+      /* a speed figure is never worth failing a turn over */
+    }
+  }
   const seq = ++t.lastSeq;
   const rec: TurnRecord = { seq, event };
   t.events.push(rec);

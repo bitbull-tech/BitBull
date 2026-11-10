@@ -88,6 +88,9 @@ if (!pcols.includes("ditto_sync")) db.exec("ALTER TABLE projects ADD COLUMN ditt
 if (!pcols.includes("ditto_synced_at")) db.exec("ALTER TABLE projects ADD COLUMN ditto_synced_at INTEGER");
 // Archive: set = moved to the sidebar's Archive section (nothing is deleted; NULL = in use)
 if (!pcols.includes("archived_at")) db.exec("ALTER TABLE projects ADD COLUMN archived_at INTEGER");
+// Response speed: when the first word of a reply arrived (time to first token, per model in the picker)
+const tcols = (db.prepare("PRAGMA table_info(turns)").all() as Array<{ name: string }>).map((c) => c.name);
+if (!tcols.includes("first_token_at")) db.exec("ALTER TABLE turns ADD COLUMN first_token_at INTEGER");
 if (!cols.includes("archived_at")) db.exec("ALTER TABLE sessions ADD COLUMN archived_at INTEGER");
 
 // Engine sessions are tied to absolute workspace paths. If the workspace root moved
@@ -367,6 +370,8 @@ export interface TurnRow {
   model: string;
   started_at: number;
   ended_at: number | null;
+  /** when the first text or thinking arrived */
+  first_token_at?: number | null;
 }
 
 export const turns = {
@@ -394,6 +399,9 @@ export const turns = {
     };
     db.prepare("INSERT INTO turns (id,session_id,status,model,started_at,ended_at) VALUES (@id,@session_id,@status,@model,@started_at,@ended_at)").run({ ...row });
     return row;
+  },
+  firstToken(id: string, at: number) {
+    db.prepare("UPDATE turns SET first_token_at = ? WHERE id = ? AND first_token_at IS NULL").run(at, id);
   },
   finish(id: string, status: TurnStatus) {
     db.prepare("UPDATE turns SET status = ?, ended_at = ? WHERE id = ?").run(status, Date.now(), id);

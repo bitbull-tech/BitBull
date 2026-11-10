@@ -3,8 +3,9 @@ import { HoundFindings, parseHoundBlock } from './HoundFindings'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ReplyFiles } from './ReplyFiles'
+import { captureFiles, WindowShare } from './screen'
 import { api, type OutputFile, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
-import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconHeadset, IconLock, IconMic, IconPlan, IconSend, IconShare, IconSpeaker, IconSpeakerOff, IconStop, IconTool, IconX } from './icons'
+import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconHeadset, IconLock, IconMic, IconMonitor, IconPlan, IconSend, IconShare, IconSpeaker, IconSpeakerOff, IconStop, IconTool, IconX } from './icons'
 import { useSpeaking, useVoice } from './voice/useVoice'
 import { speaker } from './voice/speaker'
 import { chunk, speakable } from './voice/text'
@@ -112,6 +113,30 @@ export function Chat({
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [plan, setPlan] = useState(false)
+  // "Show BitBull a window": while shared, each message carries a fresh picture of it (screen.ts)
+  const [share, setShare] = useState<WindowShare | null>(null)
+  const shareRef = useRef<WindowShare | null>(null)
+  shareRef.current = share
+  const stopShare = () => {
+    shareRef.current?.stop()
+    setShare(null)
+  }
+  const showWindow = async () => {
+    try {
+      let s = shareRef.current
+      if (!s?.active) {
+        s = await WindowShare.start()
+        s.onEnd = () => setShare(null)
+        setShare(s)
+      }
+      addFiles([await s.frame()])
+      taRef.current?.focus()
+    } catch (e) {
+      // closing the picker is not an error worth showing
+      if (!(e instanceof DOMException && e.name === 'NotAllowedError')) setNotice(e instanceof Error ? e.message : String(e))
+    }
+  }
+  useEffect(() => () => shareRef.current?.stop(), [])
   // files the agent made or changed in this chat, shown under the reply that made them
   const [outputs, setOutputs] = useState<{ projectId: string; files: OutputFile[]; host: string | null } | null>(null)
   const loadOutputs = (id: string | undefined) => {
@@ -198,6 +223,27 @@ export function Chat({
     }
   }, [])
 
+  // Pages sent from the BitBull browser extension land in the chat that is open (captures.ts)
+  useEffect(() => {
+    let stopped = false
+    const poll = async () => {
+      if (document.visibilityState !== 'visible') return
+      const r = await api.nextCapture().catch(() => null)
+      const c = r?.capture
+      if (!c || stopped) return
+      addFiles(captureFiles(c))
+      setInput((cur) => (cur.trim() ? cur : `Review this page: ${c.title || c.url} (${c.url})`))
+      setNotice(`Page from the browser attached: ${c.title || c.url}`)
+      taRef.current?.focus()
+    }
+    const t = setInterval(() => void poll(), 3000)
+    return () => {
+      stopped = true
+      clearInterval(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const patchLast = (fn: (m: ViewMessage) => ViewMessage) =>
     setMsgs((all) => (all.length ? [...all.slice(0, -1), fn(all[all.length - 1])] : all))
 
@@ -277,9 +323,15 @@ export function Chat({
     }
     setBusy(true)
     let uploaded: Uploaded[] = []
-    if (pending.length) {
+    // a window is being shown: this message carries a picture of it as it is now
+    const toSend = [...pending]
+    if (shareRef.current?.active && !pending.some((f) => f.type === 'image/png' && Date.now() - f.lastModified < 5000)) {
+      const frame = await shareRef.current.frame().catch(() => null)
+      if (frame) toSend.push(frame)
+    }
+    if (toSend.length) {
       try {
-        uploaded = (await api.upload(s.id, pending)) ?? []
+        uploaded = (await api.upload(s.id, toSend)) ?? []
       } catch (e) {
         setNotice(e instanceof Error ? e.message : 'Upload failed')
         setBusy(false)
@@ -430,8 +482,16 @@ export function Chat({
             void send()
           }}
         >
-          {(pending.length > 0 || folders.length > 0) && (
+          {(pending.length > 0 || folders.length > 0 || share) && (
             <div className="chips">
+              {share && (
+                <span className="chip sharing" title="Each message you send includes a fresh picture of this window. Stop sharing to end it.">
+                  <IconMonitor size={13} /> Showing: {share.label}
+                  <button type="button" onClick={stopShare} aria-label="Stop showing the window">
+                    <IconX size={12} />
+                  </button>
+                </span>
+              )}
               {folders.map((f) => (
                 <span className={`chip ${f.startsWith('links/') ? 'linked' : ''}`} key={f} title={f.startsWith('links/') ? 'Your folder, read-only: the agent can read it but not change it' : 'A copy, uploaded to the workspace'}>
                   {f.startsWith('links/') ? <IconLock size={13} /> : <IconFolder size={13} />} {f.startsWith('links/') ? `${f.slice(6)} (read-only)` : f}
@@ -473,6 +533,16 @@ export function Chat({
             <button type="button" className="icon-btn" title="Attach files" onClick={() => fileRef.current?.click()}>
               <IconClip />
             </button>
+            {WindowShare.supported() && (
+              <button
+                type="button"
+                className={`icon-btn ${share ? 'on' : ''}`}
+                title={share ? `Attach a fresh picture of ${share.label}` : 'Show BitBull a window: pick one, and a picture of it is attached (and refreshed with each message while you share it)'}
+                onClick={() => void showWindow()}
+              >
+                <IconMonitor />
+              </button>
+            )}
             <input ref={fileRef} type="file" multiple hidden onChange={(e) => (addFiles(e.target.files), (e.target.value = ''))} />
             <FolderMenu
               onUpload={() => folderRef.current?.click()}

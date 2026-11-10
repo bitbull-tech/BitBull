@@ -75,6 +75,9 @@ export interface ModelUsage {
   avgInputTokens?: number
   avgOutputTokens?: number
   avgSeconds?: number
+  /** typical time to the first word of a reply (median of recent turns), seconds */
+  firstTokenSeconds?: number
+  speedSamples?: number
   lastUsed?: number
 }
 export interface AdvicePick {
@@ -455,6 +458,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo, fetchOnly }),
     }),
+  /** A page the browser extension sent, waiting to be attached (server/src/captures.ts) */
+  nextCapture: () => req<{ capture: { id: string; at: number; url: string; title: string; screenshot?: string; summary: string } | null }>('/api/captures/next'),
   routerModels: (refresh = false) =>
     req<{ configured: boolean; background: 'saygm' | 'ditto-router'; model: string; active: boolean; models: RouterModel[]; error?: string }>(
       `/api/router/models${refresh ? '?refresh=1' : ''}`,

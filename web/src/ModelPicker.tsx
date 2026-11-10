@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Model } from './api'
+import { api, type Model, type ModelUsage } from './api'
 import { IconCheck, IconChevron, IconEye, IconLock, IconSearch } from './icons'
 import { ModelDog } from './dogs'
 
@@ -10,13 +10,61 @@ const FAMILY_LABEL: Record<Model['family'], string> = {
   open: 'Open weights',
   other: 'Other',
 }
-const FAMILY_ORDER: Model['family'][] = ['anthropic', 'openai', 'google', 'open', 'other']
 const API_LABEL: Record<Model['api'], string> = {
   anthropic: 'Messages API',
   responses: 'Responses API',
   google: 'Gemini API',
   chat: 'Chat API',
 }
+
+/** Who made a model: from its id first (SayGM's ids name the family), then the gateway's owner, then the family. */
+const MAKER_BY_ID: [RegExp, string][] = [
+  [/claude|anthropic/i, 'Anthropic'],
+  [/\bgpt|openai|\bo[1-9]\b|codex/i, 'OpenAI'],
+  [/gemini|gemma|google/i, 'Google'],
+  [/deepseek/i, 'DeepSeek'],
+  [/kimi|moonshot/i, 'Moonshot'],
+  [/glm|z-ai|zhipu/i, 'Z.ai'],
+  [/qwen|qwq/i, 'Qwen'],
+  [/llama|meta/i, 'Meta'],
+  [/mistral|devstral|codestral|magistral/i, 'Mistral'],
+  [/grok|x-ai|xai/i, 'xAI'],
+  [/minimax/i, 'MiniMax'],
+  [/nemotron|nvidia/i, 'NVIDIA'],
+  [/command|cohere/i, 'Cohere'],
+  [/phi-|microsoft/i, 'Microsoft'],
+  [/nova|amazon/i, 'Amazon'],
+]
+export function makerOf(m: Model): string {
+  for (const [re, name] of MAKER_BY_ID) if (re.test(m.id)) return name
+  const owner = (m.provider ?? '').trim()
+  for (const [re, name] of MAKER_BY_ID) if (owner && re.test(owner)) return name
+  if (owner && !/saygm|system|library/i.test(owner)) return owner.charAt(0).toUpperCase() + owner.slice(1)
+  return FAMILY_LABEL[m.family]
+}
+
+/** Your usage per model (for response speed), fetched once per page and refreshed after a turn. */
+let usageLoad: Promise<Map<string, ModelUsage>> | null = null
+export function modelUsageMap(refresh = false) {
+  if (!usageLoad || refresh)
+    usageLoad = api
+      .modelUsage()
+      .then((r) => new Map(r.usage.map((u) => [u.id, u])))
+      .catch(() => new Map())
+  return usageLoad
+}
+const speedLabel = (u?: ModelUsage) => (u?.firstTokenSeconds !== undefined ? `${u.firstTokenSeconds < 10 ? u.firstTokenSeconds.toFixed(1) : Math.round(u.firstTokenSeconds)} s` : null)
+
+const MAKERS_KEY = 'bitbull-mp-makers'
+const savedMakers = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(MAKERS_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+type SortBy = 'name' | 'price' | 'speed'
 
 export const money = (n: number) => `$${n > 0 && n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`
 
@@ -36,23 +84,58 @@ export function ModelPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [fam, setFam] = useState<Model['family'] | 'all'>('all')
+  // makers ticked (none = all), remembered per browser
+  const [makers, setMakers] = useState<string[]>(savedMakers)
+  const [sortBy, setSortBy] = useState<SortBy>('name')
+  const [usage, setUsage] = useState<Map<string, ModelUsage>>(new Map())
+  useEffect(() => {
+    if (open) void modelUsageMap(true).then(setUsage)
+  }, [open])
+  const toggleMaker = (name: string) =>
+    setMakers((cur) => {
+      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]
+      try {
+        localStorage.setItem(MAKERS_KEY, JSON.stringify(next))
+      } catch {
+        /* private window */
+      }
+      setCursor(0)
+      return next
+    })
   const [cursor, setCursor] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const current = models.find((m) => m.id === value)
 
+  // makers present, most models first
+  const makerCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const x of models) m.set(makerOf(x), (m.get(makerOf(x)) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  }, [models])
+  // a saved maker that isn't in this catalogue any more must not hide everything
+  const activeMakers = makers.filter((x) => makerCounts.some(([n]) => n === x))
+
   const filtered = useMemo(() => {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean)
+    const price = (m: Model) => (m.price ? m.price.input + m.price.output : Infinity)
+    const speed = (m: Model) => usage.get(m.id)?.firstTokenSeconds ?? Infinity
     return models
-      .filter((m) => fam === 'all' || m.family === fam)
+      .filter((m) => !activeMakers.length || activeMakers.includes(makerOf(m)))
       .filter((m) => {
-        const hay = `${m.id} ${m.name} ${m.provider ?? ''} ${FAMILY_LABEL[m.family]}`.toLowerCase()
+        const hay = `${m.id} ${m.name} ${m.provider ?? ''} ${makerOf(m)} ${FAMILY_LABEL[m.family]}`.toLowerCase()
         return terms.every((t) => hay.includes(t))
       })
-      .sort((a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) || a.name.localeCompare(b.name))
-  }, [models, q, fam])
+      .sort((a, b) =>
+        sortBy === 'price'
+          ? price(a) - price(b) || a.name.localeCompare(b.name)
+          : sortBy === 'speed'
+            ? speed(a) - speed(b) || price(a) - price(b)
+            : makerOf(a).localeCompare(makerOf(b)) || a.name.localeCompare(b.name),
+      )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models, q, makers, makerCounts, sortBy, usage])
 
   useEffect(() => {
     if (!open) return
@@ -83,8 +166,7 @@ export function ModelPicker({
     setQ('')
   }
 
-  const families = FAMILY_ORDER.filter((f) => models.some((m) => m.family === f))
-  let lastFam: string | null = null
+  let lastMaker: string | null = null
 
   return (
     <div className="mp" ref={rootRef}>
@@ -120,17 +202,54 @@ export function ModelPicker({
               }}
             />
           </div>
-          <div className="mp-tabs">
-            {(['all', ...families] as const).map((f) => (
-              <button key={f} className={fam === f ? 'on' : ''} onClick={() => setFam(f)}>
-                {f === 'all' ? 'All' : FAMILY_LABEL[f]}
-              </button>
+          <div className="mp-makers" role="group" aria-label="Filter by maker">
+            {makerCounts.map(([name, n]) => (
+              <label key={name} className={`mp-maker ${activeMakers.includes(name) ? 'on' : ''}`}>
+                <input type="checkbox" checked={activeMakers.includes(name)} onChange={() => toggleMaker(name)} />
+                {name}
+                <span className="mp-count">{n}</span>
+              </label>
             ))}
+            {activeMakers.length > 0 && (
+              <button
+                className="link small"
+                onClick={() => {
+                  setMakers([])
+                  try {
+                    localStorage.removeItem(MAKERS_KEY)
+                  } catch {
+                    /* private window */
+                  }
+                }}
+              >
+                All makers
+              </button>
+            )}
+          </div>
+          <div className="mp-sort">
+            <span className="muted">Sort</span>
+            <div className="seg mini">
+              {(
+                [
+                  ['name', 'Maker'],
+                  ['price', 'Cheapest'],
+                  ['speed', 'Fastest'],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} className={sortBy === k ? 'on' : ''} onClick={() => (setSortBy(k), setCursor(0))}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="grow" />
+            <span className="muted small">{filtered.length} shown</span>
           </div>
           <div className="mp-list" ref={listRef} role="listbox">
             {filtered.map((m, i) => {
-              const header = fam === 'all' && !q && m.family !== lastFam ? FAMILY_LABEL[m.family] : null
-              lastFam = m.family
+              const maker = makerOf(m)
+              const header = sortBy === 'name' && !q && maker !== lastMaker ? maker : null
+              lastMaker = maker
+              const u = usage.get(m.id)
               return (
                 <div key={m.id}>
                   {header && <div className="mp-group">{header}</div>}
@@ -184,6 +303,16 @@ export function ModelPicker({
                       ) : (
                         <div className="mp-cost-sub">—</div>
                       )}
+                      <div
+                        className={`mp-speed ${speedLabel(u) ? '' : 'none'}`}
+                        title={
+                          speedLabel(u)
+                            ? `Time to the first word of a reply: the median of your last ${u!.speedSamples} repl${u!.speedSamples === 1 ? 'y' : 'ies'} on it${u!.avgSeconds ? ` · a whole turn averages ${u!.avgSeconds} s` : ''}`
+                            : 'No speed yet: measured from your own replies once you use it'
+                        }
+                      >
+                        {speedLabel(u) ? `⚡ ${speedLabel(u)} to first word` : 'speed: not used yet'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -192,7 +321,7 @@ export function ModelPicker({
             {!filtered.length && <div className="mp-empty">No models match “{q}”.</div>}
           </div>
           <div className="mp-foot">
-            <span>Prices are SayGM's live in / out rates · −% is the saving against list price</span>
+            <span>Prices are SayGM's live in / out rates · −% is the saving against list price · ⚡ is from your own replies</span>
             <button
               className="link"
               onClick={() => {

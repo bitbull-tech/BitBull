@@ -545,6 +545,23 @@ button; rows show `vault` as their source. The vault is **at-rest** protection: 
 values live in server memory and engines are spawned without them in their environment — but
 server and agent share a uid, so `/proc` is not a hard wall (see docs/THREAT-MODEL.md R1).
 
+## Showing BitBull a window or a web page
+
+- **Show BitBull a window** (the screen button by the paperclip): pick a window in your browser's
+  share dialog and a picture of it is attached to your message. While you keep sharing, every
+  message you send carries a fresh picture of it; the "Showing: …" chip stops it. Any model that
+  reads images can then review what you see.
+- **The BitBull browser extension** (`browser-extension/`, load it unpacked in Chrome or Edge):
+  click it (or Alt+Shift+B) on any page and it sends a screenshot plus the page's text, outline,
+  links, failed requests, images without alt text and unlabelled fields to your local BitBull,
+  which attaches them to the chat you have open. It reads only the tab you're on, only when you
+  click, and sends only to BitBull on this computer. See
+  [browser-extension/README.md](browser-extension/README.md).
+
+The model picker filters by maker (tick any number) and sorts by name, price or speed. The ⚡
+figure is the typical time to the first word of a reply, measured from your own recent replies
+on that model.
+
 ## Getting files out (no command line)
 
 Whatever the agent writes, a brief, an image, a script, a whole folder, can be taken out without a shell:

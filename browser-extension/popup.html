@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BitBull</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header><img src="icons/48.png" alt=""><div><b>Send this page to BitBull</b><span id="where" class="muted"></span></div></header>
+  <main id="send-view">
+    <p class="muted">A screenshot of what you can see, plus the page's text, outline, links, failed requests and accessibility checks. It's attached to the chat you have open in BitBull.</p>
+    <label class="row"><input type="checkbox" id="shot" checked> Include a screenshot</label>
+    <button id="send" class="primary">Send to BitBull</button>
+    <p id="status" class="status" role="status"></p>
+    <button id="open" class="link" hidden>Open BitBull</button>
+  </main>
+  <details id="settings">
+    <summary>Connection</summary>
+    <label>BitBull address<input id="base" placeholder="http://localhost:8787" spellcheck="false"></label>
+    <label>Access token<input id="token" type="password" placeholder="APP_TOKEN from BitBull's .env" spellcheck="false"></label>
+    <div class="row gap"><button id="save">Save</button><button id="test">Test</button></div>
+    <p class="muted small">Kept in this browser only. The token is the same one BitBull's web page uses (Settings → Configuration → Access token, or APP_TOKEN in .env).</p>
+  </details>
+  <script src="popup.js"></script>
+</body>
+</html>

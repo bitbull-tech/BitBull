@@ -28,6 +28,7 @@ import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFil
 import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
 import { routerBackground, routerModels } from "./router.js";
+import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
@@ -130,6 +131,21 @@ app.get("/api/models", async (c) => c.json({ models: await publicModels(c.req.qu
 
 /** One model in full, including the gateway's raw record (the Models view). */
 // ---------- voice (docs/VOICE.md) ----------
+/**
+ * Pages from the BitBull browser extension: posted here, picked up by the BitBull page that is
+ * open and attached to the chat there (captures.ts). Signed in like any API call: the extension
+ * holds the access token you gave it.
+ */
+app.post("/api/captures", bodyLimit({ maxSize: 16 * 1024 * 1024, onError: (c) => c.json({ error: "That page is too big to send (16 MB)" }, 413) }), async (c) => {
+  const parsed = CaptureSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: `Not a page capture: ${parsed.error.issues[0]?.path.join(".") ?? ""} ${parsed.error.issues[0]?.message ?? ""}`.trim() }, 400);
+  const cap = addCapture(parsed.data);
+  record({ level: "info", source: "server", message: `Page captured from the browser: ${cap.title || cap.url}` });
+  return c.json({ ok: true, id: cap.id });
+});
+/** The next capture waiting for a chat (the open BitBull page asks every few seconds). */
+app.get("/api/captures/next", (c) => c.json({ capture: takeCapture() }));
+
 app.get("/api/voice", async (c) => c.json(await voiceStatus()));
 /** Text to speech with Piper, in this container: WAV back, nothing leaves the machine. */
 app.post("/api/voice/speak", bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "Too much text to speak at once" }, 413) }), async (c) => {
