@@ -3,7 +3,7 @@
 You are reading this because you are an AI agent (BitBull itself, a subagent, or an outside
 agent such as Claude Code, Codex or Gemini CLI) working in or on this product. `CLAUDE.md`
 is for agents changing BitBull's own code; this file is for agents **using** BitBull to get work done:
-building software, researching, and making heritage media with the services BitBull wires
+building software, researching, and using the Bittensor services BitBull wires
 together. Humans: `README.md`.
 
 ## 1. What BitBull is, in one paragraph
@@ -21,10 +21,9 @@ shown in an activity log the owner can review.
 |---|---|---|
 | Project workspace | the chat's working directory (`/data/projects/<slug>-<id>/`, or `/data/workspace/` for chats outside a project) | read, write, build, run, clone into |
 | Uploads | `uploads/` inside the workspace (chat attachments under `uploads/<chat>/`) | read; don't rewrite originals, write derived files beside them |
-| Archive of scans | `archive/` (made by `tools/ingest.mjs`) | read `manifest.md`, `items/<id>/original.*`, `items/<id>/text.txt` |
 | Linked folders | `/links/<name>` | read only: these are the owner's real files, mounted read-only and no-exec. Never try to write, run anything from them, or copy them wholesale |
 | Skills | `.claude/skills/<name>/SKILL.md` in every workspace | read and follow when one matches the task |
-| BitBull's own tools | `/app/tools/` (`ingest.mjs`, `atlas-run.mjs`, `hippius-setup.mjs`) | run with `node` |
+| BitBull's own tools | `/app/tools/` (`atlas-run.mjs`, `hippius-setup.mjs`) | run with `node` |
 | Everything else | `/app`, `/etc`, … | read-only filesystem; don't try to change it |
 
 The container runs as an unprivileged user with no network except through the proxy. If a
@@ -71,11 +70,11 @@ cause, not your request; say so. For a second opinion, use a subagent on a diffe
 family (the owner sets `SUBAGENT_MODEL_<NAME>`): same-family review shares blind spots.
 
 Subagents you can start (`task` tool on OpenCode, `Task`/`Agent` on the Claude engine):
-`reviewer`, `challenger`, `fact-checker` (read-only: they read files but have no shell and
+`reviewer`, `challenger` (read-only: they read files but have no shell and
 can't start other agents; put the diff or file list in their brief), `tester`, `debugger`,
 `worker` (can edit and run). Run independent ones in parallel; never give two write agents
 the same files. Habit: `reviewer` after any non-trivial change, `challenger` before a big
-plan, `fact-checker` before generating heritage media.
+plan.
 
 ### QA Hound
 
@@ -102,23 +101,9 @@ handler*: lead with the verdict, check disputed points yourself, and say what no
 - BitBull's own repo, if linked, is a filtered read-only copy without `.env` and `data/`. The
   owner refreshes it; if it looks stale, say so rather than guessing.
 
-## 6. Heritage media: Atlas AI Studio and 404
+## 6. Creative media: Atlas AI Studio and 404
 
-The end goal of this platform is grounded historical and family experiences from old
-photos, film and documents. Rules that always apply (`heritage-experience` skill, and the
-owner's likeness policy in your system prompt):
-
-- **Never state a fact about a real person without a source** in the project (a document,
-  the owner's own words). OCR text is evidence to check, not fact.
-- **Likeness**: under `ground-only`, real named people appear only through their original
-  images (Ken Burns, parallax, restoration); generative image/video/3D is for places,
-  vehicles, weather, crowds. Under `private-likeness`, animating a real person's photo is
-  allowed only inside that private project, only from images the owner uploaded and confirms
-  rights to, and every output is labelled AI-generated. Never synthesise a named person's voice.
-- **Never identify a person in a photo by face.** A name comes from a caption, a document or
-  the owner.
-
-How the services are reached:
+Image, video and 3D generation through Bittensor-connected services.
 
 - **Atlas AI Studio** (`atlas-studio` skill): image, cinematic video, 3D, rigging and
   animation. Two routes: the Atlas MCP (alpha; the owner enables it per workspace in Atlas and
@@ -129,10 +114,6 @@ How the services are reached:
   never print them.
 - **404.xyz**: no public API yet. Its slots in BitBull's integration registry are reserved; until
   404 ships an API or MCP, use Atlas's Image → 3D nodes for the same need and say so.
-- **Ingesting scans** (`archive-ingest` skill): run `node /app/tools/ingest.mjs <inbox> --out archive`
-  first (inbox = `uploads/`, `uploads/inbox/` or `/links/<name>`), then catalogue from
-  `archive/manifest.md`: what each item *says*, with evidence, never what *happened* to a person.
-  Flag conflicts; don't pick a reading silently.
 
 ## 7. Storage: Hippius
 

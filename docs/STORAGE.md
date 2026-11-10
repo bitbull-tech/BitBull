@@ -7,7 +7,7 @@ indexed in Ditto so you can find it again by what it is.
 **Hippius holds the bytes, Ditto holds what they are.** Ditto is a memory store with no
 blob storage, so it can't hold photos or film; Hippius has no idea what a file depicts. For
 every stored file BitBull saves a short Ditto memory (project, filename, key, size, SHA-256), so
-"find the photo of Grandad's squadron" searches Ditto and gets back a Hippius key.
+"find last month's subnet report" searches Ditto and gets back a Hippius key.
 
 ## Why BitBull holds the only credential
 
@@ -69,8 +69,8 @@ it lands in the workspace (the agent works on local files, as before)
 ```
 
 - **Encrypted before it leaves the machine.** Hippius encrypts at rest with per-bucket keys,
-  but its docs don't say who can read a chunk on a storage miner, and these are family
-  photographs. The object is `GMS1` + 12-byte nonce + ciphertext + 16-byte tag; a tampered
+  but its docs don't say who can read a chunk on a storage miner, and these are your
+  own files. The object is `GMS1` + 12-byte nonce + ciphertext + 16-byte tag; a tampered
   or truncated object fails to decrypt rather than returning rubbish.
 - **In the background, with retries** (2s, 15s, 60s). An upload never slows down the UI or a
   turn. Anything still pending after a restart is picked up again at boot.

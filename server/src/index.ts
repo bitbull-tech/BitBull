@@ -472,7 +472,6 @@ app.get("/api/integrations", async (c) =>
       env: env.map((e) => ({ key: e.key, label: e.label, set: !!e.value, value: e.secret ? (e.value ? `${e.value.slice(0, 4)}…${e.value.slice(-4)}` : "") : e.value })),
     })),
     atlasWorkflows: atlasWorkflows(),
-    likenessPolicy: config.heritage.likenessPolicy,
   }),
 );
 app.get("/api/integrations/status", async (c) => c.json({ integrations: await probeIntegrations() }));

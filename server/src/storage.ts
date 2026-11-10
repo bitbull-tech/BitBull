@@ -4,7 +4,7 @@
  * What goes where: **Hippius holds the bytes, Ditto holds what they are.** Every file the
  * user uploads is encrypted here and mirrored to one bucket under a per-project prefix,
  * recorded in `stored_files`, and described in a Ditto memory so "find the photo of
- * Grandad's squadron" can search for it and get back a key.
+ * last month's subnet report" can search for it and get back a key.
  *
  * Why BitBull holds the only key: Hippius sub-tokens scope to a *bucket*, read-only or
  * read-write — there is no IAM, no STS and no per-prefix policy. Prefix isolation can

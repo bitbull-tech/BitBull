@@ -20,13 +20,6 @@ export const engines: Record<EngineId, AgentEngine> = {
 const running = new Map<string, AbortController>();
 setRunningSessions(() => [...running.keys()]);
 
-const LIKENESS_RULES: Record<string, string> = {
-  "ground-only":
-    "Likeness policy (ground-only): real, named people from uploads may only be shown through their original images (Ken Burns, parallax, restoration of the scan itself). Use generative image/video/3D for places, aircraft, ships, weather, crowds and period atmosphere: reconstruct the ground, never the person. Never synthesise the voice of a named individual.",
-  "private-likeness":
-    "Likeness policy (private-likeness): generative animation of a real person's photo is allowed only inside this private project, only from images the user uploaded and confirms they have rights to, and every output must be labelled as AI-generated. Never synthesise the voice of a named individual. Never invent facts about a named person: anything stated about them must come from an attached source.",
-};
-
 function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) {
   const parts = [existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : ""];
   parts.push(
@@ -43,7 +36,6 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) 
     );
   }
   parts.push(subagentGuide(engine));
-  parts.push(`\n## Heritage media\n\n${LIKENESS_RULES[config.heritage.likenessPolicy] ?? LIKENESS_RULES["ground-only"]}`);
   if (project) {
     parts.push(
       `\n## Project: ${project.name}\n\nYour working directory is this project's workspace; keep all files for it there.` +

@@ -1,13 +1,10 @@
 # BitBull — architecture & engine proposal
 
-> Visual version with diagrams: **BitBull Platform Blueprint** (claude.ai artifact, Oct 2026).
-
 ## End goal
 
-A system for building custom historical and hereditary experiences (cinematic shorts,
-documentary sequences, playable scenes) from people's own photos, film and documents,
-combining SayGM models, Atlas / 404.xyz media generation, agentic coding assistance and
-Ditto memory, under the grounding rule from the WW2 Heritage Framework decision record.
+A coding agent and a one-stop shop for building on Bittensor: SayGM models, Ditto memory,
+Taostats subnet data, Atlas / 404.xyz media generation and Hippius storage, wired together
+behind one UI and API.
 
 ## Goals
 
@@ -145,7 +142,6 @@ MCP endpoint and a live probe. Projects opt in; engines receive only the enabled
 | `ATLAS_API_KEY`, `ATLAS_MCP_URL` | Atlas MCP (alpha): projects, platform agent, exported APIs |
 | `ATLAS_WORKFLOWS_DIR` | Exported workflow specs, run by `tools/atlas-run.mjs` (upload → execute_async → poll → download) |
 | `FOUR04_API_BASE`, `FOUR04_API_KEY`, `FOUR04_MCP_URL` | Reserved for 404.xyz; no public API yet (plugins only) |
-| `HERITAGE_LIKENESS_POLICY` | `ground-only` (default) or `private-likeness`, injected into every turn |
 | `ENABLE_WEB_SEARCH`, `ENABLE_LSP` | OpenCode websearch (Exa) and experimental LSP tool |
 
 ## Coding parity with Claude Code
@@ -154,20 +150,16 @@ Engine-provided: read/write/edit/apply_patch/glob/grep, bash, subagents (`task`)
 webfetch/websearch, AGENTS.md/CLAUDE.md, compaction. Added in this pass: plan mode
 (read-only `bitbull-plan` agent / Agent SDK plan mode), todo checklist in the UI, ten skills
 (`coding-workflow`, `git-workflow`, `verify-changes`, `code-review`, `debug-systematically`,
-`repo-onboarding`, `project-recall`, `archive-ingest`, `heritage-experience`, `atlas-studio`).
+`repo-onboarding`, `project-recall`, `atlas-studio`, `taostats-api`).
 Gaps: per-action approvals (the `question` tool is disabled because nothing can answer it),
 diff/undo UI over OpenCode snapshots, slash commands and hooks, images passed as vision
 parts, adding arbitrary MCP servers from the UI.
 
 ## Open decisions and risks
 
-1. **Likeness**: animating real people's photos conflicts with Rev 3's "reconstruct the
-   ground, never the man". Default is ground-only; private-likeness is opt-in.
-2. **Grounding is prompt-level today**; Rev 3 requires it in code. Next: a binding checker over
-   `experience/beats.json` and final captions, run server-side.
-3. **No sandbox**: bypassPermissions runs shell on the host. Containerise per project before
+1. **No sandbox**: bypassPermissions runs shell on the host. Containerise per project before
    other users.
-4. **Privacy**: full-turn Ditto archiving includes data about living relatives; add a
+2. **Privacy**: full-turn Ditto archiving keeps everything said in a chat; add a
    per-project archive switch.
-5. **Atlas runner** needs one real exported spec to confirm field names.
-6. **Spend caps** for Atlas credits; **object storage** for media; **C2PA** labels.
+3. **Atlas runner** needs one real exported spec to confirm field names.
+4. **Spend caps** for Atlas credits; **object storage** for media; **C2PA** labels.

@@ -431,7 +431,7 @@ export const api = {
     req<{ project: Project }>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(p) }),
   deleteProject: (id: string) => req(`/api/projects/${id}`, { method: 'DELETE' }),
   integrations: () =>
-    req<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[]; likenessPolicy: string }>('/api/integrations'),
+    req<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[] }>('/api/integrations'),
   integrationStatus: () => req<{ integrations: IntegrationStatus[] }>('/api/integrations/status'),
   deleteSession: (id: string) => req(`/api/sessions/${id}`, { method: 'DELETE' }),
   renameSession: (id: string, title: string) =>

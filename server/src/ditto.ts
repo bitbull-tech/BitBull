@@ -181,7 +181,7 @@ export async function archiveTurn(t: {
 
 /**
  * Index a file stored on Hippius. Hippius holds the bytes; this memory is how they are
- * found again — "the photo of Grandad's squadron" searches Ditto and gets back a key.
+ * found again — "last month's subnet report" searches Ditto and gets back a key.
  */
 export async function indexFile(f: {
   name: string;

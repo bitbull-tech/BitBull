@@ -50,8 +50,7 @@ port for trying branches (`test-stack.ps1`), collapsible chat groups, network ac
 (`egress.ts` + `mcp.ts`: the agent asks, the user allows/denies, approvals memory-only), folders
 as upload-a-copy or read-only link (`link.ps1`, `bitbull-links.sh`, `link-helper.ps1` for the folder
 picker, filtered copies for folders with secrets, ↻ refresh), `copy-in.ps1`, `backup.ps1`, two
-security hardening rounds (below), the capture/ingest pipeline (`docs/CAPTURE.md`,
-`tools/ingest.mjs`), the Repositories view (`repos.ts`, `ReposDialog`), Files view with real paths
+security hardening rounds (below), the Repositories view (`repos.ts`, `ReposDialog`), Files view with real paths
 and sorting, `agent-readme.md`, then (4 Nov) the **Windows desktop app** (`desktop/`, Tauri 2:
 checks WSL/distro/Docker/stack, runs the bitbull-wsl scripts with buttons, opens BitBull's UI in an
 IPC-less window signed in from `.env`, tray) and **Claude project import**
@@ -66,8 +65,7 @@ project was exported first).
 - Runtime: WSL2 distro **`bitbull`** (locked down) runs Docker Engine; containers `bitbull-agent`,
   `bitbull-egress`, `bitbull-gateway`; UI at http://localhost:8787. The everyday `Ubuntu` distro was only
   used to bootstrap `bitbull`.
-- Default model: **kimi-k3** (SayGM). Small model claude-haiku-4-5. Heritage policy set to
-  `private-likeness`.
+- Default model: **kimi-k3** (SayGM). Small model claude-haiku-4-5.
 - Accounts/keys in use (values never stored here): SayGM, Ditto (MCP), GitHub (token +
   GITHUB_USER_NAME/EMAIL), Atlas (`atk_…`), Taostats (optional), Hippius (pending).
 
@@ -75,11 +73,8 @@ project was exported first).
 
 1. Personal agent on SayGM (switch models freely) with Ditto as memory, own UI, backed up to
    GitHub, portable (local or by URL + key; may be opened to other users later).
-2. End goal: build custom historical/hereditary experiences — old photos, film and documents
-   "brought back to life and dramatised via video" — combining SayGM LLMs, Atlas AI Studio
-   (release 0.38 cinematic generation) / 404.xyz, agentic coding and uploads. Governed by the
-   WW2 Heritage Framework grounding rule (never state a fact about a real person without a source;
-   likeness policy `ground-only` or `private-likeness`).
+2. A coding agent and one-stop shop for building on Bittensor: its subnets and services
+   (Taostats, Atlas AI Studio / 404.xyz, Hippius, Ditto) wired in.
 
 ## Architecture (as built)
 
@@ -102,9 +97,9 @@ project was exported first).
 - **Skills** (`skills/`) mirrored into every workspace `.claude/skills` (read by both engines) and
   backed up to Ditto in the background. 11 skills incl. coding-workflow, git-workflow,
   verify-changes, code-review, debug-systematically, repo-onboarding, project-recall,
-  archive-ingest, heritage-experience, atlas-studio, taostats-api.
+  atlas-studio, taostats-api.
 - **Subagents** (`subagents/*.md`): reviewer, challenger (read-only), debugger, tester, worker
-  (write), fact-checker (read-only). Per-agent model via `SUBAGENT_MODEL_<NAME>`. Read-only on
+  (write). Per-agent model via `SUBAGENT_MODEL_<NAME>`. Read-only on
   OpenCode = edit/bash deny and `task` off (a shell allowlist proved bypassable, 28 Oct review: `cat a>b`, `cat x | sh`, `xargs rm`; and a read agent could start a write agent);
   on Claude engine = no edit tools, no shell, no Task/Agent. Disabled in Plan mode. Tests in
   `server/src/subagents.test.ts` (8 passing).
@@ -286,8 +281,6 @@ React XSS surface, serveStatic path. → run a swarm on the current tree with th
 4b. **Import the other Claude projects**: export each with Claude ("export this project for
    BitBull", same layout as `claude-export/game-development/`), run `tools/import-project.mjs`, send
    the printed prompt so the agent seeds Ditto.
-5. **Capture** (`docs/CAPTURE.md`): route 1 (phones → OneDrive → linked folder → ingest) works
-   now; route 2 (phone capture page → BitBull inbox) follows Phase 1.
 6. GAPS.md: checkpoints + diff + undo; parallel builds in git worktrees; approvals for
    push/delete/install; hooks; browser testing; spend caps; CI version tags + vuln scanning.
 
@@ -349,8 +342,7 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
   each a link to its setup. **Integrations** holds every outside service, one card each with live
   status, docs link and its editable keys: SayGM (with Reload model list), Ditto, GitHub,
   Taostats, Atlas (with exported workflows), 404, Hippius. **Configuration** is BitBull's own
-  workings: the vault, agent and runtime settings (the server's `bitbull` group), heritage
-  policy, skills, subagents, runtime info. The server's setting groups are unchanged; the web
+  workings: the vault, agent and runtime settings (the server's `bitbull` group), skills, subagents, runtime info. The server's setting groups are unchanged; the web
   splits them by id (`SERVICES` in `Settings.tsx`). Taostats has no live probe, so its card says
   whether a key is set.
 - **macOS** (CLIENTS.md Phase 6, decisions there): `scripts/bitbull-mac/` (setup, deploy, start,
@@ -454,4 +446,11 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
   after an hour (`sessions.listUsed` / `pruneUnused`). Sidebar "Select" mode with bulk Archive /
   Move / Delete (also "Select…" in a chat's menu). Model browser has the maker checkboxes and a
   Speed column.
+
+## Family archive split out (10 Nov 2026)
+
+BitBull is now only the coding agent and Bittensor one-stop shop. The family-archive workstream
+lives in `D:\github\family-archive` (its own README lists what moved). Removed here: two skills,
+one subagent, one tool, two docs, the likeness setting and its prompt text, and the wording across
+the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittensor tools.
 

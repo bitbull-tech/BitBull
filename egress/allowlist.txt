@@ -33,10 +33,3 @@ objects.githubusercontent.com
 raw.githubusercontent.com
 uploads.github.com
 
-# Heritage research: uncomment the archives you want the agent to read
-# .nationalarchives.gov.uk
-# .cwgc.org
-# .iwm.org.uk
-# .rafmuseum.org.uk
-# .wikipedia.org
-# .wikimedia.org

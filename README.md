@@ -264,7 +264,7 @@ Cloudflare Tunnel) before exposing it: the agent can run shell commands in its w
 `.env` is the base. Keys and settings marked **Edit** in Settings can also be set from the UI:
 the outside services (SayGM, Ditto, GitHub, Taostats, Atlas, 404, Hippius) under
 **Integrations**, one card each with its live status; BitBull's own workings (default engine and
-models, heritage policy, upload size, the vault, skills and subagents) under **Configuration**.
+models, upload size, the vault, skills and subagents) under **Configuration**.
 **Status** shows every service at a glance. They're saved on the server in `data/settings.local.json`
 (mode 600, never in git), override `.env`, and apply immediately: no deploy or restart.
 **Use .env** removes an override. Each value shows where it comes from: `.env`,
@@ -344,7 +344,7 @@ Nothing is deleted or changed; archived chats still open, still turn up in searc
 ## Subagents
 
 The agent can start specialists in parallel, like Claude Code's Task tool: `reviewer`,
-`challenger`, `debugger`, `tester`, `worker` and `fact-checker`, defined in
+`challenger`, `debugger`, `tester` and `worker`, defined in
 [`subagents/`](subagents/README.md). Their progress shows live under each reply. Give them
 a different model for a second opinion, e.g. `SUBAGENT_MODEL_REVIEWER=gpt-5.5`.
 
@@ -393,7 +393,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\copy-in.ps1 -Path "
 
 # link a folder read-only: pick it in a dialog, or give the path
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1
-powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\Photos\Horner"
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\Projects\specs"
 # once: "Link to BitBull (read-only)" on Explorer's right-click menu for folders (-UninstallMenu removes it)
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -InstallMenu
 # a folder with secrets: a read-only copy without them (BitBull's own repo always links this way)
@@ -401,7 +401,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\g
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Refresh bitbull
 # list links (also re-mounts missing ones), remove one
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -List
-powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Remove horner
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Remove specs
 ```
 
 **Linking with the mouse.** The page can't see your disks and never sends a path. It asks the
@@ -456,14 +456,6 @@ wsl -d bitbull --exec docker exec bitbull-agent python3 -c "import socket; socke
 # expected: PermissionError / Operation not permitted
 ```
 
-## Capturing documents, photos and books
-
-Phones scan (Microsoft Lens / Adobe Scan / vFlat), a shared cloud folder collects, the PC
-syncs it, and it's linked read-only into BitBull; in a project chat, "ingest /links/bitbull-capture"
-runs `tools/ingest.mjs`, which copies new scans into `archive/items/`, de-duplicates, reads
-dates, OCRs and writes `archive/manifest.md` for the `archive-ingest` skill. The phone-to-BitBull
-route (per-device upload-only tokens, tunnel, capture page) is planned in
-[docs/CAPTURE.md](docs/CAPTURE.md).
 
 ## Moving your Claude.ai projects and chats in
 

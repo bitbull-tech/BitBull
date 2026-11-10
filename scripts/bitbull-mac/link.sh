@@ -1,7 +1,7 @@
 #!/bin/bash
 # Give BitBull read-only access to a folder on this Mac.
 #
-#   scripts/bitbull-mac/link.sh add ~/Documents/Horner            link a folder
+#   scripts/bitbull-mac/link.sh add ~/Documents/specs             link a folder
 #   ... add ~/code/thing --name thing                              choose the name BitBull shows
 #   ... add <folder> --hide            a copy WITHOUT .env, keys and wallets (recommended when found)
 #   ... add <folder> --allow-secrets   a copy of everything, keys included (you are sure)

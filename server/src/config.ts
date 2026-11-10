@@ -61,7 +61,6 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   // Changing this makes everything already stored unreadable, so the UI confirms first
   HIPPIUS_ENCRYPTION_KEY: {},
   STORAGE_MIRROR: { options: ["uploads", "off"] },
-  HERITAGE_LIKENESS_POLICY: { options: ["ground-only", "private-likeness"] },
   UPLOAD_MAX_MB: {},
   ENABLE_WEB_SEARCH: { options: ["true", "false"] },
   ENABLE_LSP: { options: ["true", "false"] },
@@ -256,16 +255,6 @@ function buildConfig() {
     maxFileMb: Number(env("STORAGE_MAX_FILE_MB", "2048")),
   },
 
-  heritage: {
-    /**
-     * How generated media may depict real, named people from uploads.
-     *  ground-only     — real people only via Ken Burns/parallax of the original image; generative
-     *                    video/3D for places, craft, weather, crowds (decision record Rev 3 default)
-     *  private-likeness — generative animation of a real person's photo allowed in private,
-     *                    labelled family projects, with the uploader's confirmation of rights/consent
-     */
-    likenessPolicy: env("HERITAGE_LIKENESS_POLICY", "ground-only") as "ground-only" | "private-likeness",
-  },
 
   agent: {
     /** OpenCode web search via Exa (no key needed) */

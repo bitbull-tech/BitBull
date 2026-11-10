@@ -25,7 +25,7 @@ no claims about isolating users from each other. The actors we design against:
 | `APP_TOKEN` (the API's one credential) | server env | loopback-only gateway, timing-safe compare |
 | Vault key (decrypts all vaulted keys) | Windows helper (DPAPI), server memory while unlocked | never on Linux disk |
 | Chats, uploads, memory archive | `/data` (SQLite, files), Ditto account | container walls, redaction on archive |
-| Linked folders (family photos, documents) | Windows, mounted `ro,noexec` into the sandbox | 4-layer read-only enforcement + write-test |
+| Linked folders (your files, documents) | Windows, mounted `ro,noexec` into the sandbox | 4-layer read-only enforcement + write-test |
 | The owner's PC and home network | — | internal Docker network, `private_dst` squid rule, loopback binds |
 | The WSL distro root | — | scripts run unprivileged where possible |
 

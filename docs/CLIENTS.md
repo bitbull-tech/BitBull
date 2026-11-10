@@ -87,7 +87,7 @@ re-keying everything.
 
 - `devices(id, name, token_hash, scopes, created_at, last_seen_at, revoked_at)`. Scopes matter
   from day one: a scanning phone gets `capture:<project>` only (upload into one inbox, nothing
-  else); see docs/CAPTURE.md §3.
+  else).
 - Pairing: a client already holding `APP_TOKEN` (web UI or desktop app) mints a short-lived
   code — shown as a QR for the phone — which the new device exchanges once for its own
   token. Codes expire in minutes and are single-use.

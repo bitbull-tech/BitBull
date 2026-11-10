@@ -2,10 +2,10 @@
   Give BitBull read-only access to a folder on this PC, without copying it.
 
       powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1                  pick a folder in a dialog
-      ... -Add "D:\Photos\Horner"
+      ... -Add "D:\Projects\specs"
       ... -Add "D:\code\thing" -Name thing     choose the name BitBull shows (default: the folder name)
       ... -List
-      ... -Remove horner
+      ... -Remove specs
       ... -Hide              link a filtered read-only COPY without .env, keys, wallets (and, for BitBull's
                              own repo, data\); refresh it with -Refresh <name>
       ... -InstallMenu       add "Link to BitBull (read-only)" to the right-click menu of folders in Explorer

@@ -66,7 +66,7 @@ test("guide only names habits for agents that exist", () => {
   const onlyWorker = listSubagents(dirWith({ "w.md": agent("worker", "access: write\n") }));
   const g = subagentGuide("opencode", onlyWorker);
   assert.match(g, /worker/);
-  assert.doesNotMatch(g, /reviewer|challenger|fact-checker/);
+  assert.doesNotMatch(g, /reviewer|challenger/);
   assert.equal(subagentGuide("claude", []), "");
   assert.match(subagentGuide("claude", onlyWorker), /Task\/Agent tool/);
 });

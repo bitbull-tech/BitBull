@@ -47,7 +47,7 @@ if (available) {
 }
 
 test("OpenCode resolves read-only agents with no shell, edits or delegation", { skip: !available && "opencode binary not available" }, () => {
-  for (const name of ["reviewer", "challenger", "fact-checker"]) {
+  for (const name of ["reviewer", "challenger"]) {
     const a = resolved(name);
     assert.equal(last(a, "bash"), "deny", `${name}: bash`);
     assert.equal(last(a, "edit"), "deny", `${name}: edit`);

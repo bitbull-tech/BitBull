@@ -70,8 +70,8 @@ function toView(m: Message): ViewMessage {
 }
 
 const PROJECT_SUGGESTIONS = [
-  { title: 'Catalogue my uploads', text: 'Use the archive-ingest skill: catalogue everything in uploads/, extract what each item says with evidence, and list conflicts and questions for me.' },
-  { title: 'Plan a cinematic', text: 'Using the catalogue, propose a 90-second cinematic: beats, which shots use original images and which are reconstructions, and the grounding bindings for every line.' },
+  { title: 'Map a subnet', text: 'Pick a Bittensor subnet with me, then pull its current state from Taostats (registration, emissions, validators, miners) and summarise what it would take to build on it.' },
+  { title: 'Plan a feature', text: 'Help me plan a feature for the code in this project: ask what it should do, then propose the design, the files involved and the tests.' },
   { title: 'Set up a codebase', text: 'Clone a repository into this project and onboard it: map the code, run the build and tests, and write AGENTS.md. Ask me for the URL.' },
   { title: 'Catch me up', text: 'Catch me up on this project from memory and from the files in the workspace: where it stands and what is still open.' },
 ]

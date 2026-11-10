@@ -135,7 +135,6 @@ export function subagentGuide(engine: "opencode" | "claude", list = listSubagent
   const habits = [
     has("reviewer") && `after a non-trivial code change, run \`reviewer\`${has("tester") ? " (and `tester` when tests are missing)" : ""} before saying you are done`,
     has("challenger") && "before committing to a significant plan, ask `challenger`",
-    has("fact-checker") && "for heritage content, run `fact-checker` before generating media",
   ].filter(Boolean);
   return [
     "\n## Subagents",

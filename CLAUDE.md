@@ -8,9 +8,9 @@ Read this first, then `docs/HANDOFF.md` (full history, decisions and open items)
 Tom's own AI agent platform: a web UI + API server that runs agent engines (**OpenCode**
 by default, or the **Claude Agent SDK**) on any model from the **SayGM** gateway, with
 **Ditto** (heyditto.ai) as long-term memory. It runs sandboxed in Docker (on Windows inside a
-locked-down WSL distro called `bitbull`). End goal: a platform for custom historical/hereditary
-experiences (old photos, film, documents → grounded cinematic/interactive pieces) combining
-SayGM models, Atlas AI Studio / 404.xyz media generation and agentic coding.
+locked-down WSL distro called `bitbull`). The aim: a coding agent and a one-stop shop for building
+on Bittensor, with its subnets and services (Taostats, Atlas AI Studio / 404.xyz, Hippius, Ditto)
+wired in.
 
 Next phase (why you're here): **desktop, Linux and iOS implementations**. Plan and decisions
 in `docs/CLIENTS.md` (Phase 0.1 and the Windows desktop app are done; next are client-core,
@@ -45,14 +45,13 @@ web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ReposDia
 agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/bitbull-guard.js  secret guard
 agent-readme.md      for agents USING BitBull (copied into the image at /app): services, rules, what they may touch
 skills/              skills mirrored into every workspace (.claude/skills) and backed up to Ditto
-subagents/           reviewer, challenger, debugger, tester, worker, fact-checker
+subagents/           reviewer, challenger, debugger, tester, worker
 egress/              squid allowlist proxy (allowlist.txt) + socat gateway image
 scripts/bitbull-wsl/      Windows: setup.ps1 (create bitbull distro), deploy.ps1, start.ps1, test-stack.ps1,
                      link.ps1 + bitbull-links.sh (read-only folder links), link-helper.ps1 (localhost:8790: folder
                      picker, Open in Explorer, vault key), copy-in.ps1 (fast copy), backup.ps1
-docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md,
-                     CAPTURE.md (phone scanning → cloud folder → ingest; later a capture page)
-tools/               atlas-run.mjs, hippius-setup.mjs, ingest.mjs (scans → archive/ with manifest, OCR, dedupe),
+docs/                ARCHITECTURE.md, HANDOFF.md, GAPS.md, CLIENTS.md (desktop/Linux/iOS), STORAGE.md
+tools/               atlas-run.mjs, hippius-setup.mjs,
                      import-project.mjs (a Claude.ai project export → BitBull project + uploads + Ditto seed prompt),
                      import-claude-export.mjs (the claude.ai account export zip → projects + chats via POST /api/import/conversations)
 desktop/             Windows desktop app (Tauri 2): launcher checks WSL/distro/Docker/stack, runs scripts/bitbull-wsl

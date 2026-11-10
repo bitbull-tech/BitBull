@@ -72,7 +72,7 @@ export function ProjectDialog({
         >
           <label>
             <span>Name</span>
-            <input autoFocus value={form.name} maxLength={80} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Horner family — WW2" />
+            <input autoFocus value={form.name} maxLength={80} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Subnet 59 miner" />
           </label>
           <div className="field">
             <span>Colour</span>

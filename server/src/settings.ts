@@ -213,15 +213,6 @@ export function describeSettings() {
         row("HIPPIUS_S3_ENDPOINT", "Endpoint", config.storage.endpoint),
       ],
     },
-    {
-      id: "heritage",
-      title: "Heritage experiences",
-      rows: [
-        row("HERITAGE_LIKENESS_POLICY", "Likeness policy", config.heritage.likenessPolicy, {
-          hint: "ground-only: real people only via their original images, generate the world around them. private-likeness: allow animating family photos in private, labelled projects",
-        }),
-      ],
-    },
   ];
 }
 

@@ -34,7 +34,7 @@ export function Settings({
   const [checking, setChecking] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [info, setInfo] = useState<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[]; likenessPolicy: string } | null>(null)
+  const [info, setInfo] = useState<{ integrations: IntegrationInfo[]; atlasWorkflows: { file: string; title: string; inputs: string[] }[] } | null>(null)
   const [live, setLive] = useState<IntegrationStatus[] | null>(null)
   const [focus, setFocus] = useState<string | null>(null)
 
