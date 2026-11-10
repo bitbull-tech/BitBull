@@ -449,4 +449,9 @@ Never mirror a whole figure: it would flip the τ. The cut-and-place script is n
 - Speed: `turns.first_token_at` (migration) set on the first text/thinking event; advisor.ts
   `usageByModel` gives `firstTokenSeconds` (median of last 50). Picker: maker checkboxes
   (`makerOf`), sort Maker/Cheapest/Fastest.
+- Follow-ups: launcher Checks card shows "checked Ns ago" + Re-check (it already re-ran every 6 s
+  and after each action). Unused chats (no message, no turn) are no longer listed and are deleted
+  after an hour (`sessions.listUsed` / `pruneUnused`). Sidebar "Select" mode with bulk Archive /
+  Move / Delete (also "Select…" in a chat's menu). Model browser has the maker checkboxes and a
+  Speed column.
 

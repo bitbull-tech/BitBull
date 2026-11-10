@@ -480,7 +480,21 @@ app.get("/api/integrations/status", async (c) => c.json({ integrations: await pr
 // ---------- sessions ----------
 const EngineSchema = z.string().refine((e) => e in engines, { message: "unknown engine" });
 
-app.get("/api/sessions", (c) => c.json({ sessions: sessions.list() }));
+// Chats that were opened but never used (no message, no turn) aren't listed, and are cleared
+// out after an hour, so going Home or opening QA Hound and backing out leaves nothing behind.
+let lastPrune = 0;
+app.get("/api/sessions", (c) => {
+  if (Date.now() - lastPrune > 10 * 60_000) {
+    lastPrune = Date.now();
+    try {
+      const n = sessions.pruneUnused();
+      if (n) console.log(`[sessions] removed ${n} empty chat${n === 1 ? "" : "s"}`);
+    } catch (e) {
+      console.warn("[sessions] couldn't clear empty chats:", e instanceof Error ? e.message : e);
+    }
+  }
+  return c.json({ sessions: sessions.listUsed() });
+});
 
 app.post("/api/sessions", async (c) => {
   const body = z

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, type Model, type ModelDetail, type ModelUsage } from './api'
 import { IconSearch, IconX } from './icons'
 import { ModelDog } from './dogs'
+import { makerOf } from './ModelPicker'
 
 /**
  * Everything SayGM publishes about a model, without going to SayGM: one sortable table of
@@ -13,7 +14,7 @@ const money = (n?: number) => (typeof n === 'number' ? (n >= 10 ? `$${n.toFixed(
 const ctx = (n?: number) => (typeof n === 'number' ? (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)) : '—')
 const API_LABEL: Record<Model['api'], string> = { anthropic: 'Messages', responses: 'Responses', google: 'generateContent', chat: 'chat.completions' }
 
-type Key = 'name' | 'provider' | 'api' | 'contextLength' | 'in' | 'out' | 'savingsPct' | 'yours'
+type Key = 'name' | 'provider' | 'api' | 'contextLength' | 'in' | 'out' | 'savingsPct' | 'speed' | 'yours'
 const COLS: { key: Key; label: string; num?: boolean; title?: string }[] = [
   { key: 'name', label: 'Model' },
   { key: 'provider', label: 'Maker' },
@@ -22,6 +23,7 @@ const COLS: { key: Key; label: string; num?: boolean; title?: string }[] = [
   { key: 'in', label: 'In', num: true, title: 'USD per million input tokens' },
   { key: 'out', label: 'Out', num: true, title: 'USD per million output tokens' },
   { key: 'savingsPct', label: 'Saving', num: true, title: 'Below list price, blended 3:1 input:output' },
+  { key: 'speed', label: 'Speed', num: true, title: 'Time to the first word of a reply: the median of your own recent replies on it' },
   { key: 'yours', label: 'Your use', num: true, title: 'Turns you have run on it here, and what one costs on average' },
 ]
 
@@ -37,8 +39,10 @@ const valueOf = (m: Model, k: Key, usage?: Map<string, ModelUsage>): string | nu
       return m.contextLength ?? -1
     case 'savingsPct':
       return m.savingsPct ?? -1
+    case 'speed':
+      return usage?.get(m.id)?.firstTokenSeconds ?? Infinity
     case 'provider':
-      return m.provider ?? ''
+      return makerOf(m)
     default:
       return m[k] ?? ''
   }
@@ -52,6 +56,29 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
   const [detail, setDetail] = useState<ModelDetail | null>(null)
   const [detailErr, setDetailErr] = useState<string | null>(null)
   const [usage, setUsage] = useState<Map<string, ModelUsage>>(new Map())
+  // makers ticked (none = all), shared with the model picker's choice
+  const [makers, setMakers] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('bitbull-mp-makers') ?? '[]')
+      return Array.isArray(v) ? v : []
+    } catch {
+      return []
+    }
+  })
+  const setMakersSaved = (next: string[]) => {
+    setMakers(next)
+    try {
+      localStorage.setItem('bitbull-mp-makers', JSON.stringify(next))
+    } catch {
+      /* private window */
+    }
+  }
+  const makerCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const x of models) m.set(makerOf(x), (m.get(makerOf(x)) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  }, [models])
+  const activeMakers = makers.filter((x) => makerCounts.some(([n]) => n === x))
 
   useEffect(() => {
     void api
@@ -86,8 +113,9 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
       if (only.tools && !m.tools) return false
       if (only.vision && !m.vision) return false
       if (only.tee && !m.confidential) return false
+      if (activeMakers.length && !activeMakers.includes(makerOf(m))) return false
       if (!needle) return true
-      return `${m.id} ${m.name} ${m.provider ?? ''} ${m.family} ${m.tier ?? ''}`.toLowerCase().includes(needle)
+      return `${m.id} ${m.name} ${m.provider ?? ''} ${makerOf(m)} ${m.family} ${m.tier ?? ''}`.toLowerCase().includes(needle)
     })
     return list.sort((a, b) => {
       const x = valueOf(a, sort.key, usage)
@@ -95,7 +123,8 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
       const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))
       return c * sort.dir
     })
-  }, [models, q, only, sort, usage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models, q, only, sort, usage, makers, makerCounts])
 
   const picked = detail ?? models.find((m) => m.id === sel) ?? null
 
@@ -125,6 +154,25 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
             </label>
           </div>
         </div>
+        <div className="mp-makers models-makers" role="group" aria-label="Filter by maker">
+          {makerCounts.map(([name, n]) => (
+            <label key={name} className={`mp-maker ${activeMakers.includes(name) ? 'on' : ''}`}>
+              <input
+                type="checkbox"
+                checked={activeMakers.includes(name)}
+                onChange={() => setMakersSaved(activeMakers.includes(name) ? activeMakers.filter((x) => x !== name) : [...activeMakers, name])}
+              />
+              {name}
+              <span className="mp-count">{n}</span>
+            </label>
+          ))}
+          {activeMakers.length > 0 && (
+            <button className="link small" onClick={() => setMakersSaved([])}>
+              All makers
+            </button>
+          )}
+          <span className="muted small models-shown">{rows.length} shown</span>
+        </div>
         <div className="models-body">
           <div className="models-table-wrap">
             <table className="models-table">
@@ -150,12 +198,15 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
                       <ModelDog id={m.id} family={m.family} size={22} /> {m.name}
                       <div className="models-id">{m.id}</div>
                     </td>
-                    <td>{m.provider ?? '—'}</td>
+                    <td title={m.provider ? `SayGM lists the owner as ${m.provider}` : undefined}>{makerOf(m)}</td>
                     <td>{API_LABEL[m.api]}</td>
                     <td className="num">{ctx(m.contextLength)}</td>
                     <td className="num">{money(m.price?.input)}</td>
                     <td className="num">{money(m.price?.output)}</td>
                     <td className="num">{m.savingsPct ? `−${m.savingsPct}%` : '—'}</td>
+                    <td className="num" title={usage.get(m.id)?.speedSamples ? `Median of your last ${usage.get(m.id)!.speedSamples} replies` : 'Not used yet'}>
+                      {usage.get(m.id)?.firstTokenSeconds !== undefined ? `${usage.get(m.id)!.firstTokenSeconds} s` : '—'}
+                    </td>
                     <td className="num">{yours(usage.get(m.id))}</td>
                   </tr>
                 ))}

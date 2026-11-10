@@ -26,6 +26,9 @@
   h1 .dot.ok { background:var(--ok); } h1 .dot.bad { background:var(--bad); }
   .sub { color:var(--mut); margin:0 0 16px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .checks-head { display:flex; align-items:center; gap:8px; }
+  .checks-head .checked { margin-left:auto; font-size:11px; text-transform:none; letter-spacing:0; font-weight:400; }
+  .checks-head button.mini { font-size:11px; padding:2px 8px; text-transform:none; letter-spacing:0; }
   .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing:.04em; color:var(--mut); margin:0 0 10px; }
   table { width:100%; border-collapse: collapse; }
   td { padding: 5px 0; vertical-align: top; border-top:1px solid var(--line); }
@@ -74,7 +77,7 @@
   <div class="checks-row">
   <div class="mascot" aria-hidden="true"><img src="bitbull-presenting.webp" alt="" draggable="false"></div>
   <div class="card">
-    <h2>Checks</h2>
+    <h2 class="checks-head">Checks <span class="checked" id="checkedAt" title="The checks re-run by themselves every 6 seconds and after every action"></span><button class="mini" id="recheck" title="Run the checks again now">Re-check</button></h2>
     <table id="checks">
       <tr><td class="k">Repo</td><td class="v" id="c_repo">…</td></tr>
       <tr><td class="k">.env</td><td class="v" id="c_env">…</td></tr>
@@ -132,6 +135,13 @@ const $ = (id) => document.getElementById(id);
 let settings = null, running = false, status = null, lastHealthy = null;
 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+// When the checks last ran: they re-run every 6 s, so this normally reads "just now"
+let lastChecked = 0;
+function showChecked() {
+  if (!lastChecked) return;
+  const s = Math.round((Date.now() - lastChecked) / 1000);
+  $('checkedAt').textContent = s < 3 ? 'checked just now' : `checked ${s}s ago`;
+}
 const check = (el, ok, detail, na) => { el.innerHTML = `<span class="st ${na ? 'na' : ok ? 'ok' : 'bad'}">${na ? '–' : ok ? '✓' : '✗'}</span> ${esc(detail)}`; };
 const log = (line, err) => { const p = $('log'); const s = document.createElement('span'); s.textContent = line + '\n'; if (err) s.className = 'err'; p.appendChild(s); if (p.childNodes.length > 2000) p.removeChild(p.firstChild); p.scrollTop = p.scrollHeight; };
 
@@ -182,8 +192,15 @@ function labelChecks(platform) {
   $('l_distro').textContent = mac ? 'VM' : 'distro';
   $('repo').placeholder = mac ? '~/github/BitBull' : 'D:\\github\\BitBull';
 }
+let checking = false;
 async function refresh() {
+  if (checking) return;
+  checking = true;
+  $('recheck').disabled = true;
   try { status = await invoke('get_status'); } catch (e) { log('status failed: ' + e, true); return; }
+  finally { checking = false; $('recheck').disabled = false; }
+  lastChecked = Date.now();
+  showChecked();
   const s = status;
   labelChecks(s.platform);
   check($('c_repo'), s.repo_ok, s.repo ? s.repo + (s.repo_ok ? '' : '  (not the BitBull repo)') : 'not chosen');
@@ -237,6 +254,8 @@ listen('bitbull-done', (e) => { log(`(finished, exit code ${e.payload.code})`, e
   await refresh();
   if (status?.healthy && settings.open_when_ready) invoke('open_gm').catch(() => {});
   setInterval(refresh, 6000);
+  setInterval(showChecked, 1000);
+  $('recheck').onclick = () => refresh();
 })();
 </script>
 </body>

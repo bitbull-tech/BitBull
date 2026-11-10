@@ -230,6 +230,33 @@ export const sessions = {
   list(): SessionRow[] {
     return db.prepare("SELECT * FROM sessions ORDER BY updated_at DESC").all() as unknown as SessionRow[];
   },
+  /**
+   * What the sidebar lists: chats that have said something (a message or a turn). A chat that
+   * was opened and never used doesn't count, except for a minute so a new one can start.
+   */
+  listUsed(graceMs = 60_000): SessionRow[] {
+    return db
+      .prepare(
+        `SELECT * FROM sessions s
+          WHERE EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id)
+             OR EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id)
+             OR s.created_at > ?
+          ORDER BY s.updated_at DESC`,
+      )
+      .all(Date.now() - graceMs) as unknown as SessionRow[];
+  },
+  /** Delete chats that never got a message or a turn and are older than this. Returns how many. */
+  pruneUnused(olderThanMs = 60 * 60_000): number {
+    const r = db
+      .prepare(
+        `DELETE FROM sessions
+          WHERE created_at < ?
+            AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id)
+            AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = sessions.id)`,
+      )
+      .run(Date.now() - olderThanMs);
+    return Number(r.changes);
+  },
   get(id: string): SessionRow | undefined {
     return db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as unknown as SessionRow | undefined;
   },

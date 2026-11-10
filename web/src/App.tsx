@@ -6,7 +6,7 @@ import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
 import { SwarmTheatre } from './SwarmTheatre'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive } from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { ReposDialog } from './ReposDialog'
@@ -232,6 +232,22 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   }, [ctx])
   const [filter, setFilter] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  // Bulk actions: tick chats, then archive, move or delete them together
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [bulkMove, setBulkMove] = useState(false)
+  const togglePick = (id: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const endSelecting = () => {
+    setSelecting(false)
+    setPicked(new Set())
+    setBulkMove(false)
+  }
   const [status, setStatus] = useState<Status | null>(null)
   const [activityOpen, setActivityOpen] = useState(false)
   const { unseen } = useActivity()
@@ -351,6 +367,23 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const remove = async (id: string) => {
     await guard(api.deleteSession(id))
     if (activeId === id) newChat()
+    void refreshSessions()
+  }
+
+  const bulk = async (what: 'archive' | 'unarchive' | 'delete' | { move: string | null }) => {
+    const ids = [...picked]
+    if (!ids.length) return
+    if (what === 'delete' && !confirm(`Delete ${ids.length} chat${ids.length === 1 ? '' : 's'}? This can't be undone. (Archive keeps them.)`)) return
+    if (what === 'delete') {
+      await Promise.all(ids.map((id) => guard(api.deleteSession(id))))
+      if (activeId && ids.includes(activeId)) newChat()
+    } else if (what === 'archive' || what === 'unarchive') {
+      await Promise.all(ids.map((id) => archiveChat(id, what === 'archive')))
+    } else {
+      await Promise.all(ids.map((id) => guard(api.moveSession(id, what.move))))
+      if (what.move) setExpand(what.move, true)
+    }
+    endSelecting()
     void refreshSessions()
   }
 
@@ -520,6 +553,10 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       active={s.id === activeId}
       editing={editingId === s.id}
       projects={liveProjects}
+      selecting={selecting}
+      checked={picked.has(s.id)}
+      onCheck={() => togglePick(s.id)}
+      onSelect={() => (setSelecting(true), setPicked(new Set([s.id])))}
       onArchive={(a) => void archiveChat(s.id, a)}
       onOpen={() => openSession(s)}
       onEdit={() => setEditingId(s.id)}
@@ -550,6 +587,52 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <IconSearch size={14} />
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search chats" />
         </label>
+        {selecting && (
+          <div className="bulk-bar" role="toolbar" aria-label="Selected chats">
+            <span className="bulk-count">{picked.size} selected</span>
+            <button
+              className="link small"
+              onClick={() => setPicked(new Set(sessions.filter((x) => matches(x) && !x.archived_at).map((x) => x.id)))}
+              title="Every chat not in the Archive (that matches the search)"
+            >
+              All
+            </button>
+            <span className="grow" />
+            <button className="icon-btn sm" title="Done" onClick={endSelecting}>
+              <IconX size={14} />
+            </button>
+            <div className="bulk-actions">
+              <button className="btn sm" disabled={!picked.size} onClick={() => void bulk('archive')}>
+                <IconArchive size={13} /> Archive
+              </button>
+              {[...picked].some((id) => sessions.find((x) => x.id === id)?.archived_at) && (
+                <button className="btn sm" disabled={!picked.size} onClick={() => void bulk('unarchive')}>
+                  <IconUnarchive size={13} /> Unarchive
+                </button>
+              )}
+              <span className="bulk-move">
+                <button className="btn sm" disabled={!picked.size} onClick={() => setBulkMove((v) => !v)}>
+                  <IconFolderMove size={13} /> Move
+                </button>
+                {bulkMove && (
+                  <div className="row-menu bulk-move-menu">
+                    {liveProjects.map((p) => (
+                      <button key={p.id} onClick={() => void bulk({ move: p.id })}>
+                        <span className={`pdot pc-${p.color}`} /> {p.name}
+                      </button>
+                    ))}
+                    <button onClick={() => void bulk({ move: null })}>
+                      <span className="pdot" /> No project
+                    </button>
+                  </div>
+                )}
+              </span>
+              <button className="btn sm danger" disabled={!picked.size} onClick={() => void bulk('delete')}>
+                <IconTrash size={13} /> Delete
+              </button>
+            </div>
+          </div>
+        )}
         <nav className="sessions">
           <div className="section-head">
             <span>Projects</span>
@@ -566,6 +649,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
 
           <div className="section-head chats-head">
             <span>Chats</span>
+            <button className="link small select-toggle" onClick={() => (selecting ? endSelecting() : setSelecting(true))} title="Tick chats to archive, move or delete them together">
+              {selecting ? 'Done' : 'Select'}
+            </button>
           </div>
           {unfiled.map(([label, list]) => {
             const key = `group:${label}`
@@ -902,6 +988,10 @@ function SessionRow({
   onMove,
   onArchive,
   onDelete,
+  selecting,
+  checked,
+  onCheck,
+  onSelect,
 }: {
   s: Session
   active: boolean
@@ -914,6 +1004,10 @@ function SessionRow({
   onMove: (projectId: string | null) => void
   onArchive: (archived: boolean) => void
   onDelete: () => void
+  selecting?: boolean
+  checked?: boolean
+  onCheck?: () => void
+  onSelect?: () => void
 }) {
   const [menu, setMenu] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -927,7 +1021,7 @@ function SessionRow({
     <div
       ref={ref}
       className={`session ${active ? 'active' : ''} ${menu ? 'menu-open' : ''}`}
-      onClick={() => !editing && onOpen()}
+      onClick={() => (selecting ? onCheck?.() : !editing && onOpen())}
       // right-click: the same menu as ⋯ (rename, move, archive, delete)
       onContextMenu={(e) => {
         if (editing) return
@@ -940,6 +1034,16 @@ function SessionRow({
         <RenameInput initial={s.title} onDone={onRename} onCancel={onCancel} />
       ) : (
         <>
+          {selecting && (
+            <input
+              type="checkbox"
+              className="session-check"
+              checked={!!checked}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => onCheck?.()}
+              aria-label={`Select ${s.title}`}
+            />
+          )}
           <span className="title" onDoubleClick={onEdit}>{s.title}</span>
           <span className="session-actions">
             <button
@@ -970,6 +1074,11 @@ function SessionRow({
                 <span className="pdot" /> No project
               </button>
               <div className="menu-sep" />
+              {onSelect && (
+                <button onClick={() => (setMenu(false), onSelect())}>
+                  <IconCheck size={13} /> Select…
+                </button>
+              )}
               <button onClick={() => (setMenu(false), onArchive(!s.archived_at))}>
                 {s.archived_at ? <IconUnarchive size={13} /> : <IconArchive size={13} />} {s.archived_at ? 'Unarchive' : 'Archive'}
               </button>

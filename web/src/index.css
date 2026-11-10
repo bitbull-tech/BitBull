@@ -1245,3 +1245,16 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .mp-sort .grow { flex: 1; }
 .mp-speed { font-size: 11px; color: var(--text-2); white-space: nowrap; margin-top: 2px; }
 .mp-speed.none { color: var(--muted); opacity: 0.75; }
+.models-makers { padding: 4px 22px 8px; align-items: center; }
+.models-makers .models-shown { margin-left: auto; }
+
+/* ---- sidebar: select chats for bulk actions ---- */
+.chats-head .select-toggle { font-size: 11px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 8px 6px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 12.5px; }
+.bulk-bar .grow { flex: 1; }
+.bulk-count { font-weight: 600; }
+.bulk-actions { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.bulk-actions .btn.sm { display: inline-flex; align-items: center; gap: 4px; }
+.bulk-move { position: relative; }
+.bulk-move-menu { position: absolute; top: calc(100% + 4px); left: 0; right: auto; z-index: 30; min-width: 180px; }
+.session .session-check { margin: 0 6px 0 0; accent-color: var(--accent); flex: none; }
