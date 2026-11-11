@@ -18,6 +18,13 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
   data folder; reachable by URL with a bearer token
 - Import existing conversations, projects and data from your existing coding agents
 - `POST /api/v1/chat` for scripts and other agents
+- **Which model for this?** (three picks with pros, cons and cost), a model picker with maker
+  filters and your own response speeds, optional **Ditto Router** for background work
+- **Voice**: talk to it and hear it answer, push-to-talk from anywhere, hands-free
+- Show it a window or send it a web page (browser extension), get every file a reply made with one
+  click, archive and bulk-tidy chats
+- Bittensor services wired in: Taostats, Atlas, 404 (3D as code), Hippius storage, Ditto memory
+  and Ditto Review
 
 Installing for the first time? The step-by-step guide for Windows, Mac and Linux is at
 **[bitbull.tech/guide](https://www.bitbull.tech/guide/getting-started)**, or paste this into the AI
@@ -185,7 +192,10 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\start.ps1 -Stop
 `desktop/` is a small Windows and macOS app (Tauri 2) that does the same with buttons: it checks WSL,
 the `bitbull` distro, Docker and the containers, runs these scripts with a click and shows their
 output, then opens BitBull's UI in its own window once the stack answers, signed in with
-`APP_TOKEN` from `.env`. It lives in the tray; closing it leaves BitBull running. Build it once
+`APP_TOKEN` from `.env`. It also keeps the link helper running (folder picker, Open in Explorer,
+vault key), registers the push-to-talk shortcut, and its Checks re-run every few seconds (or
+**Re-check**). It lives in the tray; closing it leaves BitBull running; **Stop BitBull and quit**
+stops the stack too. Build it once
 on the PC (`cd desktop && npm install && npm run tauri build`, needs rustup + VS Build
 Tools); see [desktop/README.md](desktop/README.md).
 
@@ -346,6 +356,10 @@ button on a project row (or right-click → Archive project), or **⋯ → Archi
 into the collapsed **Archive** section at the bottom of the sidebar, a project with all its chats.
 Nothing is deleted or changed; archived chats still open, still turn up in search, and
 **Unarchive** puts them back where they were.
+
+**Tidying in bulk:** **Select** (by the Chats heading, or **Select…** in a chat's right-click menu)
+puts a tick box on every chat; then Archive, Move or Delete them together. Right-click any chat for
+its menu. A chat that never got a message isn't listed and is cleared out after an hour.
 
 ## Subagents
 
@@ -573,7 +587,7 @@ Whatever the agent writes, a brief, an image, a script, a whole folder, can be t
 
 Downloads go wherever your browser (or the desktop app) saves files, normally Downloads. They are
 always saved, never opened inside BitBull, so nothing an agent writes can run in the page. Showing
-in Explorer needs the link helper (started by `start.ps1`; the BitBull app on a Mac) and works on the
+in Explorer needs the link helper (the BitBull app keeps it running; without the app, `start.ps1`) and works on the
 computer BitBull runs on. Endpoints: `GET /api/sessions/:id/outputs`, `GET /api/projects/:id/download?path=…`
 (repeat `path` for several; folders and several files come as a .zip, up to 5,000 files / 512 MB).
 
@@ -663,6 +677,15 @@ Optional: run background work (titles, compaction) on a model from Ditto Router 
 small model, choose it from the Router's live model list, let the advisor's picks go straight to
 background work, and ask Ditto Review to review any branch's pull request from Repositories. See
 [docs/ROUTER.md](docs/ROUTER.md).
+
+## 404: 3D as code
+
+404 (Bittensor subnet 17) makes every 3D object a Three.js module. There is no 404 key or MCP: the
+agent clones the public [404 game recipe](https://github.com/404-Repo/404-game-recipe), follows it
+(the `404-game-recipe` skill), checks each object with the recipe's verifier and a game with its jam
+gate (the image ships Chromium for that), and a jam entry goes in as a pull request from your GitHub
+account, after asking you. Optional: 404's open model on your own RunPod GPU
+(`FOUR04_MODEL_URL`, `FOUR04_MODEL_KEY` in Settings → Integrations → 404).
 
 ## GitHub
 

@@ -225,10 +225,10 @@ async function refresh() {
   $('headline').className = 'state ' + (s.healthy ? 'ok' : 'bad');
   $('open').disabled = !s.healthy;
   $('next').textContent = nextStep(s);
-  if (s.healthy && lastHealthy === false && settings.open_when_ready && !running) invoke('open_gm').catch((e) => log(String(e), true));
+  if (s.healthy && lastHealthy === false && settings.open_when_ready && !running) invoke('open_bitbull').catch((e) => log(String(e), true));
   lastHealthy = s.healthy;
 }
-$('open').onclick = () => invoke('open_gm').catch((e) => log(String(e), true));
+$('open').onclick = () => invoke('open_bitbull').catch((e) => log(String(e), true));
 
 document.querySelectorAll('button[data-action]').forEach((b) => {
   b.onclick = async () => {
@@ -252,7 +252,7 @@ listen('bitbull-done', (e) => { log(`(finished, exit code ${e.payload.code})`, e
 (async () => {
   await loadSettings();
   await refresh();
-  if (status?.healthy && settings.open_when_ready) invoke('open_gm').catch(() => {});
+  if (status?.healthy && settings.open_when_ready) invoke('open_bitbull').catch(() => {});
   setInterval(refresh, 6000);
   setInterval(showChecked, 1000);
   $('recheck').onclick = () => refresh();

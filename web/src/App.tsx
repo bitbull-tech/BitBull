@@ -6,9 +6,10 @@ import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
 import { SwarmTheatre } from './SwarmTheatre'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck } from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck, IconHelp } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
+import { HelpDialog } from './HelpDialog'
 import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
@@ -208,6 +209,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   })
   const [navOpen, setNavOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [projectDialog, setProjectDialog] = useState<Project | 'new' | null>(null)
   // Files dialog: a project, or 'general' for the workspace of unfiled chats
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
@@ -732,6 +734,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           >
             {resolved === 'dark' ? <IconSun /> : <IconMoon />}
           </button>
+          <button className="icon-btn" title="Help: how BitBull works" onClick={() => setHelpOpen(true)}>
+            <IconHelp />
+          </button>
           <button className="icon-btn" title="Settings" onClick={() => setSettingsOpen(true)}>
             <IconSettings />
           </button>
@@ -826,6 +831,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
       <SelectionAsk />
 
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       {settingsOpen && (
         <Settings
           cfg={cfg}

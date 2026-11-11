@@ -65,6 +65,7 @@ COPY subagents subagents
 COPY tools tools
 # Read by agents working inside BitBull (the system prompt points at it)
 COPY agent-readme.md agent-readme.md
+COPY help help
 # The proxy's static allowlist, so Settings -> Network can show it (the proxy has its own copy)
 COPY egress/allowlist.txt egress/allowlist.txt
 # What this image was built from (written by deploy.ps1). The bracket makes it optional, so a

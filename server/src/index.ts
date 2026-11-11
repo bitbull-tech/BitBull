@@ -7,7 +7,7 @@ import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { assertConfig, config, paths, readFileOverrides, reloadConfig, writeOverrides, type EngineId } from "./config.js";
+import { assertConfig, config, paths, ROOT, readFileOverrides, reloadConfig, writeOverrides, type EngineId } from "./config.js";
 import "./log.js";
 import { engines, isRunning } from "./agent.js";
 import {
@@ -1186,10 +1186,14 @@ if (existsSync(config.webDist)) {
     "form-action 'self'",
     "frame-ancestors 'none'",
   ].join("; ");
+  // Help pages (help/) are shown inside BitBull's Help dialog, so only they may be framed, and only by BitBull
+  const HELP_CSP = CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'");
   app.use("/*", async (c, next) => {
     await next();
-    if (!c.req.path.startsWith("/api/")) c.header("content-security-policy", CSP);
+    if (!c.req.path.startsWith("/api/")) c.header("content-security-policy", c.req.path.startsWith("/help/") ? HELP_CSP : CSP);
   });
+  // help/ in the repo: the system map and other help pages (help/README.md lists them)
+  if (existsSync(path.join(ROOT, "help"))) app.use("/help/*", serveStatic({ root: path.relative(process.cwd(), ROOT) }));
   const index = readFileSync(path.join(config.webDist, "index.html"), "utf8");
   // index.html must never be cached: it names the hashed bundle, and a stale copy after a deploy
   // keeps showing the old UI (the bundles themselves are content-hashed, so they may cache).

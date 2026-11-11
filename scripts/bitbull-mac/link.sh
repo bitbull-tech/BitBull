@@ -52,7 +52,7 @@ SECRET_GLOBS='*.pem *.key *.pfx *.p12 *.ppk *.jks *.keystore *.kdbx *.ovpn *.wal
 
 # Everything in a folder that looks like a key, password store or wallet, one relative path per
 # line, into $HIDE (a file). Paths find can't read are added too: a copy can't include what
-# wasn't checked. Sets IS_REPO=1 for BitBull's own repo (adds its .env, data, .gmtmp, links).
+# wasn't checked. Sets IS_REPO=1 for BitBull's own repo (adds its .env, data, .bitbull-tmp, links).
 scan() {
   local full="$1" errs args=() n g
   HIDE="$(mktemp "${TMPDIR:-/tmp}/bitbull-hide.XXXXXX")"
@@ -77,7 +77,7 @@ scan() {
     local prefix="${BB_REPO#"$full"}"
     prefix="${prefix#/}"
     [ -n "$prefix" ] && prefix="$prefix/"
-    printf '%s\n' "${prefix}.env" "${prefix}data" "${prefix}.gmtmp" "${prefix}links" >> "$HIDE"
+    printf '%s\n' "${prefix}.env" "${prefix}data" "${prefix}.bitbull-tmp" "${prefix}.gmtmp" "${prefix}links" >> "$HIDE"
   else
     case "$full" in "$BB_REPO"/*) IS_REPO=1 ;; esac
   fi

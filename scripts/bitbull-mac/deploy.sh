@@ -12,7 +12,7 @@ mkdir -p "$BB_APP" "$BB_DATA" "$BB_LINKS"
 say "Copying code into $BB_APP"
 # The same things Windows leaves out: data, dependencies, builds, git, the desktop app, Claude exports.
 rsync -a --delete \
-  --exclude '/data' --exclude '/links' --exclude '/.git' --exclude '/desktop' --exclude '/claude-export' --exclude '/.gmtmp' \
+  --exclude '/data' --exclude '/links' --exclude '/.git' --exclude '/desktop' --exclude '/claude-export' --exclude '/.bitbull-tmp' --exclude '/.gmtmp' \
   --exclude 'node_modules' --exclude 'dist' --exclude '.DS_Store' \
   "$BB_REPO/" "$BB_APP/" || die "copy failed"
 # a .env saved on Windows has CRLF line ends, which docker compose reads into the values

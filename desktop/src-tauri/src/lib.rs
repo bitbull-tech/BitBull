@@ -260,15 +260,15 @@ fn quit_app(app: &AppHandle) {
 /// created from a sync command (that runs on the main thread, and window creation on Windows
 /// waits for that same thread, so the app freezes with a blank window).
 #[tauri::command]
-async fn open_gm(app: AppHandle) -> Result<(), String> {
-    show_gm(&app)
+async fn open_bitbull(app: AppHandle) -> Result<(), String> {
+    show_bitbull(&app)
 }
 
 /// Same from a tray/menu callback, which also runs on the main thread.
-fn show_gm_later(app: &AppHandle) {
+fn show_bitbull_later(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
-        if show_gm(&app).is_err() {
+        if show_bitbull(&app).is_err() {
             show_launcher(app);
         }
     });
@@ -283,7 +283,7 @@ fn show_launcher(app: AppHandle) {
     }
 }
 
-fn show_gm(app: &AppHandle) -> Result<(), String> {
+fn show_bitbull(app: &AppHandle) -> Result<(), String> {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
     if let Some(w) = app.get_webview_window("bitbull") {
         let _ = w.show();
@@ -486,7 +486,7 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, ev| match ev.id().as_ref() {
-                    "open" => show_gm_later(app),
+                    "open" => show_bitbull_later(app),
                     "launcher" => show_launcher(app.clone()),
                     "stop" => stop_and_quit(app),
                     "quit" => quit_app(app),
@@ -494,7 +494,7 @@ pub fn run() {
                 })
                 .on_tray_icon_event(|tray, ev| {
                     if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = ev {
-                        show_gm_later(tray.app_handle());
+                        show_bitbull_later(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -517,7 +517,7 @@ pub fn run() {
                 sign_in_if_local(webview.app_handle(), webview, payload.url());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_settings, set_settings, pick_repo, get_status, run_action, cancel_action, open_gm, show_launcher])
+        .invoke_handler(tauri::generate_handler![get_settings, set_settings, pick_repo, get_status, run_action, cancel_action, open_bitbull, show_launcher])
         .build(tauri::generate_context!())
         .expect("error while building BitBull desktop")
         .run(|_app, event| {

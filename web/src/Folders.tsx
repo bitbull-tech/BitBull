@@ -34,10 +34,10 @@ export function FoldersPanel() {
   }
 
   const ready = helper && helper !== 'checking'
-  const rows: Array<{ name: string; path?: string; mode?: string; inGm?: LinkedFolder; state?: string }> = []
+  const rows: Array<{ name: string; path?: string; mode?: string; inBitBull?: LinkedFolder; state?: string }> = []
   for (const l of links?.links ?? []) {
     const h = ready ? helper.links.find((x) => x.name === l.name) : undefined
-    rows.push({ name: l.name, inGm: l, path: h?.path, mode: h?.mode })
+    rows.push({ name: l.name, inBitBull: l, path: h?.path, mode: h?.mode })
   }
   if (ready) for (const h of helper.links) if (!rows.some((r) => r.name === h.name)) rows.push({ name: h.name, path: h.path, mode: h.mode, state: h.state })
 
@@ -61,8 +61,8 @@ export function FoldersPanel() {
                   <IconLock size={13} />
                   <span className="mono">{r.name}</span>
                   {r.path && <span className="muted small net-why mono">{r.path}</span>}
-                  {r.inGm ? (
-                    <span className={`pill ${r.inGm.readOnly ? 'ok' : 'bad'}`}>{r.inGm.readOnly ? 'read-only' : 'NOT read-only'}</span>
+                  {r.inBitBull ? (
+                    <span className={`pill ${r.inBitBull.readOnly ? 'ok' : 'bad'}`}>{r.inBitBull.readOnly ? 'read-only' : 'NOT read-only'}</span>
                   ) : (
                     <span className="pill bad">{r.state === 'missing' ? 'folder missing' : 'not visible to BitBull yet'}</span>
                   )}

@@ -186,8 +186,8 @@ numbering; "this branch" means the security branch, now merged.
    domain-approved.
 7. Host mode binds `0.0.0.0` by default and suggests `ALLOW_NO_AUTH=true` — default to
    loopback and refuse/warn loudly on non-loopback no-auth.
-8. ~~`migrate-from-gm.ps1`: root tar restore follows planted symlinks~~ — **REMOVED, not
-   fixed** (`a5fdeb5`): the script was a one-off for migrating off the retired `gm` distro
+8. ~~The old-distro migration script: root tar restore follows planted symlinks~~ — **REMOVED, not
+   fixed** (`a5fdeb5`): the script was a one-off for migrating off a retired earlier distro
    and is deleted. The unprivileged restore it would have needed could not chown to the
    userns-remapped uid anyway, so there was no fix worth keeping the file for. Any future
    restore path must reject link members in the tar.

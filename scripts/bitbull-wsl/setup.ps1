@@ -125,9 +125,9 @@ if ($downloaded) { Remove-Item -LiteralPath $tarWin -ErrorAction SilentlyContinu
 
 Step "Provisioning (Docker, user, code, data, lockdown) - takes a few minutes"
 # Still before the lockdown, so /mnt is available and the repo can be read from Windows.
-$repoInGm = (& wsl.exe -d $Distro -u root --exec wslpath -a ($Repo -replace '\\', '/')).Trim()
-if (-not $repoInGm -or $repoInGm -notmatch '^/') { throw "could not reach $Repo from $Distro (is /mnt available?)" }
-Wsl @("-d", $Distro, "-u", "root", "--exec", "bash", "-c", "tr -d '\r' < '$repoInGm/scripts/bitbull-wsl/provision.sh' > /root/provision.sh && bash /root/provision.sh '$User' '$repoInGm'")
+$repoInDistro = (& wsl.exe -d $Distro -u root --exec wslpath -a ($Repo -replace '\\', '/')).Trim()
+if (-not $repoInDistro -or $repoInDistro -notmatch '^/') { throw "could not reach $Repo from $Distro (is /mnt available?)" }
+Wsl @("-d", $Distro, "-u", "root", "--exec", "bash", "-c", "tr -d '\r' < '$repoInDistro/scripts/bitbull-wsl/provision.sh' > /root/provision.sh && bash /root/provision.sh '$User' '$repoInDistro'")
 
 Step "Restarting '$Distro' with the lockdown applied"
 Wsl @("--terminate", $Distro)

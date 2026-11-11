@@ -70,7 +70,7 @@ function Test-Linkable([string]$full) {
 
 # Everything in a folder that looks like a key, password store or wallet, as paths relative to
 # the folder (folders like .ssh count as a whole). For BitBull's own repo, its .env, data\ and
-# .gmtmp\ are added. Windows names are matched case-insensitively here; the copy then leaves out
+# .bitbull-tmp\ are added. Windows names are matched case-insensitively here; the copy then leaves out
 # exactly these paths (plus the same patterns, in bitbull-links.sh).
 function Get-HideList([string]$full) {
   $secretNames = @(".env", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".docker", ".hippius", ".bittensor", ".npmrc", ".pypirc", ".netrc", ".git-credentials",
@@ -93,7 +93,7 @@ function Get-HideList([string]$full) {
     $isRepo = $true
     $prefix = $Repo.TrimEnd('\').Substring($full.Length).TrimStart('\').Replace('\', '/')
     if ($prefix) { $prefix += "/" }
-    $rel += @("$($prefix).env", "$($prefix)data", "$($prefix).gmtmp", "$($prefix)links")
+    $rel += @("$($prefix).env", "$($prefix)data", "$($prefix).bitbull-tmp", "$($prefix).gmtmp", "$($prefix)links")
   } elseif ($lower.StartsWith("$repoLower\")) {
     $isRepo = $true
   }
@@ -157,7 +157,10 @@ function Restart-BitBull {
 }
 
 function Main {
-  $menuKeys = @("HKCU:\Software\Classes\Directory\shell\GMAgentLink", "HKCU:\Software\Classes\Directory\Background\shell\GMAgentLink")
+  $menuKeys = @("HKCU:\Software\Classes\Directory\shell\BitBullLink", "HKCU:\Software\Classes\Directory\Background\shell\BitBullLink")
+  # entries made under the project's old name: removed on install and uninstall, so there is one menu item
+  $oldMenuKeys = @("HKCU:\Software\Classes\Directory\shell\GMAgentLink", "HKCU:\Software\Classes\Directory\Background\shell\GMAgentLink")
+  foreach ($k in $oldMenuKeys) { if (Test-Path $k) { Remove-Item -Recurse -Force $k } }
   if ($InstallMenu) {
     # Right-click a folder (or inside one) -> "Link to BitBull (read-only)". Only for you (HKCU), and
     # it just runs this script, which shows what it is doing and asks nothing of BitBull.

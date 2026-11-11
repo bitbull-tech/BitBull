@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitBull System Map</title>
+<meta name="description" content="How BitBull fits together: what runs on your computer, what is sandboxed, where your data lives and which services it talks to.">
+<style>
+:root {
+  --bg: #f7f5f0; --panel: #ffffff; --ink: #1b1a17; --muted: #5f5b52; --line: #d9d4c8;
+  --frame: #ece8de; --accent: #d9480f; --accent-soft: #fff1e8;
+  --box: #ffffff; --box-line: #c9c2b2;
+  --run: #eef4ff; --run-line: #8fb0e8; --agent: #e3edff; --agent-line: #5b85d6;
+  --safe: #eaf7ee; --safe-line: #5fae7a; --data: #fff7df; --data-line: #d6a521;
+  --net: #f4eefb; --net-line: #a083cf; --arrow: #3d3a33;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14130f; --panel: #1d1b17; --ink: #f1ede4; --muted: #a8a194; --line: #36322b;
+    --frame: #1a1915; --accent: #ff7a3d; --accent-soft: #2a1a10;
+    --box: #23211c; --box-line: #4a453b;
+    --run: #151b27; --run-line: #3c5687; --agent: #1a2336; --agent-line: #5b85d6;
+    --safe: #13221a; --safe-line: #3f8a5a; --data: #261f0c; --data-line: #a88218;
+    --net: #1f1828; --net-line: #7d62aa; --arrow: #cfc8ba;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14130f; --panel: #1d1b17; --ink: #f1ede4; --muted: #a8a194; --line: #36322b;
+  --frame: #1a1915; --accent: #ff7a3d; --accent-soft: #2a1a10;
+  --box: #23211c; --box-line: #4a453b;
+  --run: #151b27; --run-line: #3c5687; --agent: #1a2336; --agent-line: #5b85d6;
+  --safe: #13221a; --safe-line: #3f8a5a; --data: #261f0c; --data-line: #a88218;
+  --net: #1f1828; --net-line: #7d62aa; --arrow: #cfc8ba;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 32px 16px 64px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 8px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+h1 span { color: var(--accent); }
+.lede { color: var(--muted); max-width: 760px; margin: 4px 0 24px; }
+h2 { font-size: 20px; margin: 40px 0 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); margin: 0 0 12px; padding: 0; list-style: none; }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+.diagram { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 860px; height: auto; }
+svg text { fill: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+svg .t { font-size: 15px; font-weight: 650; }
+svg .s { font-size: 12px; fill: var(--muted); }
+svg .lbl { font-size: 12px; font-weight: 650; fill: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+svg .al { font-size: 11.5px; fill: var(--muted); font-style: italic; }
+svg .box { fill: var(--box); stroke: var(--box-line); stroke-width: 1.5; }
+svg .frame { fill: var(--frame); stroke: var(--line); stroke-width: 1.5; }
+svg .run { fill: var(--run); stroke: var(--run-line); stroke-width: 1.5; stroke-dasharray: 6 4; }
+svg .agent { fill: var(--agent); stroke: var(--agent-line); stroke-width: 2; }
+svg .inner { fill: var(--box); stroke: var(--agent-line); stroke-width: 1; }
+svg .safe { fill: var(--safe); stroke: var(--safe-line); stroke-width: 1.5; }
+svg .data { fill: var(--data); stroke: var(--data-line); stroke-width: 1.5; }
+svg .net { fill: var(--net); stroke: var(--net-line); stroke-width: 1.5; }
+svg .arr { fill: none; stroke: var(--arrow); stroke-width: 1.6; marker-end: url(#a); }
+svg .arr2 { fill: none; stroke: var(--arrow); stroke-width: 1.6; marker-end: url(#a); marker-start: url(#a0); }
+svg .dash { stroke-dasharray: 5 4; }
+svg .ah { fill: var(--arrow); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.card h3 { font-size: 15px; margin: 0 0 6px; }
+.card p, .card ul { margin: 0; color: var(--muted); font-size: 14px; }
+.card ul { padding-left: 18px; }
+ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 0; display: grid; gap: 8px; }
+ol.steps li { counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 10px 50px; position: relative; font-size: 15px; }
+ol.steps li::before { content: counter(s); position: absolute; left: 14px; top: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--frame); padding: 1px 5px; border-radius: 4px; }
+.tag { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.tag.req { border-color: var(--accent); color: var(--accent); }
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+@media (max-width: 600px) { h1 { font-size: 24px; } main { padding-top: 20px; } }
+</style>
+</head>
+<body>
+<main>
+<header class="top">
+  <h1>Bit<span>Bull</span> system map</h1>
+</header>
+<p class="lede">How BitBull fits together: what runs on your computer, what is sealed off, where your data lives and which services it talks to. Everything inside the dashed box runs on your own machine.</p>
+
+<ul class="legend" aria-label="Legend">
+  <li><span class="sw" style="background:var(--box);border-color:var(--box-line)"></span>You and your tools</li>
+  <li><span class="sw" style="background:var(--safe);border-color:var(--safe-line)"></span>Guards (the only ways in and out)</li>
+  <li><span class="sw" style="background:var(--agent);border-color:var(--agent-line)"></span>The agent container</li>
+  <li><span class="sw" style="background:var(--data);border-color:var(--data-line)"></span>Your data</li>
+  <li><span class="sw" style="background:var(--net);border-color:var(--net-line)"></span>Online services</li>
+</ul>
+
+<div class="diagram">
+<svg viewBox="0 0 1200 1020" role="img" aria-labelledby="mapTitle mapDesc">
+  <title id="mapTitle">BitBull architecture</title>
+  <desc id="mapDesc">You reach BitBull through a browser, the desktop app, the browser extension or the API. Everything enters through a gateway on your own machine, runs in a sandboxed agent container that keeps its data in one folder, and leaves only through an allowlist proxy to services such as SayGM, Ditto, GitHub and the Bittensor subnets.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="ah" d="M0 0 10 5 0 10z"/></marker>
+    <marker id="a0" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="ah" d="M10 0 0 5 10 10z"/></marker>
+  </defs>
+
+  <!-- Row 1: you -->
+  <text class="lbl" x="40" y="26">You</text>
+  <rect class="box" x="40" y="40" width="250" height="84" rx="10"/>
+  <text class="t" x="56" y="66">BitBull desktop app</text>
+  <text class="s" x="56" y="86">Windows and Mac: tray, health checks,</text>
+  <text class="s" x="56" y="102">push-to-talk anywhere, its own window</text>
+
+  <rect class="box" x="330" y="40" width="250" height="84" rx="10"/>
+  <text class="t" x="346" y="66">Browser</text>
+  <text class="s" x="346" y="86">http://localhost:8787, signed in</text>
+  <text class="s" x="346" y="102">with your APP_TOKEN</text>
+
+  <rect class="box" x="620" y="40" width="250" height="84" rx="10"/>
+  <text class="t" x="636" y="66">Browser extension</text>
+  <text class="s" x="636" y="86">Sends a page: screenshot, text,</text>
+  <text class="s" x="636" y="102">links and errors, to review in a chat</text>
+
+  <rect class="box" x="910" y="40" width="250" height="84" rx="10"/>
+  <text class="t" x="926" y="66">Scripts and other agents</text>
+  <text class="s" x="926" y="86">POST /api/v1/chat with a</text>
+  <text class="s" x="926" y="102">bearer token</text>
+
+  <!-- Your computer -->
+  <rect class="frame" x="20" y="150" width="1160" height="640" rx="14"/>
+  <text class="lbl" x="40" y="176">Your computer</text>
+
+  <rect class="box" x="40" y="236" width="230" height="124" rx="10"/>
+  <text class="t" x="56" y="262">Link helper</text>
+  <text class="s" x="56" y="282">127.0.0.1:8790, this PC only.</text>
+  <text class="s" x="56" y="298">Links folders, opens Explorer</text>
+  <text class="s" x="56" y="314">or Finder, holds the vault key.</text>
+  <text class="s" x="56" y="330">Kept running by the desktop app.</text>
+
+  <rect class="box" x="40" y="410" width="230" height="96" rx="10"/>
+  <text class="t" x="56" y="436">Your folders</text>
+  <text class="s" x="56" y="456">Only the ones you link.</text>
+  <text class="s" x="56" y="472">Files with secrets (.env) are</text>
+  <text class="s" x="56" y="488">left out of a filtered copy.</text>
+
+  <rect class="box" x="40" y="560" width="230" height="96" rx="10"/>
+  <text class="t" x="56" y="586">Your repo clone</text>
+  <text class="s" x="56" y="606">Source of truth for BitBull.</text>
+  <text class="s" x="56" y="622">deploy copies it into the</text>
+  <text class="s" x="56" y="638">runtime and rebuilds.</text>
+
+  <!-- Runtime -->
+  <rect class="run" x="300" y="196" width="860" height="576" rx="12"/>
+  <text class="lbl" x="318" y="220">Locked-down runtime</text>
+  <text class="s" x="318" y="760">A WSL distro on Windows, a Colima VM on a Mac, Docker on Linux. It can't see the rest of your computer.</text>
+
+  <rect class="safe" x="330" y="238" width="800" height="54" rx="10"/>
+  <text class="t" x="348" y="262">Gateway · the only way in</text>
+  <text class="s" x="348" y="280">Answers on 127.0.0.1:8787, your machine only. Put a tunnel in front of it to reach BitBull from your phone.</text>
+
+  <rect class="agent" x="330" y="322" width="540" height="318" rx="12"/>
+  <text class="t" x="348" y="346">Agent container</text>
+  <text class="s" x="490" y="346">no route out, read-only system, unprivileged user</text>
+
+  <rect class="inner" x="348" y="362" width="246" height="58" rx="8"/>
+  <text class="t" x="362" y="386">Server and web UI</text>
+  <text class="s" x="362" y="405">API, chats, projects, settings</text>
+  <rect class="inner" x="606" y="362" width="246" height="58" rx="8"/>
+  <text class="t" x="620" y="386">Turns</text>
+  <text class="s" x="620" y="405">Run here; close the tab, they carry on</text>
+
+  <rect class="inner" x="348" y="430" width="246" height="58" rx="8"/>
+  <text class="t" x="362" y="454">Engines</text>
+  <text class="s" x="362" y="473">OpenCode · Claude Agent SDK</text>
+  <rect class="inner" x="606" y="430" width="246" height="58" rx="8"/>
+  <text class="t" x="620" y="454">Skills and subagents</text>
+  <text class="s" x="620" y="473">Shared by both engines, in Git</text>
+
+  <rect class="inner" x="348" y="498" width="246" height="58" rx="8"/>
+  <text class="t" x="362" y="522">QA Hound</text>
+  <text class="s" x="362" y="541">Models review, argue, give a verdict</text>
+  <rect class="inner" x="606" y="498" width="246" height="58" rx="8"/>
+  <text class="t" x="620" y="522">Voice</text>
+  <text class="s" x="620" y="541">Piper speaks, generated in here</text>
+
+  <rect class="inner" x="348" y="566" width="246" height="58" rx="8"/>
+  <text class="t" x="362" y="590">Outputs and captures</text>
+  <text class="s" x="362" y="609">Reply files, zips, sent pages</text>
+  <rect class="inner" x="606" y="566" width="246" height="58" rx="8"/>
+  <text class="t" x="620" y="590">Browser tools</text>
+  <text class="s" x="620" y="609">Chromium for the agent's own browsing</text>
+
+  <rect class="safe" x="900" y="322" width="230" height="130" rx="10"/>
+  <text class="t" x="916" y="346">Egress proxy</text>
+  <text class="s" x="916" y="366">The only way out. Reaches</text>
+  <text class="s" x="916" y="382">approved sites only and asks</text>
+  <text class="s" x="916" y="398">you before a new one.</text>
+  <text class="s" x="916" y="414">Keys never enter the agent's</text>
+  <text class="s" x="916" y="430">own environment.</text>
+
+  <rect class="data" x="900" y="476" width="230" height="164" rx="10"/>
+  <text class="t" x="916" y="500">Data folder (/data)</text>
+  <text class="s" x="916" y="520">Chats and projects (SQLite)</text>
+  <text class="s" x="916" y="536">Workspaces and uploads</text>
+  <text class="s" x="916" y="552">settings.local.json</text>
+  <text class="s" x="916" y="568">vault.json (encrypted keys)</text>
+  <text class="s" x="916" y="592">One folder to back up.</text>
+  <text class="s" x="916" y="608">Deploys never touch it.</text>
+
+  <rect class="box" x="330" y="668" width="800" height="62" rx="10"/>
+  <text class="t" x="348" y="692">Linked folders · /links/&lt;name&gt;</text>
+  <text class="s" x="348" y="712">Your folders appear here read-only and no-exec. The agent works on its own copy in a workspace.</text>
+
+  <!-- Internet -->
+  <g transform="translate(0,20)">
+  <rect class="frame" x="20" y="800" width="1160" height="186" rx="14"/>
+  <text class="lbl" x="40" y="826">Online · reached only through the egress proxy</text>
+
+  <rect class="net" x="40" y="840" width="250" height="130" rx="10"/>
+  <text class="t" x="56" y="866">Models</text>
+  <text class="s" x="56" y="888">SayGM: every chat model with</text>
+  <text class="s" x="56" y="904">one key, and speech to text</text>
+  <text class="s" x="56" y="926">Ditto Router (optional):</text>
+  <text class="s" x="56" y="942">background work</text>
+
+  <rect class="net" x="330" y="840" width="250" height="130" rx="10"/>
+  <text class="t" x="346" y="866">Memory and review</text>
+  <text class="s" x="346" y="888">Ditto: long-term memory, a</text>
+  <text class="s" x="346" y="904">thread per chat, project sync</text>
+  <text class="s" x="346" y="926">Ditto Review: reviews a</text>
+  <text class="s" x="346" y="942">branch's pull request</text>
+
+  <rect class="net" x="620" y="840" width="250" height="130" rx="10"/>
+  <text class="t" x="636" y="866">Code</text>
+  <text class="s" x="636" y="888">GitHub: clones, branches,</text>
+  <text class="s" x="636" y="904">pull requests, QA Hound</text>
+  <text class="s" x="636" y="920">verdicts posted as reviews</text>
+
+  <rect class="net" x="910" y="840" width="250" height="130" rx="10"/>
+  <text class="t" x="926" y="866">Bittensor subnets</text>
+  <text class="s" x="926" y="888">Taostats: subnet data</text>
+  <text class="s" x="926" y="904">Atlas: images and video</text>
+  <text class="s" x="926" y="920">404: 3D as code, no key</text>
+  <text class="s" x="926" y="936">Hippius: file storage</text>
+
+  </g>
+
+  <!-- Arrows -->
+  <path class="arr" d="M520 124 V236"/>
+  <path class="arr" d="M745 124 V236"/>
+  <path class="arr" d="M1035 124 V236"/>
+  <path class="arr" d="M165 124 V234"/>
+  <text class="al" x="62" y="200">keeps it running</text>
+    <path class="arr dash" d="M380 124 V176 H230 V234"/>
+  <text class="al" x="240" y="170">link a folder</text>
+  <path class="arr" d="M155 360 V408"/>
+  <path class="arr dash" d="M270 470 H300 V699 H328"/>
+  <text class="al" x="200" y="530">mounted</text>
+  <text class="al" x="200" y="545">read-only</text>
+    <path class="arr" d="M600 292 V320"/>
+  <path class="arr" d="M870 392 H898"/>
+  <path class="arr2" d="M872 560 H898"/>
+  <path class="arr" d="M1130 388 H1150 V858"/>
+  <text class="al" x="1142" y="812" text-anchor="end">HTTPS, approved sites only</text>
+</svg>
+</div>
+
+<h2>A message, start to finish</h2>
+<ol class="steps">
+  <li>You type or speak in the browser or the desktop app. Push-to-talk turns speech into text with a SayGM model.</li>
+  <li>The message enters through the gateway, the only door, which answers on your own machine only.</li>
+  <li>The server saves it and starts a <strong>turn</strong>. Turns run in the container, so you can close the tab and come back later.</li>
+  <li>The chat's engine (OpenCode or the Claude Agent SDK) calls the model you picked on SayGM, through the egress proxy.</li>
+  <li>The agent uses its tools inside the container: the shell, files in the workspace, its own browser, skills, subagents and MCP servers such as Ditto.</li>
+  <li>Anything it needs from the internet goes through the proxy. A site that isn't approved yet waits for your yes.</li>
+  <li>The reply streams back to you. Files it made are listed under the reply to download, the turn is archived to Ditto, and Piper reads it out if voice is on.</li>
+</ol>
+
+<h2>What keeps it safe</h2>
+<div class="grid">
+  <div class="card"><h3>Three layers</h3><p>A locked-down runtime (WSL distro, VM or Docker host), a container with no route out, and an unprivileged user on a read-only system.</p></div>
+  <div class="card"><h3>One door in, one door out</h3><p>The gateway only answers your own machine. The egress proxy only reaches approved sites, and asks you before adding one.</p></div>
+  <div class="card"><h3>Your folders stay yours</h3><p>The agent sees a folder only if you link it, read-only, without files that hold secrets. It edits its own copy.</p></div>
+  <div class="card"><h3>Keys out of reach</h3><p>Keys live in <code>.env</code> or the encrypted vault. They are scrubbed from the engines' environment and hidden from the agent's tools.</p></div>
+  <div class="card"><h3>Pages are data</h3><p>Web pages, captures and repos the agent reads are treated as material to review, never as instructions.</p></div>
+  <div class="card"><h3>One data folder</h3><p>Everything you make lives in <code>/data</code>. Deploys replace the code and never touch it.</p></div>
+</div>
+
+<h2>Services and keys</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Service</th><th>What BitBull uses it for</th><th>Key</th></tr></thead>
+  <tbody>
+    <tr><td>SayGM</td><td>Every chat model through one key, plus speech to text for voice</td><td><code>SAYGM_API_KEY</code> <span class="tag req">needed</span></td></tr>
+    <tr><td>Ditto</td><td>Long-term memory, a thread per chat, project sync</td><td><code>DITTO_API_KEY</code> <span class="tag req">needed</span></td></tr>
+    <tr><td>Your BitBull</td><td>The password for the UI and the API</td><td><code>APP_TOKEN</code> <span class="tag req">needed</span></td></tr>
+    <tr><td>Ditto Router</td><td>Background work (titles, compaction) on a model you choose</td><td>Router key <span class="tag">optional</span></td></tr>
+    <tr><td>Ditto Review</td><td>A review of a branch's pull request, from Repositories</td><td>Uses your GitHub token <span class="tag">optional</span></td></tr>
+    <tr><td>GitHub</td><td>Clones, branches, pull requests and QA Hound verdicts</td><td><code>GITHUB_TOKEN</code> <span class="tag">optional</span></td></tr>
+    <tr><td>Taostats</td><td>Bittensor subnet and network data</td><td>Taostats key <span class="tag">optional</span></td></tr>
+    <tr><td>Atlas</td><td>Image and video generation</td><td>Atlas key <span class="tag">optional</span></td></tr>
+    <tr><td>404</td><td>3D objects as Three.js code, from the public game recipe</td><td>None <span class="tag">no key</span></td></tr>
+    <tr><td>Hippius</td><td>Backing up workspace files to decentralised storage</td><td>Hippius sub-token <span class="tag">optional</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Where things live</h2>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>What</th><th>Where</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>BitBull's code</td><td>Your clone of the repo</td><td>The source of truth. Deploy copies it into the runtime and rebuilds the image.</td></tr>
+    <tr><td>Chats, projects, uploads, workspaces</td><td><code>/data</code> in the container</td><td>On Windows, <code>~/bitbull-data</code> inside the WSL distro.</td></tr>
+    <tr><td>Settings changed in the UI</td><td><code>settings.local.json</code></td><td>In the data folder. Keys go to the encrypted vault instead.</td></tr>
+    <tr><td>Keys</td><td><code>.env</code> or <code>vault.json</code></td><td>The vault's key stays on your PC with the link helper.</td></tr>
+    <tr><td>Skills and subagents</td><td><code>skills/</code>, <code>subagents/</code></td><td>Versioned in Git, copied into every workspace at start-up.</td></tr>
+    <tr><td>Help</td><td><code>help/</code></td><td>This map and the help pages. Open from the Help button in BitBull; the agent can read them too.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<footer>BitBull, the Bittensor builder · BitBob Ltd · Guide: <a href="https://www.bitbull.tech/guide/getting-started">bitbull.tech/guide</a> · Updated November 2026</footer>
+</main>
+</body>
+</html>

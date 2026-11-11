@@ -54,3 +54,4 @@ export const IconSpeakerOff = (p: P) => (<svg {...base(p)}><path d="M11 5 6 9H3v
 export const IconArchive = (p: P) => (<svg {...base(p)}><rect x="3" y="4" width="18" height="5" rx="1" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4" /></svg>)
 export const IconUnarchive = (p: P) => (<svg {...base(p)}><rect x="3" y="4" width="18" height="5" rx="1" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M12 18v-6M9.5 14.5 12 12l2.5 2.5" /></svg>)
 export const IconDownload = (p: P) => (<svg {...base(p)}><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 19h14" /></svg>)
+export const IconHelp = (p: P) => (<svg {...base(p)}><circle cx="12" cy="12" r="9" /><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9" /><path d="M12 17.2h.01" /></svg>)

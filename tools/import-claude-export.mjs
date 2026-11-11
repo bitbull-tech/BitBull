@@ -5,7 +5,7 @@
  * account-level memory, and artifacts.
  *
  *   node tools/import-claude-export.mjs <zip | folder> [more zips/folders…]
- *        [--gm http://localhost:8787] [--token <APP_TOKEN>]
+ *        [--bitbull http://localhost:8787] [--token <APP_TOKEN>]
  *        [--projects-only | --conversations-only] [--project "<name>"] [--since 2026-01-01]
  *        [--include-starter] [--no-artifacts] [--dry-run]
  *
@@ -26,7 +26,7 @@
  *   artifacts/*          → the general workspace's uploads/claude-import/artifacts/<id>/ (skip: --no-artifacts)
  *   Attachments' extracted text is kept with the message; images are named only.
  *
- * The token is read from --token, GM_APP_TOKEN, or APP_TOKEN in the repo's .env (never printed).
+ * The token is read from --token, BITBULL_APP_TOKEN, or APP_TOKEN in the repo's .env (never printed).
  * Nothing is sent anywhere except the BitBull URL. Needs Node 20+.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -39,18 +39,18 @@ const one = (n, d) => {
   const i = args.indexOf(`--${n}`);
   return i >= 0 && args[i + 1] ? args[i + 1] : d;
 };
-const VALUED = new Set(["--gm", "--token", "--project", "--since"]);
+const VALUED = new Set(["--bitbull", "--token", "--project", "--since"]);
 const inputs = args.filter((a, i) => !a.startsWith("--") && !VALUED.has(args[i - 1] ?? ""));
 if (!inputs.length || flag("help")) {
-  console.log("usage: node tools/import-claude-export.mjs <zip|folder> [more…] [--gm url] [--token t] [--projects-only|--conversations-only] [--project name] [--since YYYY-MM-DD] [--include-starter] [--no-artifacts] [--dry-run]");
+  console.log("usage: node tools/import-claude-export.mjs <zip|folder> [more…] [--bitbull url] [--token t] [--projects-only|--conversations-only] [--project name] [--since YYYY-MM-DD] [--include-starter] [--no-artifacts] [--dry-run]");
   process.exit(inputs.length ? 0 : 2);
 }
-const GM = (one("gm", process.env.GM_URL ?? "http://localhost:8787")).replace(/\/+$/, "");
+const BITBULL = (one("bitbull", process.env.BITBULL_URL ?? "http://localhost:8787")).replace(/\/+$/, "");
 const DRY = flag("dry-run");
 const SINCE = one("since", "") ? Date.parse(one("since", "")) : 0;
 
 function readToken() {
-  const t = one("token", process.env.GM_APP_TOKEN);
+  const t = one("token", process.env.BITBULL_APP_TOKEN);
   if (t) return t;
   const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
   for (const env of [path.join(here, "..", ".env"), path.join(process.cwd(), ".env")]) {
@@ -62,7 +62,7 @@ function readToken() {
 }
 const TOKEN = readToken();
 if (!TOKEN && !DRY) {
-  console.error("No token: pass --token, set GM_APP_TOKEN, or run from the repo (reads APP_TOKEN from .env).");
+  console.error("No token: pass --token, set BITBULL_APP_TOKEN, or run from the repo (reads APP_TOKEN from .env).");
   process.exit(2);
 }
 
@@ -206,7 +206,7 @@ function shapeConversation(c) {
 // ---------- talking to BitBull ----------
 
 async function api(method, route, body, isForm = false) {
-  const res = await fetch(`${GM}${route}`, {
+  const res = await fetch(`${BITBULL}${route}`, {
     method,
     headers: { Authorization: `Bearer ${TOKEN}`, ...(isForm ? {} : { "content-type": "application/json" }) },
     body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),

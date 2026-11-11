@@ -48,7 +48,7 @@ async function post(path: string, body: unknown) {
 }
 
 /** BitBull restarts after a link changes; wait until it answers again and (optionally) shows the link. */
-async function waitForGm(name?: string, present = true) {
+async function waitForBitBull(name?: string, present = true) {
   const until = Date.now() + 90_000
   await new Promise((r) => setTimeout(r, 3000))
   while (Date.now() < until) {
@@ -76,7 +76,7 @@ export async function linkFolder(onStep?: (s: string) => void) {
   const r = await post('/link', {})
   if (!r.ok) return r
   onStep?.(isMac ? `Linked ${r.path ?? ''}. Waiting for BitBull to show it…` : `Linked ${r.path ?? ''}. BitBull is restarting to see it…`)
-  await waitForGm(r.name ?? undefined, true)
+  await waitForBitBull(r.name ?? undefined, true)
   return r
 }
 
@@ -85,7 +85,7 @@ export async function unlinkFolder(name: string, onStep?: (s: string) => void) {
   const r = await post('/unlink', { name })
   if (!r.ok) return r
   onStep?.(isMac ? `Removed ${name}.` : `Removed ${name}. BitBull is restarting…`)
-  await waitForGm(name, false)
+  await waitForBitBull(name, false)
   return r
 }
 

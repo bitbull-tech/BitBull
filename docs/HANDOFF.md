@@ -213,13 +213,13 @@ verdict "fix first", one live RCE, four more highs. Verified and fixed here, wit
 Checked and NOT accepted: **finding #3 (Tauri IPC)** claims the desktop app's commands are
 callable from the BitBull webview and the README's "no IPC" is false. Tauri 2's ACL source and
 its own tests show window-scoped denial ("not allowed on window …"), and our capability lists
-only `main`, so the `gm` window has no permissions. One swarm, static, no PoC — needs a
+only `main`, so the BitBull window has no permissions. One swarm, static, no PoC — needs a
 click-through proof before anything is redesigned.
 
 Still open from that swarm, for the coding agent: `/vault-key` has no consent dialog (any local
 process with a forged Origin can take the vault key — #2, real and worth the dialog); vault
 values land in `process.env` and so in the OpenCode child's `/proc` (#5, the known shared-uid
-residual, GAPS #11); host-mode `0.0.0.0` + `ALLOW_NO_AUTH` foot-gun (#7); `migrate-from-gm.ps1`
+residual, GAPS #11); host-mode `0.0.0.0` + `ALLOW_NO_AUTH` foot-gun (#7); the old-distro migration script
 root tar follows planted symlinks (#8); `deploy.ps1` unquoted filename interpolation (#9);
 storage restore writes plaintext before GCM verify (#10); swarm reviewers are full-capability
 agents on hostile repos and their output is interpolated into the verdict prompt (#11); CI has
@@ -238,7 +238,7 @@ describe giving BitBull its own claimable Ditto agent account (`heyditto init --
 Tom still has to: run that `init`, claim it, swap `DITTO_API_KEY`; enable the repo for Ditto
 Review in his Ditto workspace (otherwise `ditto_review` returns the service's refusal).
 Not done, deliberately: the engines' own Ditto MCP calls don't carry the thread headers
-(OpenCode's MCP config is per server, not per chat); Ditto's inference router (`gm/` models,
+(OpenCode's MCP config is per server, not per chat); Ditto's inference router (SayGM-backed models,
 recall/record) is worth evaluating at the device-token phase, not before.
 
 ## Vault and Open in Explorer (4 Nov 2026, late)

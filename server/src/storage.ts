@@ -27,7 +27,9 @@ import { indexFile } from "./ditto.js";
 import { storedFiles, type StoredFileRow } from "./db.js";
 
 /** File header: magic, version, then the GCM nonce. The 16-byte tag is appended at the end. */
-const MAGIC = Buffer.from("GMS1", "ascii");
+const MAGIC = Buffer.from("BBS1", "ascii");
+/** Files stored before the rename carry this header; still read, never written. */
+const OLD_MAGIC = Buffer.from("GMS1", "ascii");
 const IV_LEN = 12;
 const TAG_LEN = 16;
 export const HEADER_LEN = MAGIC.length + IV_LEN;
@@ -122,7 +124,7 @@ async function decryptFile(src: string, dest: string, key: Buffer) {
   try {
     const header = Buffer.alloc(HEADER_LEN);
     await fh.read(header, 0, HEADER_LEN, 0);
-    if (!header.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("not a BitBull-encrypted file");
+    if (!header.subarray(0, MAGIC.length).equals(MAGIC) && !header.subarray(0, MAGIC.length).equals(OLD_MAGIC)) throw new Error("not a BitBull-encrypted file");
     const tag = Buffer.alloc(TAG_LEN);
     await fh.read(tag, 0, TAG_LEN, size - TAG_LEN);
 

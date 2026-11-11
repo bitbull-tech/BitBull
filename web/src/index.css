@@ -1258,3 +1258,17 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .bulk-move { position: relative; }
 .bulk-move-menu { position: absolute; top: calc(100% + 4px); left: 0; right: auto; z-index: 30; min-width: 180px; }
 .session .session-check { margin: 0 6px 0 0; accent-color: var(--accent); flex: none; }
+
+/* Help */
+.help-modal { width: min(1200px, 96vw); height: min(88vh, 900px); display: flex; flex-direction: column; }
+.help-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 14px; padding: 8px 16px 16px; flex: 1; min-height: 0; }
+.help-nav { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
+.help-item { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.help-item span { font-size: 12px; color: var(--muted); }
+.help-item.on { border-color: var(--accent); }
+.help-links { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: 13px; }
+.help-frame { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+@media (max-width: 720px) {
+  .help-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .help-nav { max-height: 30vh; }
+}
