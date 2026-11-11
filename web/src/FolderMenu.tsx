@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus, IconRefresh } from './icons'
-import { HELPER_CMD, helperStatus, isMac, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
+import { HELPER_CMD, helperStatus, inDesktopApp, isMac, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
 
 /**
  * The composer's folder button: upload a copy (the agent may change it), attach a folder you
@@ -39,6 +39,14 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, busy])
+
+  // No helper yet: keep looking while the menu is open, so it switches on by itself once the
+  // helper is up (the BitBull app starts it within seconds), with no reopening or restarting
+  useEffect(() => {
+    if (!open || helper !== null || !onThisPc()) return
+    const t = setInterval(() => void helperStatus().then((h) => h && setHelper(h)), 2000)
+    return () => clearInterval(t)
+  }, [open, helper])
 
   const info = (name: string) => (helper && helper !== 'checking' ? helper.links.find((h) => h.name === name) : undefined)
   const winPath = (name: string) => info(name)?.path
@@ -170,10 +178,13 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
               ) : (
                 <>
                   <p className="fm-note">
-                    {isMac
-                      ? 'To link folders from here, the BitBull app must be running (it holds the link helper on a Mac), then reopen this menu:'
-                      : 'To link folders from here, start the link helper on this PC (start.ps1 does it), then reopen this menu:'}
+                    {inDesktopApp
+                      ? 'Starting the link helper… The BitBull app does this by itself; this menu switches on as soon as it answers.'
+                      : isMac
+                        ? 'Linking needs the BitBull app running (it holds the link helper on a Mac). This menu switches on by itself once it is.'
+                        : 'Linking needs the link helper on this PC. Open the BitBull app and it starts by itself, or run start.ps1 once; this menu switches on by itself as soon as it answers.'}
                   </p>
+                  {!inDesktopApp && (
                   <div className="fm-cmd">
                     <code>{HELPER_CMD}</code>
                     <button
@@ -190,6 +201,7 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                       {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
                     </button>
                   </div>
+                  )}
                 </>
               )}
               {busy && <p className="fm-note fm-busy">{busy}</p>}

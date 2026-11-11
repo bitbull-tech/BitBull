@@ -453,4 +453,8 @@ BitBull is now only the coding agent and Bittensor one-stop shop. The family-arc
 lives in `D:\github\family-archive` (its own README lists what moved). Removed here: two skills,
 one subagent, one tool, two docs, the likeness setting and its prompt text, and the wording across
 the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittensor tools.
+- Link helper on Windows: the desktop app now keeps `link-helper.ps1` running (checks port 8790
+  every 10 s, starts it hidden if nothing answers; `keep_link_helper` in lib.rs). The folder menu
+  polls for the helper while open and switches on by itself; its note names one script
+  (start.ps1) and none at all inside the app.
 

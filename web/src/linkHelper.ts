@@ -1,7 +1,8 @@
 import { api } from './api'
 
 /**
- * Talks to the link helper on this PC (scripts/bitbull-wsl/link-helper.ps1, started by start.ps1).
+ * Talks to the link helper on this PC (scripts/bitbull-wsl/link-helper.ps1). The BitBull app keeps
+ * it running on Windows; without the app, start.ps1 starts it.
  * The page never sends a path: the helper opens a Windows folder picker and you choose there.
  * It only answers BitBull's own page, and only on the PC itself (localhost).
  */
@@ -18,8 +19,10 @@ export interface HelperLink {
 /** BitBull on a Mac: the helper is the BitBull app itself, folders open in Finder, links are copies. */
 export const isMac = /Mac/i.test(navigator.userAgent)
 export const fileManager = isMac ? 'Finder' : 'Explorer'
-/** What starts the helper, for the "no helper" notes. */
-export const HELPER_CMD = isMac ? 'Open the BitBull app (it stays in the menu bar)' : 'powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
+/** This page is open in the BitBull desktop app, which keeps the link helper running by itself. */
+export const inDesktopApp = !!(window as unknown as { __BITBULL_DESKTOP?: unknown }).__BITBULL_DESKTOP
+/** What starts the helper without the app, for the "no helper" notes. */
+export const HELPER_CMD = isMac ? 'Open the BitBull app (it stays in the menu bar)' : 'powershell -ExecutionPolicy Bypass -File scripts\\bitbull-wsl\\start.ps1'
 
 export const onThisPc = () => ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
 
@@ -63,7 +66,9 @@ async function waitForGm(name?: string, present = true) {
 
 export const HELPER_HINT = isMac
   ? 'Linking from the page needs the link helper, which on a Mac runs inside the BitBull app: open the app (it stays in the menu bar) and reload.'
-  : 'Linking from the page needs the link helper on this PC. start.ps1 starts it; or run: powershell -ExecutionPolicy Bypass -STA -File scripts\\bitbull-wsl\\link-helper.ps1'
+  : inDesktopApp
+    ? 'The BitBull app starts the link helper by itself: give it a few seconds and try again.'
+    : 'Linking from the page needs the link helper on this PC. Open the BitBull app (it starts the helper by itself), or run start.ps1 once.'
 
 /** Opens the folder picker on this PC; resolves once BitBull shows the new link. */
 export async function linkFolder(onStep?: (s: string) => void) {

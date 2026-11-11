@@ -306,7 +306,7 @@ Same stack, same launcher, same web UI; only the layer that Windows gets from WS
 | Scripts | `scripts/bitbull-wsl/*.ps1` | `scripts/bitbull-mac/*.sh` (bash 3.2, no Homebrew bash needed) |
 | Deployed code / data / links | `~/BitBull`, `~/bitbull-data`, `/srv/bitbull-links` in the distro | `app/`, `data/`, `links/` under BitBull's folder |
 | Linked folders | read-only bind mounts (live) | read-only **copies** (secrets left out unless chosen); Refresh to update |
-| Link helper | `link-helper.ps1`, started by `start.ps1` | built into the app (`desktop/src-tauri/src/helper.rs`), same HTTP API on `localhost:8790` |
+| Link helper | `link-helper.ps1`, kept running by the app (or started by `start.ps1`) | built into the app (`desktop/src-tauri/src/helper.rs`), same HTTP API on `localhost:8790` |
 | Vault key | DPAPI file in `%LOCALAPPDATA%\BitBull` | login Keychain item `io.bitbull.vault`, owned by the app |
 | Start at login | Startup shortcut | LaunchAgent `io.bitbull.stack`, which also opens the app (for the helper) |
 | Installer | NSIS / MSI from `npm run tauri build` | universal `.dmg` from the `macos` workflow |

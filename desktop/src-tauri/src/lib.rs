@@ -412,6 +412,46 @@ fn register_push_to_talk(app: &AppHandle) {
     }
 }
 
+/// Windows: keep the link helper (scripts/bitbull-wsl/link-helper.ps1: folder picker, Open in
+/// Explorer, vault key) running while this app runs. It is checked every 10 s and started, hidden,
+/// when nothing answers on its port; start.ps1 still starts it too, for when the app isn't open.
+#[cfg(windows)]
+fn keep_link_helper(app: AppHandle) {
+    use std::net::{SocketAddr, TcpStream};
+    use std::os::windows::process::CommandExt;
+    use std::time::Duration;
+    std::thread::spawn(move || {
+        let addr: SocketAddr = "127.0.0.1:8790".parse().unwrap();
+        loop {
+            let s = app.state::<AppState>().settings.lock().unwrap().clone();
+            let answering = TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok();
+            let mut started = false;
+            if !answering {
+                if let Some(repo) = s.repo.as_deref().filter(|r| stack::is_repo(r)) {
+                    let script = repo.join("scripts").join("bitbull-wsl").join("link-helper.ps1");
+                    let distro = if stack::valid_distro(&s.distro) { s.distro.clone() } else { "bitbull".into() };
+                    if script.is_file() {
+                        let r = std::process::Command::new("powershell.exe")
+                            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File"])
+                            .arg(&script)
+                            .arg("-Distro")
+                            .arg(&distro)
+                            .current_dir(repo)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW; its dialogs still show
+                            .spawn();
+                        started = r.is_ok();
+                    }
+                }
+            }
+            // a helper takes a few seconds to start listening: don't start a second one meanwhile
+            std::thread::sleep(Duration::from_secs(if started { 20 } else { 10 }));
+        }
+    });
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -429,6 +469,10 @@ pub fn run() {
             if Platform::current() == Platform::Mac {
                 helper::serve(std::sync::Arc::new(AppHost(app.handle().clone())));
             }
+            // On Windows this app keeps link-helper.ps1 running, so linking folders from BitBull's
+            // page works without starting anything by hand.
+            #[cfg(windows)]
+            keep_link_helper(app.handle().clone());
 
             // tray: the app lives here; closing windows never stops the stack
             let open = MenuItem::with_id(app, "open", "Open BitBull", true, None::<&str>)?;

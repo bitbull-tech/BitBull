@@ -405,7 +405,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Remove sp
 ```
 
 **Linking with the mouse.** The page can't see your disks and never sends a path. It asks the
-**link helper** (`scripts/bitbull-wsl/link-helper.ps1`, started hidden by `start.ps1`, listening on
+**link helper** (`scripts/bitbull-wsl/link-helper.ps1`, kept running by the BitBull app, or started hidden by `start.ps1` when you don't use the app; listening on
 `http://localhost:8790` only), which opens a Windows folder picker on the PC. Nothing is linked
 unless you pick a folder there; if the folder holds keys, `.env` files or wallets, a Windows box
 asks how to link it (below). The helper then runs `link.ps1`, so every check below applies. It only
