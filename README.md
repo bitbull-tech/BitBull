@@ -4,19 +4,25 @@ A personal agent on top of **[SayGM](https://saygm.com)** (one key, many models,
 any time), with **[Ditto](https://heyditto.ai)** as long-term memory, two pluggable agent
 engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 
-- Chat UI with streaming, tool-call view, per-message model switching
+- Chat UI with streaming, tool-call view, browser tools, per-message model switching
 - Turns run on the server, not in your tab: close it, sleep the laptop, come back, and the
   chat picks up where it left off
 - Light and dark, with colour schemes for the background and sidebar (Settings → Appearance), and
   white-labelled from one `brand.json` — name, logo and every colour
 - **QA Hound**: unleash multiple LLMs on a repo, folder or file to review it, challenge each other
   and summarise a verdict and recommendations
-- Every model has its own detective bulldog as its icon, the same everywhere in the app
 - Engine per chat: **OpenCode** (native for every model) or **Claude Agent SDK**
-- Ditto MCP wired into the agent + every turn and skill archived to Ditto
+- Ditto MCP wired into the agent + every turn and skill archived to Ditto whenever you need it
 - Skills in `/skills`, versioned in Git, shared by both engines
-- Three small containers (the agent, an allowlist proxy, a localhost-only gateway) and one data folder; reachable by URL with a bearer token
+- Sandboxed Docker containers (the agent, an allowlist proxy, a localhost-only gateway) and one
+  data folder; reachable by URL with a bearer token
+- Import existing conversations, projects and data from your existing coding agents
 - `POST /api/v1/chat` for scripts and other agents
+
+Installing for the first time? The step-by-step guide for Windows, Mac and Linux is at
+**[bitbull.tech/guide](https://www.bitbull.tech/guide/getting-started)**, or paste this into the AI
+agent you already use: *Set up BitBull for me. Fetch https://www.bitbull.tech/get-started.md and
+follow it.*
 
 New here (or a new agent session)? Start with [CLAUDE.md](CLAUDE.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
 Agents *using* BitBull (rather than changing it) read [agent-readme.md](agent-readme.md).
@@ -73,7 +79,7 @@ bitbull VM ("On a Mac", below).
 Three layers, from the outside in. Each only sees what the layer outside hands it.
 
 ```
-Windows  ── D:\github\BitBull (source, .env, git)      ── deploy.ps1 copies code + .env in ──┐
+Windows  ── C:\code\BitBull (source, .env, git)        ── deploy.ps1 copies code + .env in ──┐
                                                                                                  ▼
 WSL distro "bitbull" (no Windows drives, no Windows programs, Docker with userns-remap)
    ~/BitBull   code copy, replaced on every deploy
@@ -89,12 +95,12 @@ Docker (network "sandbox" is internal: no internet, no LAN, no host)
 
 | What | Where | Notes |
 |---|---|---|
-| Source code, git history | `D:\github\BitBull` | You edit and commit here. BitBull never sees this folder. |
-| Secrets and settings | `D:\github\BitBull\.env` | Never committed (`.gitignore`). Copied into `bitbull` by `deploy.ps1`. |
+| Source code, git history | your BitBull folder (e.g. `C:\code\BitBull`) | You edit and commit here. BitBull never sees this folder. |
+| Secrets and settings | `.env` in that folder | Never committed (`.gitignore`). Copied into `bitbull` by `deploy.ps1`. |
 | Scripts | `scripts\bitbull-wsl\setup.ps1`, `deploy.ps1`, `start.ps1` | One-time setup, ship changes, keep running. |
 | Start at login | Startup folder shortcut "BitBull" | Created by `start.ps1 -InstallAtLogin`. |
 | The `bitbull` distro's disk | `%LOCALAPPDATA%\BitBull-WSL\disk` | A virtual disk holding everything in the next table. |
-| Old data from before the sandbox | `D:\github\BitBull\data` | Copied into `bitbull` once at setup; no longer used. |
+| Old data from before the sandbox | `data\` in that folder | Copied into `bitbull` once at setup; no longer used. |
 
 ### Outside Docker: inside the `bitbull` WSL distro
 
@@ -278,12 +284,12 @@ from it and ignores (and reports) anything else. The UI can't write your Windows
 container can't see Windows, by design); copy a value there yourself if you want it to be the
 long-term default.
 
-BitBull's own credentials (SayGM, Ditto, Atlas, 404, Hippius, `APP_TOKEN`) are blanked in every
+BitBull's own credentials (SayGM, Ditto, Atlas, Hippius, `APP_TOKEN`) are blanked in every
 shell the **OpenCode** engine starts, and any known key that turns up in a tool's output, a
 reply, an export or the Ditto archive is replaced with `[REDACTED]`
 ([`agent/opencode-plugin/bitbull-guard.js`](agent/opencode-plugin/bitbull-guard.js) for OpenCode; the
 server redacts again for both engines). Keys meant for the agent (`GITHUB_TOKEN`,
-`TAOSTATS_API_KEY`) stay available to it but are masked in output. The **Claude Agent SDK**
+`TAOSTATS_API_KEY`, `FOUR04_MODEL_KEY`) stay available to it but are masked in output. The **Claude Agent SDK**
 engine has no equivalent of bitbull-guard: its shell inherits the SayGM key, and only the server's
 redaction stands between it and the chat. This all prevents accidental leaks; it isn't a hard
 wall, because the shell runs as the same user as BitBull and can read the server's environment,
@@ -397,7 +403,7 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\P
 # once: "Link to BitBull (read-only)" on Explorer's right-click menu for folders (-UninstallMenu removes it)
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -InstallMenu
 # a folder with secrets: a read-only copy without them (BitBull's own repo always links this way)
-powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "D:\github\BitBull" -Hide
+powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Add "C:\code\BitBull" -Hide
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -Refresh bitbull
 # list links (also re-mounts missing ones), remove one
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\link.ps1 -List
@@ -685,6 +691,13 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/debug` | Tries each SayGM API shape and logs which fail |
 | `GET` | `/api/models` | Live SayGM model list (`?refresh=1`) |
 | `POST` | `/api/models/refresh` | Re-read the model list and reload OpenCode |
+| `GET` | `/api/models/:id` | One model's details from the live catalogue |
+| `GET` | `/api/models/usage` | Your record per model: turns, errors, stopped, cost, tokens, speed |
+| `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
+| `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
+| `GET` | `/api/voice` | Voice: Piper text-to-speech and its voices, and the speech-to-text model |
+| `POST` | `/api/voice/speak` | Text to speech in the container (`{text, voice?, speed?}` → WAV); nothing leaves the machine |
+| `POST` | `/api/voice/transcribe` | Speech to text: a WAV recording in, its words out (a Gemini model on SayGM) |
 | `GET/PUT` | `/api/settings` | Current settings (masked) / save UI overrides `{values: {KEY: value or null}}` |
 | `GET/POST` | `/api/sessions` | List / create (`{engine, model, projectId?}`) |
 | `GET/PATCH/DELETE` | `/api/sessions/:id` | History / rename or move (`{title?, projectId?}`) / delete |
@@ -695,12 +708,16 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/sessions/:id/export` | Chat export: `?format=md` (default) or `json`; `exchange=last` or an assistant message id; `compact=1` (prompt + reply only); `tools=0`, `activity=0`, `limit=` (chars per tool output) |
 | `GET/POST` | `/api/projects` | List / create a project |
 | `PATCH/DELETE` | `/api/projects/:id` | Update (name, instructions, colour, integrations) / delete |
+| `GET` | `/api/sessions/:id/outputs` | Files a chat's replies created or changed in its workspace |
+| `GET` | `/api/projects/:id/download` | `?path=` (repeat for several): one file as itself; a folder or several paths as one .zip (up to 5,000 files / 512 MB) |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
 | `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA Hound run (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
 | `GET/POST` | `/api/vault`, `/api/vault/unlock {key}`, `/api/vault/lock` | Vault state; unlock with the 64-hex key (migrates secrets out of settings.local.json); lock |
 | `GET` | `/api/projects/:id/repos` | Git clones in the workspace: branch, status, ahead/behind, branches, last commit (read-only) |
+| `POST` | `/api/projects/:id/repos/sync` | Fetch and fast-forward one clone onto its origin (`{repo}`): the Sync button |
+| `POST` | `/api/projects/:id/repos/ditto-review` | Ask Ditto Review to review a branch's open pull request (comments "@ditto review" on it) |
 | `GET` | `/api/projects/:id/repos/diff` | `?repo=<path>` uncommitted-changes stat; `&base=<ref>` compares base...HEAD |
 | `GET` | `/api/projects/:id/stored` | What has been mirrored to Hippius for a project |
 | `POST` | `/api/stored/:id/restore` | Pull a stored file back into its workspace and verify it |
@@ -710,6 +727,10 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/ditto/tools` | The tools Ditto's MCP server offers |
 | `GET/POST` | `/api/skills`, `/api/skills/sync` | List / re-sync + back up skills to Ditto |
 | `GET` | `/api/brand` | Name, logos and colour overrides (public) |
+| `GET` | `/api/brand/asset/:file` | An image from the `brand/` folder (public) |
+| `PUT` | `/api/appearance` | Save the background and sidebar colours (Settings → Appearance) into `brand.json` |
+| `POST` | `/api/captures` | A page sent by the BitBull browser extension (screenshot, text, outline…; up to 16 MB) |
+| `GET` | `/api/captures/next` | The next captured page waiting for the open chat |
 | `GET` | `/api/links` | Read-only linked folders (name, path, entries, readOnly, noExec); listed only, never changed |
 | `GET` | `/api/network` | Static allowlist, your approvals, pending/recent agent requests, recently blocked hosts |
 | `POST` | `/api/network/requests/:id` | Answer an agent's request: `{decision: "host" \| "domain" \| "deny"}` |

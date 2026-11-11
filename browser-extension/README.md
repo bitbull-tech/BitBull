@@ -8,7 +8,7 @@ as a picture and a Markdown summary, so the chat's model can review it.
 ## Install (Chrome, Edge, Brave)
 
 1. Open `chrome://extensions` (Edge: `edge://extensions`) and turn on **Developer mode**.
-2. **Load unpacked** → choose this folder (`D:\github\BitBull\browser-extension`).
+2. **Load unpacked** → choose this folder (`browser-extension` inside your BitBull folder).
 3. Pin it, click it, open **Connection**: the address is `http://localhost:8787` and the token is
    BitBull's access token (`APP_TOKEN` in BitBull's `.env`). **Test**, then **Save**.
 

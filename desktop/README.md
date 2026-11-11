@@ -45,7 +45,7 @@ winget install Microsoft.VisualStudio.2022.BuildTools   # tick "Desktop developm
 Then from the repo:
 
 ```powershell
-cd D:\github\BitBull\desktop
+cd C:\code\BitBull\desktop   # your BitBull folder
 npm install
 npm run tauri build
 ```
