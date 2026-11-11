@@ -27,7 +27,7 @@ test("only UI-editable keys are applied from settings.local.json", () => {
 
 test("the UI can never set tokens, paths, sandbox settings or service URLs", () => {
   for (const k of ["APP_TOKEN", "ALLOW_HOST_SHELL", "BITBULL_SANDBOX", "DATA_DIR", "BITBULL_LINKS_PATH", "SKILLS_DIR", "SUBAGENTS_DIR", "SYSTEM_PROMPT_FILE", "PORT", "HOST",
-    "SAYGM_OPENAI_BASE_URL", "SAYGM_ANTHROPIC_BASE_URL", "DITTO_MCP_URL", "ATLAS_MCP_URL", "FOUR04_MCP_URL", "FOUR04_API_BASE", "HIPPIUS_S3_ENDPOINT", "HTTPS_PROXY"]) {
+    "SAYGM_OPENAI_BASE_URL", "SAYGM_ANTHROPIC_BASE_URL", "DITTO_MCP_URL", "ATLAS_MCP_URL", "HIPPIUS_S3_ENDPOINT", "HTTPS_PROXY"]) {
     assert.ok(!(k in EDITABLE), k);
   }
 });

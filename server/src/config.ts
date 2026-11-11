@@ -53,7 +53,10 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   GIT_USER_NAME: {},
   GIT_USER_EMAIL: {},
   ATLAS_API_KEY: {},
-  FOUR04_API_KEY: {},
+  // 404's open model on your own RunPod GPU (optional). The URL is editable on purpose: the key
+  // it is sent with is that pod's own vLLM key, worth nothing elsewhere.
+  FOUR04_MODEL_URL: {},
+  FOUR04_MODEL_KEY: {},
   TAOSTATS_API_KEY: {},
   HIPPIUS_ACCESS_KEY: {},
   HIPPIUS_SECRET_KEY: {},
@@ -216,10 +219,19 @@ function buildConfig() {
     /** Taostats API key (Bittensor data). Sent raw in Authorization (no Bearer); v1 API only. */
     taostats: { apiKey: env("TAOSTATS_API_KEY", "") },
     four04: {
-      /** 404.xyz (404—GEN text-to-3D). No public API documented yet: set these when 404 provides one. */
-      apiKey: env("FOUR04_API_KEY", ""),
-      apiBase: env("FOUR04_API_BASE", ""),
-      mcpUrl: env("FOUR04_MCP_URL", ""),
+      /**
+       * 404 (Bittensor subnet 17): 3D objects as Three.js code, through the public 404 game recipe.
+       * No 404 key and no 404 MCP: the recipe is a public repo the agent clones and follows
+       * (GAME.md, 404.md), its gate runs locally against your own URL, and jam entries go in as a
+       * pull request from your GitHub account. Optional: the open model behind the leader of the
+       * 404 generation competition, on your own RunPod GPU (vLLM, OpenAI-compatible, your own key).
+       */
+      recipeRepo: "https://github.com/404-Repo/404-game-recipe",
+      jamRepo: "https://github.com/404-Repo/404-game-jam",
+      /** e.g. https://<podId>-8001.proxy.runpod.net/v1 */
+      modelUrl: env("FOUR04_MODEL_URL", ""),
+      /** the VLLM_API_KEY you set when deploying the pod */
+      modelKey: env("FOUR04_MODEL_KEY", ""),
     },
   },
 

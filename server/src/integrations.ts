@@ -65,18 +65,18 @@ export function integrations(): IntegrationDef[] {
     },
     {
       id: "four04",
-      name: "404.xyz (404—GEN)",
-      blurb: "Text-to-3D generation (Bittensor 404—GEN). Plugins for Blender, Unity and Unreal.",
-      docs: "https://www.404.xyz/plugin",
+      name: "404 (3D as code)",
+      blurb: "Bittensor subnet 17: every 3D object is a Three.js module, made with the public 404 game recipe and checked by its own verifier and jam gate.",
+      docs: f.recipeRepo,
       env: [
-        { key: "FOUR04_API_KEY", label: "API key", secret: true, value: f.apiKey },
-        { key: "FOUR04_API_BASE", label: "API base URL", value: f.apiBase },
-        { key: "FOUR04_MCP_URL", label: "MCP endpoint (if offered)", value: f.mcpUrl },
+        { key: "FOUR04_MODEL_URL", label: "Open model endpoint (optional)", value: f.modelUrl },
+        { key: "FOUR04_MODEL_KEY", label: "Open model key (optional)", secret: true, value: f.modelKey },
       ],
-      mcp: f.mcpUrl ? { url: f.mcpUrl, headers: f.apiKey ? { Authorization: `Bearer ${f.apiKey}` } : {} } : undefined,
-      configured: !!(f.apiBase || f.mcpUrl),
+      // no 404 MCP and no 404 key: always ready, through the 404-game-recipe skill
+      configured: true,
+      global: true,
       notes:
-        "404 has no public API documented yet; generation is via its Blender/Unity/Unreal plugins. These slots are ready for an API or MCP endpoint when 404 provides one. Until then the agent can use Atlas's own Image → 3D nodes.",
+        "Nothing to sign up for. The agent clones the public recipe (404-Repo/404-game-recipe), follows GAME.md for a game or 404.md for assets, checks every object with harness/verify.mjs, and runs the jam gate (harness/jam.mjs) against your own deployed URL. Jam entries go in as a pull request to 404-Repo/404-game-jam from your GitHub account (the GitHub card above). By default the agent writes the geometry itself: no account, key or GPU. Optional: the open model behind the leader of the 404 generation competition, deployed from 404's RunPod template on your own GPU; put its endpoint and VLLM_API_KEY here and stop the pod when you finish (it bills by the hour). For images and sound, Atlas (above) is what the jam used.",
     },
   ];
 }
@@ -136,10 +136,29 @@ async function probeGithub() {
   }
 }
 
+/** 404 needs nothing to be ready; when the optional open model is set, check the pod answers. */
+async function probeFour04() {
+  const f = config.integrations.four04;
+  if (!f.modelUrl) return { id: "four04" as const, ok: true, configured: true, detail: "Ready: no key needed · the agent writes the geometry with the 404 game recipe" };
+  try {
+    const res = await fetch(`${f.modelUrl.replace(/\/+$/, "")}/models`, {
+      headers: f.modelKey ? { Authorization: `Bearer ${f.modelKey}` } : {},
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.status === 401) return { id: "four04" as const, ok: false, configured: true, detail: "The open model refused the key (401): check FOUR04_MODEL_KEY" };
+    if (!res.ok) return { id: "four04" as const, ok: false, configured: true, detail: `The open model pod said ${res.status} (stopped, or still downloading its weights?)` };
+    const j = (await res.json().catch(() => ({}))) as { data?: Array<{ id?: string }> };
+    return { id: "four04" as const, ok: true, configured: true, detail: `Open model up: ${j.data?.[0]?.id ?? "answering"} · remember to stop the pod when you finish` };
+  } catch {
+    return { id: "four04" as const, ok: false, configured: true, detail: "The open model pod isn't answering (stopped?). The recipe still works without it." };
+  }
+}
+
 export async function probeIntegrations() {
   return Promise.all(
     integrations().map(async (i) => {
       if (i.id === "github") return probeGithub();
+      if (i.id === "four04") return probeFour04();
       if (!i.mcp) return { id: i.id, ok: false, configured: i.configured, detail: i.configured ? "Configured (no MCP endpoint)" : "Not configured" };
       try {
         const c = new Client({ name: "bitbull-agent-probe", version: "0.1.0" });

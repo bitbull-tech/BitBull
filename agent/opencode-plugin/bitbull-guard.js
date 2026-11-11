@@ -14,12 +14,12 @@
 
 // Credentials the agent's shell never needs
 const HIDE = [
-  "SAYGM_API_KEY", "DITTO_API_KEY", "APP_TOKEN", "ATLAS_API_KEY", "FOUR04_API_KEY",
+  "SAYGM_API_KEY", "DITTO_API_KEY", "DITTO_ROUTER_KEY", "APP_TOKEN", "ATLAS_API_KEY",
   "HIPPIUS_ACCESS_KEY", "HIPPIUS_SECRET_KEY", "HIPPIUS_ENCRYPTION_KEY",
   "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENCODE_CONFIG_CONTENT", "OPENCODE_SERVER_PASSWORD",
 ];
 // Given to the agent on purpose, but their values still shouldn't be echoed to the model
-const MASK_ONLY = ["GITHUB_TOKEN", "GH_TOKEN", "TAOSTATS_API_KEY"];
+const MASK_ONLY = ["GITHUB_TOKEN", "GH_TOKEN", "TAOSTATS_API_KEY", "FOUR04_MODEL_KEY"];
 
 function secretValues() {
   const vals = new Set();

@@ -35,7 +35,7 @@ const secrets = () =>
     config.ditto.apiKey,
     config.appToken,
     config.integrations.atlas.apiKey,
-    config.integrations.four04.apiKey,
+    config.integrations.four04.modelKey,
     config.integrations.github.token,
     config.integrations.taostats.apiKey,
     config.storage.accessKey,

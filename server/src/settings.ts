@@ -188,11 +188,12 @@ export function describeSettings() {
     },
     {
       id: "four04",
-      title: "404.xyz (404—GEN)",
+      title: "404 (3D as code)",
       rows: [
-        row("FOUR04_API_KEY", "API key", config.integrations.four04.apiKey, { secret: true }),
-        row("FOUR04_API_BASE", "API base URL", config.integrations.four04.apiBase, { hint: "No public API documented yet; fill in when 404 provides one" }),
-        row("FOUR04_MCP_URL", "MCP endpoint", config.integrations.four04.mcpUrl),
+        row("FOUR04_MODEL_URL", "Open model endpoint (optional)", config.integrations.four04.modelUrl, {
+          hint: "Only for running 404's open model on your own RunPod GPU: https://<podId>-8001.proxy.runpod.net/v1. Leave empty and the agent writes the geometry itself, which needs nothing.",
+        }),
+        row("FOUR04_MODEL_KEY", "Open model key (optional)", config.integrations.four04.modelKey, { secret: true, hint: "The VLLM_API_KEY you set when deploying the pod." }),
       ],
     },
     {

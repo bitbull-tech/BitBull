@@ -112,8 +112,11 @@ Image, video and 3D generation through Bittensor-connected services.
   you run it with `node /app/tools/atlas-run.mjs <spec> --in key=value --file key=path --out dir`
   (`--inspect` shows what a spec needs, `--list` what exists). Those specs contain credentials:
   never print them.
-- **404.xyz**: no public API yet. Its slots in BitBull's integration registry are reserved; until
-  404 ships an API or MCP, use Atlas's Image → 3D nodes for the same need and say so.
+- **404** (subnet 17, `404-game-recipe` skill): 3D objects as Three.js code. No key and no MCP:
+  clone the public recipe (github.com/404-Repo/404-game-recipe), follow its `404.md` / `GAME.md`,
+  verify with its harness, and gate a game with `harness/jam.mjs`. Jam entries are a pull request
+  to 404-Repo/404-game-jam from the owner's GitHub account (ask first). If `FOUR04_MODEL_URL` is
+  set, the owner's RunPod pod serves 404's open model (OpenAI-compatible, `FOUR04_MODEL_KEY`).
 
 ## 7. Storage: Hippius
 

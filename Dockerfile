@@ -35,9 +35,14 @@ FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git gh ripgrep python3 \
       ffmpeg libimage-exiftool-perl poppler-utils tesseract-ocr \
+      chromium fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
     BITBULL_SANDBOX=docker \
+    # Headless Chromium for page checks (the 404 recipe's verifier and jam gate use puppeteer):
+    # use the image's own, never download one through the egress proxy
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     DATA_DIR=/data \
     PORT=8787 \
     HOST=0.0.0.0 \

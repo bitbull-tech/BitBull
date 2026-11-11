@@ -74,7 +74,7 @@ project was exported first).
 1. Personal agent on SayGM (switch models freely) with Ditto as memory, own UI, backed up to
    GitHub, portable (local or by URL + key; may be opened to other users later).
 2. A coding agent and one-stop shop for building on Bittensor: its subnets and services
-   (Taostats, Atlas AI Studio / 404.xyz, Hippius, Ditto) wired in.
+   (Taostats, Atlas AI Studio, 404, Hippius, Ditto) wired in.
 
 ## Architecture (as built)
 
@@ -457,4 +457,15 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
   every 10 s, starts it hidden if nothing answers; `keep_link_helper` in lib.rs). The folder menu
   polls for the helper while open and switches on by itself; its note names one script
   (start.ps1) and none at all inside the app.
+
+## 404 integration corrected (11 Nov 2026)
+
+- There is no 404 key and no 404 MCP. 404 (subnet 17) is used through the public
+  404-Repo/404-game-recipe (clone, `npm install`, follow 404.md / GAME.md, harness/verify.mjs,
+  harness/jam.mjs against your own URL); jam entries are a PR to 404-Repo/404-game-jam from
+  Tom's GitHub. The MCP jam entrants used was Atlas's (already integrated).
+- BitBull: `FOUR04_API_KEY/API_BASE/MCP_URL` removed; optional `FOUR04_MODEL_URL` +
+  `FOUR04_MODEL_KEY` for 404's open model on Tom's own RunPod pod (probe: GET /models). New skill
+  `skills/404-game-recipe`. Image now has Chromium (+ PUPPETEER_SKIP_DOWNLOAD /
+  PUPPETEER_EXECUTABLE_PATH) so the recipe's puppeteer harness runs inside the sandbox.
 

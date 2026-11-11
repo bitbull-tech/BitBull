@@ -22,5 +22,6 @@ Git is the source of truth; Ditto is the backup/searchable copy.
 | `debug-systematically` | Reproduce → hypothesise → isolate → fix → prove |
 | `repo-onboarding` | Map a repo and record it in `AGENTS.md` |
 | `project-recall` | Catch up on a project from Ditto memory |
+| `404-game-recipe` | 3D objects and games as Three.js code with 404 (subnet 17): recipe, verifier, jam gate |
 | `atlas-studio` | Generate video/images/3D via Atlas MCP and exported workflow APIs |
 | `taostats-api` | Taostats v1 API (Bittensor data): auth, paging, RAO strings, old `/api/` → `/v1/` route map |

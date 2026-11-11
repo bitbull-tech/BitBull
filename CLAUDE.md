@@ -9,7 +9,7 @@ Tom's own AI agent platform: a web UI + API server that runs agent engines (**Op
 by default, or the **Claude Agent SDK**) on any model from the **SayGM** gateway, with
 **Ditto** (heyditto.ai) as long-term memory. It runs sandboxed in Docker (on Windows inside a
 locked-down WSL distro called `bitbull`). The aim: a coding agent and a one-stop shop for building
-on Bittensor, with its subnets and services (Taostats, Atlas AI Studio / 404.xyz, Hippius, Ditto)
+on Bittensor, with its subnets and services (Taostats, Atlas AI Studio, 404, Hippius, Ditto)
 wired in.
 
 Next phase (why you're here): **desktop, Linux and iOS implementations**. Plan and decisions

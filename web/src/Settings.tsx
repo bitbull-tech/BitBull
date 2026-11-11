@@ -557,7 +557,7 @@ const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
   { id: 'github', name: 'GitHub', blurb: 'Clone, pull, push and open PRs from the agent’s shell.', docs: 'https://github.com/settings/personal-access-tokens' },
   { id: 'taostats', name: 'Taostats', blurb: 'Bittensor network data (subnets, validators, prices) for the taostats-api skill.', docs: 'https://docs.taostats.io' },
   { id: 'atlas', name: 'Atlas AI Studio', blurb: 'Images, video, 3D and animation workflows.', docs: 'https://docs.atlas.design' },
-  { id: 'four04', name: '404.xyz (404—GEN)', blurb: 'Text-to-3D generation on Bittensor.', docs: 'https://www.404.xyz' },
+  { id: 'four04', name: '404 (3D as code)', blurb: 'Subnet 17: 3D objects as Three.js code with the public 404 game recipe. No key needed.', docs: 'https://github.com/404-Repo/404-game-recipe' },
   { id: 'hippius', name: 'Hippius storage', blurb: 'Encrypted copies of your uploads on decentralised S3 storage.', docs: 'https://hippius.com' },
 ]
 

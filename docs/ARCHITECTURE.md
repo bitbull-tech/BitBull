@@ -3,7 +3,7 @@
 ## End goal
 
 A coding agent and a one-stop shop for building on Bittensor: SayGM models, Ditto memory,
-Taostats subnet data, Atlas / 404.xyz media generation and Hippius storage, wired together
+Taostats subnet data, Atlas media generation, 404 3D-as-code and Hippius storage, wired together
 behind one UI and API.
 
 ## Goals
@@ -141,7 +141,7 @@ MCP endpoint and a live probe. Projects opt in; engines receive only the enabled
 |---|---|
 | `ATLAS_API_KEY`, `ATLAS_MCP_URL` | Atlas MCP (alpha): projects, platform agent, exported APIs |
 | `ATLAS_WORKFLOWS_DIR` | Exported workflow specs, run by `tools/atlas-run.mjs` (upload → execute_async → poll → download) |
-| `FOUR04_API_BASE`, `FOUR04_API_KEY`, `FOUR04_MCP_URL` | Reserved for 404.xyz; no public API yet (plugins only) |
+| `FOUR04_MODEL_URL`, `FOUR04_MODEL_KEY` | Optional: 404's open model on your own RunPod GPU. 404 itself needs no key or MCP (public recipe, `404-game-recipe` skill) |
 | `ENABLE_WEB_SEARCH`, `ENABLE_LSP` | OpenCode websearch (Exa) and experimental LSP tool |
 
 ## Coding parity with Claude Code
