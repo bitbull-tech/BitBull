@@ -33,6 +33,8 @@ const secrets = () =>
   [
     config.saygm.apiKey,
     config.ditto.apiKey,
+    config.router.key,
+    config.router.reviewKey,
     config.appToken,
     config.integrations.atlas.apiKey,
     config.integrations.four04.modelKey,

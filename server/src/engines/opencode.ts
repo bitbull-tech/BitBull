@@ -8,27 +8,54 @@ import { dittoMcpHeaders } from "../ditto.js";
 import { bitbullMcpServer } from "../mcp.js";
 import { LINKS_ROOT, linksAvailable } from "../links.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
-import { listModels, type ModelApi, type ModelInfo } from "../models.js";
+import { chatModels, fromRouter, routerRefusal, type ModelApi, type ModelInfo } from "../models.js";
 import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
-import { cachedRouterModels, routerBackground } from "../router.js";
+import {
+  cachedRouterReview,
+  ROUTER_HEADERS,
+  routerBaseUrl,
+  routerBackground,
+  routerMcpServers,
+  routerModelId,
+  routerReview,
+  reviewModelId,
+  type RouterMcpServer,
+} from "../router.js";
 
 /**
  * Engine 2: OpenCode (open source, provider-agnostic agent runtime).
- * Talks to every SayGM model natively: Claude models via SayGM's Anthropic
- * endpoint (@ai-sdk/anthropic), everything else via SayGM's OpenAI-compatible
+ * Talks to every model natively: Claude models via their gateway's Anthropic
+ * endpoint (@ai-sdk/anthropic), everything else via its OpenAI-compatible
  * endpoint (@ai-sdk/openai-compatible). Tools, MCP (Ditto) and skills behave the
- * same regardless of model.
+ * same regardless of model or gateway (SayGM, or Ditto Router: server/src/router.ts).
  */
 
-/** One OpenCode provider per SayGM API shape, so every model speaks its native protocol. */
-const PROVIDERS: Record<ModelApi, { id: string; npm: string; name: string; baseURL: () => string }> = {
-  anthropic: { id: "saygm-anthropic", npm: "@ai-sdk/anthropic", name: "SayGM · Anthropic", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1` },
-  responses: { id: "saygm-openai", npm: "@ai-sdk/openai", name: "SayGM · OpenAI", baseURL: () => config.saygm.openaiBaseUrl },
-  google: { id: "saygm-google", npm: "@ai-sdk/google", name: "SayGM · Google", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1beta` },
-  chat: { id: "saygm", npm: "@ai-sdk/openai-compatible", name: "SayGM", baseURL: () => config.saygm.openaiBaseUrl },
-};
+type Provider = { id: string; npm: string; name: string; baseURL: () => string; apiKey: () => string; headers?: Record<string, string> };
+const saygmKey = () => config.saygm.apiKey;
 
-const ROUTER_PROVIDER = "ditto-router";
+/** One OpenCode provider per gateway and API shape, so every model speaks its native protocol. */
+const PROVIDERS: Record<ModelApi, Provider> = {
+  anthropic: { id: "saygm-anthropic", npm: "@ai-sdk/anthropic", name: "SayGM · Anthropic", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1`, apiKey: saygmKey },
+  responses: { id: "saygm-openai", npm: "@ai-sdk/openai", name: "SayGM · OpenAI", baseURL: () => config.saygm.openaiBaseUrl, apiKey: saygmKey },
+  google: { id: "saygm-google", npm: "@ai-sdk/google", name: "SayGM · Google", baseURL: () => `${config.saygm.anthropicBaseUrl}/v1beta`, apiKey: saygmKey },
+  chat: { id: "saygm", npm: "@ai-sdk/openai-compatible", name: "SayGM", baseURL: () => config.saygm.openaiBaseUrl, apiKey: saygmKey },
+};
+/**
+ * Ditto Router serves both shapes on one /v1; its own ids are what OpenCode sends. Plan mode
+ * (and so QA Hound) uses the review endpoint's key: no memory recall or recording there, so what a
+ * reviewer reads in a possibly hostile repo never reaches long-term memory.
+ */
+function routerProvider(api: ModelApi, review: boolean): Provider {
+  const anthropic = api === "anthropic";
+  return {
+    id: `ditto-router${review ? "-review" : ""}${anthropic ? "-anthropic" : ""}`,
+    npm: anthropic ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible",
+    name: `Ditto Router${review ? " (review)" : ""}${anthropic ? " · Anthropic" : ""}`,
+    baseURL: routerBaseUrl,
+    apiKey: () => (review ? config.router.reviewKey : config.router.key),
+    headers: ROUTER_HEADERS,
+  };
+}
 
 // Make the bundled `opencode` binary resolvable and keep its state in DATA_DIR.
 process.env.PATH = `${path.join(ROOT, "server", "node_modules", ".bin")}${path.delimiter}${process.env.PATH ?? ""}`;
@@ -49,74 +76,89 @@ const PLAN_PROMPT = [
 type AnyEvent = { type: string; properties?: any };
 type Listener = (ev: AnyEvent) => void;
 
-type Running = { client: OpencodeClient; close(): void; models: Set<string>; agents: string; cfg: number };
+type Running = { client: OpencodeClient; close(): void; models: Set<string>; agents: string; cfg: number; mcp: RouterMcpServer[]; router: string };
+
+/** What OpenCode's config takes from Ditto Router (the endpoint's MCP catalog, the review endpoint); a change restarts it. */
+const routerSignature = (servers: RouterMcpServer[]) => JSON.stringify([servers.map((s) => [s.name, s.url, s.deny]), cachedRouterReview()]);
+
+/** Plan mode runs on the review endpoint when it is there and checked to have no memory and no tools. */
+const reviewReady = () => !!config.router.reviewKey && !!cachedRouterReview()?.safe;
 let server: Running | null = null;
 let starting: Promise<Running> | null = null;
 const listeners = new Map<string, Set<Listener>>();
 let activeRuns = 0;
 
-function providerFor(m: { api?: ModelApi; family: ModelInfo["family"] }) {
+function providerFor(m: Pick<ModelInfo, "api" | "gateway">, review = false): Provider {
   let api: ModelApi = m.api ?? "chat";
   if (api === "anthropic" && !config.agent.opencodeClaudeNative) api = "chat";
-  return PROVIDERS[api].id;
+  if (m.gateway === "ditto-router") return routerProvider(api === "anthropic" ? api : "chat", review);
+  return PROVIDERS[api];
 }
 
-export function buildConfig(models: ModelInfo[]) {
+/** OpenCode's "<provider>/<model>" for a model: the gateway's own model id behind its provider. */
+const ref = (m: ModelInfo, review = false) => {
+  const routerId = routerModelId(m.id);
+  // on the review endpoint, the chat endpoint's own entry becomes the review endpoint's
+  const modelID = routerId === null ? m.id : review ? reviewModelId({ id: routerId, endpoint: m.endpoint }) : routerId;
+  return { providerID: providerFor(m, review).id, modelID };
+};
+const refString = (m: ModelInfo, review = false) => `${ref(m, review).providerID}/${ref(m, review).modelID}`;
+
+export function buildConfig(models: ModelInfo[], routerMcp: RouterMcpServer[] = []) {
   type Entry = {
     name: string;
     limit?: { context: number; output: number };
     cost?: { input: number; output: number; cache_read?: number };
   };
+  // Background work on Ditto Router (Configuration → Background work runs on) moves the small
+  // model there; declared even when the Router's list could not be fetched just now
+  const bg = routerBackground();
+  const bgModel = bg ? (models.find((m) => routerModelId(m.id) === bg.model) ?? fromRouter({ id: bg.model, name: bg.model })) : undefined;
+  if (bgModel && !models.includes(bgModel)) models = [...models, bgModel];
+  const providers = new Map<string, Provider>();
   const byProvider: Record<string, Record<string, Entry>> = {};
+  const declare = (p: Provider, modelID: string, entry: Entry) => {
+    providers.set(p.id, p);
+    (byProvider[p.id] ??= {})[modelID] = entry;
+  };
   for (const m of models) {
     const entry: Entry = {
       name: m.name,
       ...(m.contextLength ? { limit: { context: m.contextLength, output: Math.min(32000, m.contextLength) } } : {}),
-      // Live SayGM prices ($/Mtok) so OpenCode's own cost tracking is right
+      // Live gateway prices ($/Mtok) so OpenCode's own cost tracking is right
       ...(m.price ? { cost: { input: m.price.input, output: m.price.output, ...(m.price.cacheRead ? { cache_read: m.price.cacheRead } : {}) } } : {}),
     };
-    (byProvider[providerFor(m)] ??= {})[m.id] = entry;
+    declare(providerFor(m), ref(m).modelID, entry);
+    if (m.gateway === "ditto-router" && reviewReady()) declare(providerFor(m, true), ref(m, true).modelID, entry);
   }
   const allow = config.agent.permissionMode === "bypassPermissions";
   const def = models.find((m) => m.id === config.agent.defaultModel) ?? models.find((m) => m.api === "anthropic") ?? models[0];
-  const small = models.find((m) => m.id === config.agent.smallModel) ?? models.find((m) => /haiku|mini|flash/i.test(m.id)) ?? def;
+  const small = bgModel ?? models.find((m) => m.id === config.agent.smallModel) ?? models.find((m) => /haiku|mini|flash/i.test(m.id)) ?? def;
   const provider: Record<string, unknown> = {};
-  for (const p of Object.values(PROVIDERS)) {
-    if (!byProvider[p.id]) continue;
-    provider[p.id] = { npm: p.npm, name: p.name, options: { baseURL: p.baseURL(), apiKey: config.saygm.apiKey }, models: byProvider[p.id] };
-  }
-  // Background work on Ditto Router (Configuration → Background work runs on): only the small
-  // model moves; chats and subagents keep their SayGM models (server/src/router.ts)
-  const viaRouter = routerBackground();
-  if (viaRouter) {
-    const rm = cachedRouterModels().find((m) => m.id === viaRouter.model);
-    provider[ROUTER_PROVIDER] = {
-      npm: "@ai-sdk/openai-compatible",
-      name: "Ditto Router",
-      options: { baseURL: config.router.baseUrl, apiKey: config.router.key },
-      models: {
-        [viaRouter.model]: {
-          name: rm?.name ?? viaRouter.model,
-          ...(rm?.contextLength ? { limit: { context: rm.contextLength, output: Math.min(32000, rm.contextLength) } } : {}),
-          ...(rm?.price ? { cost: { input: rm.price.input, output: rm.price.output } } : {}),
-        },
-      },
-    };
+  for (const p of providers.values()) {
+    provider[p.id] = { npm: p.npm, name: p.name, options: { baseURL: p.baseURL(), apiKey: p.apiKey(), ...(p.headers ? { headers: p.headers } : {}) }, models: byProvider[p.id] };
   }
   return {
     $schema: "https://opencode.ai/config.json",
     autoupdate: false,
-    // Keeps BitBull's credentials out of the agent's shell and out of tool output (agent/opencode-plugin)
-    plugin: [pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", "bitbull-guard.js")).href],
+    // The guard keeps BitBull's credentials out of the agent's shell and out of tool output;
+    // ditto-router gives each chat its own Router thread (agent/opencode-plugin)
+    plugin: ["bitbull-guard.js", ...(config.router.key ? ["ditto-router.js"] : [])].map((f) => pathToFileURL(path.join(ROOT, "agent", "opencode-plugin", f)).href),
     share: "disabled" as const,
-    model: def ? `${providerFor(def)}/${def.id}` : undefined,
-    small_model: viaRouter ? `${ROUTER_PROVIDER}/${viaRouter.model}` : small ? `${providerFor(small)}/${small.id}` : undefined,
+    model: def ? refString(def) : undefined,
+    // Housekeeping (titles, summaries) needs no memory: on the review endpoint when it's ready, so a
+    // plan-mode chat's background calls don't reach the chat endpoint's memory either
+    small_model: small ? refString(small, small.gateway === "ditto-router" && reviewReady()) : undefined,
     enabled_providers: Object.keys(provider),
     provider,
     mcp: {
-      ...(config.ditto.apiKey
+      // Memory: the Router endpoint's built-in "ditto" server when there is one, else Ditto's MCP
+      // with the account key
+      ...(config.ditto.apiKey && !routerMcp.some((s) => s.name === "ditto")
         ? { ditto: { type: "remote" as const, url: config.ditto.mcpUrl, headers: dittoMcpHeaders(), oauth: false as const, timeout: 15000 } }
         : {}),
+      // The Router endpoint's tools (server/src/router.ts)
+      ...Object.fromEntries(routerMcp.map((s) => [s.name, { type: "remote" as const, url: s.url, headers: s.headers, oauth: false as const, timeout: 15000 }])),
       // BitBull's own tools (network access requests); waits for the user, hence the long timeout
       ...(bitbullMcpServer()
         ? { bitbull: { type: "remote" as const, url: bitbullMcpServer()!.url, headers: bitbullMcpServer()!.headers, oauth: false as const, timeout: 660000 } }
@@ -137,7 +179,7 @@ export function buildConfig(models: ModelInfo[]) {
               description: a.description,
               mode: "subagent",
               prompt: a.prompt,
-              ...(sm ? { model: `${providerFor(sm)}/${sm.id}` } : {}),
+              ...(sm ? { model: refString(sm) } : {}),
               // read-only agents: file reading only (no shell, no edits, no further delegation)
               ...opencodeAgentAccess(a, { editAllowed: allow, shell: shellAllowed() }),
             },
@@ -173,6 +215,9 @@ export function buildConfig(models: ModelInfo[]) {
         // read-only links from the user's computer (the mount itself refuses writes)
         ...(linksAvailable() ? { [`${LINKS_ROOT}/*`]: "allow" } : {}),
       },
+      // Tools the Router endpoint wants a person to approve in the client (client approvals):
+      // nobody can answer mid-turn here, so they are refused
+      ...Object.fromEntries(routerMcp.flatMap((s) => s.deny.map((t) => [`${s.name}_${t}`, "deny"]))),
     },
   };
 }
@@ -199,7 +244,7 @@ function freePort(preferred: number): Promise<number> {
  * keys applyOverrides() put into process.env — stays out. GITHUB_TOKEN/TAOSTATS_API_KEY stay
  * by design (the agent gets them on purpose). Brief window: env is restored right after spawn.
  */
-const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|ATLAS_API_KEY|HIPPIUS_.*)$/;
+const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|ATLAS_API_KEY|HIPPIUS_.*)$/;
 
 async function withScrubbedEnv<T>(fn: () => Promise<T>): Promise<T> {
   const saved: Record<string, string | undefined> = {};
@@ -227,21 +272,22 @@ async function start(force = false): Promise<Running> {
       server.close();
       server = null;
     }
-    const models = await listModels(force);
+    const models = await chatModels(force);
+    const [mcp] = await Promise.all([routerMcpServers(force), routerReview(force)]);
     const port = await freePort(config.agent.opencodePort);
     const { client, server: srv } = await withScrubbedEnv(() =>
       createOpencode({
         hostname: "127.0.0.1",
         port,
         timeout: 30000,
-        config: buildConfig(models) as any,
+        config: buildConfig(models, mcp) as any,
       }),
     );
-    const s: Running = { client, close: () => srv.close(), models: new Set(models.map((m) => m.id)), agents: subagentsSignature(), cfg: configVersion };
+    const s: Running = { client, close: () => srv.close(), models: new Set(models.map((m) => m.id)), agents: subagentsSignature(), cfg: configVersion, mcp, router: routerSignature(mcp) };
     checkSubagentModels(s.models);
     server = s;
     pumped.clear();
-    console.log(`[opencode] server up at ${srv.url} with ${models.length} SayGM models`);
+    console.log(`[opencode] server up at ${srv.url} with ${models.length} models${mcp.length ? ` and ${mcp.length} Ditto MCP servers` : ""}`);
     return s;
   })();
   try {
@@ -277,21 +323,36 @@ async function pumpEvents(client: OpencodeClient, directory: string) {
   }
 }
 
+/** Ditto Router's error codes, by the HTTP status they come with. */
+const ROUTER_ERRORS: Record<string, string> = {
+  missing_api_key: "401", invalid_api_key: "401", expired_api_key: "401", revoked_api_key: "401", endpoint_deleted: "401",
+  insufficient_balance: "402", spend_limit_exceeded: "402", key_spend_limit_exceeded: "402", endpoint_inactive: "402", byok_key_missing: "402",
+  insufficient_scope: "403", endpoint_access_revoked: "403",
+  unsupported_model: "404",
+};
+
 /**
- * Turn SayGM's terse HTTP errors into something actionable. Returns null for errors that
+ * Turn the gateway's terse HTTP errors into something actionable. Returns null for errors that
  * may be transient (network blips), which OpenCode is allowed to retry.
  */
-export function gatewayHint(message: string, model: string): string | null {
-  const code = message.match(/"code"\s*:\s*"?(\d{3})"?/)?.[1] ?? message.match(/\b(40[1-4]|429)\b/)?.[1];
+export function gatewayHint(message: string, model: string, gateway?: ModelInfo["gateway"]): string | null {
+  const router = gateway === "ditto-router";
+  const routerCode = router ? Object.keys(ROUTER_ERRORS).find((c) => message.includes(c)) : undefined;
+  const code = (routerCode && ROUTER_ERRORS[routerCode]) ?? message.match(/"code"\s*:\s*"?(\d{3})"?/)?.[1] ?? message.match(/\b(40[1-4]|429)\b/)?.[1];
+  const name = router ? "Ditto Router" : "SayGM";
   switch (code) {
     case "402":
-      return `SayGM refused the request: payment required (402) for ${model}. Check your SayGM balance or whether your plan includes this model, or switch model.`;
+      return router
+        ? `Ditto Router refused the request${routerCode ? ` (${routerCode})` : " (402)"} for ${model}. Check your Ditto credits, and the endpoint's spend limit and provider keys on developer.heyditto.ai, or switch model.`
+        : `SayGM refused the request: payment required (402) for ${model}. Check your SayGM balance or whether your plan includes this model, or switch model.`;
     case "401":
-      return "SayGM rejected the API key (401). Check SAYGM_API_KEY in Settings → Integrations → SayGM.";
+      return router
+        ? `Ditto Router rejected the endpoint key${routerCode ? ` (${routerCode})` : " (401)"}. Check the Router key in Settings → Integrations → Ditto.`
+        : "SayGM rejected the API key (401). Check SAYGM_API_KEY in Settings → Integrations → SayGM.";
     case "403":
-      return `SayGM says this key isn't allowed to use ${model} (403).`;
+      return `${name} says this key isn't allowed to use ${model} (403).${router ? " Check the endpoint's model routes on developer.heyditto.ai." : ""}`;
     case "404":
-      return `SayGM doesn't know the model ${model} (404). Reload the model list in Settings and pick another.`;
+      return `${name} doesn't know the model ${model} (404). Reload the model list in Settings and pick another.`;
     default:
       return null;
   }
@@ -330,12 +391,19 @@ export const opencodeEngine: AgentEngine = {
   label: "OpenCode",
 
   async *run(input: RunInput): AsyncIterable<AgentEvent> {
-    let s = await start();
-    if ((!s.models.has(input.model) || s.agents !== subagentsSignature() || s.cfg !== configVersion) && activeRuns === 0) {
-      s = await start(true); // new SayGM model, edited subagents or changed settings — reload OpenCode's config
+    // refuse before anything restarts: an unknown Router model must not restart OpenCode every turn
+    const [known, mcp] = await Promise.all([chatModels().then((all) => all.find((m) => m.id === input.model)), routerMcpServers(), routerReview()]);
+    const refusal = routerRefusal(input.model, known, input.plan);
+    if (refusal) {
+      yield { type: "error", message: refusal };
+      yield { type: "done", engineSessionId: input.engineSessionId ?? "" };
+      return;
     }
-    const models = await listModels();
-    const info = models.find((m) => m.id === input.model) ?? { family: "other" as const, api: "chat" as const };
+    let s = await start();
+    if ((!s.models.has(input.model) || s.agents !== subagentsSignature() || s.cfg !== configVersion || s.router !== routerSignature(mcp)) && activeRuns === 0) {
+      s = await start(true); // new model or Ditto tools, edited subagents or changed settings — reload OpenCode's config
+    }
+    const info: ModelInfo = known ?? { id: input.model, name: input.model, family: "other", api: "chat" };
     const dir = { directory: input.cwd };
     ensurePump(s.client, input.cwd);
 
@@ -408,7 +476,7 @@ export const opencodeEngine: AgentEngine = {
             reportUsage();
             if (m.error) {
               const raw = String(m.error.data?.message ?? m.error.name ?? "Model error");
-              out.push({ type: "error", message: gatewayHint(raw, input.model) ?? raw });
+              out.push({ type: "error", message: gatewayHint(raw, input.model, info.gateway) ?? raw });
             }
           }
           break;
@@ -445,7 +513,7 @@ export const opencodeEngine: AgentEngine = {
         case "session.status": {
           const st = p.status;
           if (st?.type === "retry") {
-            const hint = gatewayHint(String(st.message ?? ""), input.model);
+            const hint = gatewayHint(String(st.message ?? ""), input.model, info.gateway);
             out.push({ type: "error", message: hint ?? `Model call failed, OpenCode retrying (attempt ${st.attempt}): ${st.message}` });
             // Billing/auth/model errors won't fix themselves: stop instead of retrying
             if (hint || st.attempt >= 2) s.client.session.abort({ path: { id: sid }, query: dir }).catch((e) => console.warn("[opencode] abort failed:", e));
@@ -519,7 +587,7 @@ export const opencodeEngine: AgentEngine = {
         path: { id: sid },
         query: dir,
         body: {
-          model: { providerID: providerFor(info), modelID: input.model },
+          model: ref(info, input.plan),
           system: input.systemPrompt,
           ...(input.plan ? { agent: PLAN_AGENT } : {}),
           // question needs an interactive answer this UI can't give yet; integrations off unless the project enables them
@@ -535,7 +603,11 @@ export const opencodeEngine: AgentEngine = {
             // things — swarm reviewers on contributor branches — so it gets none of them.
             // (2026-11 swarm, confirmed by both reviewers; was residual R-list item since the merge.)
             ...(input.plan
-              ? { "ditto_*": false, "bitbull_*": false, ...Object.fromEntries(integrations().map((i) => [`${i.id}_*`, false])) }
+              ? {
+                  "ditto_*": false,
+                  "bitbull_*": false,
+                  ...Object.fromEntries([...integrations().map((i) => i.id), ...s.mcp.map((m) => m.name)].map((n) => [`${n}_*`, false])),
+                }
               : {}),
           },
           parts: [{ type: "text", text: input.prompt }],

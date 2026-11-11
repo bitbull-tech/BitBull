@@ -19,7 +19,8 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - Import existing conversations, projects and data from your existing coding agents
 - `POST /api/v1/chat` for scripts and other agents
 - **Which model for this?** (three picks with pros, cons and cost), a model picker with maker
-  filters and your own response speeds, optional **Ditto Router** for background work
+  filters and your own response speeds; **Connect Ditto** for Ditto Router models next to SayGM's,
+  with your Ditto memory and connected apps as the agent's tools
 - **Voice**: talk to it and hear it answer, push-to-talk from anywhere, hands-free
 - Show it a window or send it a web page (browser extension), get every file a reply made with one
   click, archive and bulk-tidy chats
@@ -673,10 +674,12 @@ run in the sandbox where you can see them and the reviewer can check them.
 
 ## Ditto Router and Ditto Review
 
-Optional: run background work (titles, compaction) on a model from Ditto Router instead of SayGM's
-small model, choose it from the Router's live model list, let the advisor's picks go straight to
-background work, and ask Ditto Review to review any branch's pull request from Repositories. See
-[docs/ROUTER.md](docs/ROUTER.md).
+Settings → Integrations → Ditto → **Connect Ditto**: one sign-in creates two Ditto Router
+endpoints (chats with memory and your connected apps; a review one with neither, for plan mode
+and QA Hound) and saves their keys. The endpoint's models join every model picker next to SayGM's
+and run natively on both engines, its tools are attached as MCP servers inside BitBull's fences,
+and **Manage connections** opens Ditto's Connections. Ask Ditto Review to review any branch's pull
+request from Repositories. See [docs/ROUTER.md](docs/ROUTER.md).
 
 ## 404: 3D as code
 
@@ -718,6 +721,7 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/models/usage` | Your record per model: turns, errors, stopped, cost, tokens, speed |
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
+| `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
 | `GET` | `/api/voice` | Voice: Piper text-to-speech and its voices, and the speech-to-text model |
 | `POST` | `/api/voice/speak` | Text to speech in the container (`{text, voice?, speed?}` → WAV); nothing leaves the machine |
 | `POST` | `/api/voice/transcribe` | Speech to text: a WAV recording in, its words out (a Gemini model on SayGM) |

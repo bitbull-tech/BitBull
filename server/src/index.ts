@@ -27,7 +27,8 @@ import { collect, contentType, disposition, insideReal, outputsDuring, zip } fro
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
-import { routerBackground, routerModels } from "./router.js";
+import { routerBackground, routerMcpServers, routerModels, routerReview } from "./router.js";
+import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
 import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
@@ -123,7 +124,14 @@ app.get("/api/config", async (c) =>
     engines: Object.values(engines).map((e) => ({ id: e.id, label: e.label })),
     defaultEngine: config.agent.defaultEngine,
     defaultModel: config.agent.defaultModel,
-    ditto: { enabled: dittoEnabled(), archive: config.ditto.archive },
+    ditto: {
+      enabled: dittoEnabled(),
+      archive: config.ditto.archive,
+      router: !!config.router.key,
+      // the app owner's referral code, so signups from this link count for them (Ditto's own /r/<code> link)
+      signupUrl: /^[a-z2-7]{4}-[a-z2-7]{4}$/.test(config.ditto.referralCode.toLowerCase()) ? `https://heyditto.ai/r/${config.ditto.referralCode.toLowerCase()}` : "https://app.heyditto.ai/",
+      connectionsUrl: CONNECTIONS_URL,
+    },
   }),
 );
 
@@ -211,8 +219,8 @@ app.put("/api/settings", async (c) => {
   if (!body.values || typeof body.values !== "object") return c.json({ error: "values required" }, 400);
   try {
     const changed = await updateSettings(body.values);
-    // the Router's model details go into OpenCode's config, so fetch them before it restarts
-    if (routerBackground()) await routerModels(true).catch(() => {});
+    // the Router's models and tools go into OpenCode's config, so fetch them before it restarts
+    if (config.router.key) await Promise.all([routerModels(true).catch(() => {}), routerMcpServers(true), routerReview(true)]);
     void reloadOpencode().catch(() => {}); // restarts now if idle, otherwise before the next turn
     return c.json({ changed, groups: describeSettings() });
   } catch (e) {
@@ -220,6 +228,16 @@ app.put("/api/settings", async (c) => {
   }
 });
 app.get("/api/status", async (c) => c.json(await status()));
+
+/** Connect Ditto (server/src/dittoConnect.ts): start the sign-in, then poll until it's connected. */
+app.post("/api/ditto/connect", async (c) => {
+  try {
+    return c.json(await startConnect());
+  } catch (e) {
+    return c.json({ status: "error", message: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+app.get("/api/ditto/connect", (c) => c.json(connectState()));
 
 /** Ditto Router's models (for Configuration → Background work), and whether background work is on it. */
 app.get("/api/router/models", async (c) => {
@@ -1210,8 +1228,8 @@ if (existsSync(config.webDist)) {
 resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
-// background work on Ditto Router: have its model details ready for OpenCode's config
-if (routerBackground()) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
+// Ditto Router: have its models ready for the model list and OpenCode's config
+if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });

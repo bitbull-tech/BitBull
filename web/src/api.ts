@@ -130,6 +130,8 @@ export interface Model {
   name: string
   family: 'anthropic' | 'openai' | 'google' | 'open' | 'other'
   api: 'anthropic' | 'responses' | 'google' | 'chat'
+  /** Served by Ditto Router (id `ditto-router/…`) instead of SayGM */
+  gateway?: 'ditto-router'
   provider?: string
   tier?: string
   confidential?: boolean
@@ -225,11 +227,17 @@ export interface Uploaded {
   size: number
 }
 
+export type DittoConnectState =
+  | { status: 'idle' }
+  | { status: 'waiting'; userCode: string; url: string; expiresAt: number }
+  | { status: 'connected'; endpoint: string }
+  | { status: 'error'; message: string }
+
 export interface AppConfig {
   engines: { id: EngineId; label: string }[]
   defaultEngine: EngineId
   defaultModel: string
-  ditto: { enabled: boolean; archive: string }
+  ditto: { enabled: boolean; archive: string; router: boolean; signupUrl: string; connectionsUrl: string }
 }
 
 export type TurnStatus = 'running' | 'done' | 'error' | 'aborted' | 'interrupted'
@@ -460,6 +468,9 @@ export const api = {
     }),
   /** A page the browser extension sent, waiting to be attached (server/src/captures.ts) */
   nextCapture: () => req<{ capture: { id: string; at: number; url: string; title: string; screenshot?: string; summary: string } | null }>('/api/captures/next'),
+  /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
+  dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
+  dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
   routerModels: (refresh = false) =>
     req<{ configured: boolean; background: 'saygm' | 'ditto-router'; model: string; active: boolean; models: RouterModel[]; error?: string }>(
       `/api/router/models${refresh ? '?refresh=1' : ''}`,

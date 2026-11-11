@@ -90,7 +90,10 @@ secrets (GAPS #11). Until then, everything below should be read with this in min
 
 ### R2 — Claude engine hands the SayGM key to the shell
 `ANTHROPIC_API_KEY` is set for the Claude SDK and inherited by every shell it spawns; the
-bitbull-guard plugin exists only for OpenCode. Prefer the OpenCode engine for untrusted work.
+bitbull-guard plugin exists only for OpenCode. Prefer the OpenCode engine for untrusted work. On a Ditto Router model the same
+goes for the Router endpoint key (`ANTHROPIC_AUTH_TOKEN`): it reaches the endpoint's tools on
+`.heyditto.ai`, the same tools the turn already has, behind Ditto's approval gate. Plan turns carry
+the review endpoint's key instead, which reaches no tools and no memory (docs/ROUTER.md).
 
 ### R3 — Redaction is exact-substring only
 Server `redact()` and bitbull-guard match configured values verbatim. Base64, case changes,

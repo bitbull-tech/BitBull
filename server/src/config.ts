@@ -37,11 +37,14 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   SAYGM_API_KEY: {},
   DITTO_API_KEY: {},
   DITTO_ARCHIVE: { options: ["turn", "off"] },
+  // The app owner's own Ditto referral code, for the public signup link in Settings
+  DITTO_REFERRAL_CODE: {},
   DEFAULT_ENGINE: { options: ["opencode", "claude"] },
   DEFAULT_MODEL: {},
   SMALL_MODEL: {},
-  // Ditto Router for background work only (docs/ROUTER.md); the base URL stays .env-only
+  // Ditto Router (docs/ROUTER.md); the base URL stays .env-only
   DITTO_ROUTER_KEY: {},
+  DITTO_ROUTER_REVIEW_KEY: {},
   BACKGROUND_VIA: { options: ["saygm", "ditto-router"] },
   DITTO_ROUTER_MODEL: {},
   ADVISOR_MODEL: {},
@@ -172,12 +175,15 @@ function buildConfig() {
   },
 
   /**
-   * Ditto Router (router.heyditto.ai), an OpenAI-compatible inference service. Optional and only
-   * for background work (titles, compaction and other housekeeping the engines do on their
-   * small model): chats keep running on SayGM. BACKGROUND_VIA picks which one does that work.
+   * Ditto Router (router.heyditto.ai), Ditto's model gateway: Anthropic Messages and OpenAI APIs
+   * under one /v1. Optional: with a key its models join the model list for chats, subagents and
+   * QA Hound, and BACKGROUND_VIA can move background work (titles, compaction) there.
    */
   router: {
+    /** the chat endpoint's key: memory recall/record and the endpoint's tools */
     key: env("DITTO_ROUTER_KEY", ""),
+    /** the review endpoint's key, for plan mode and QA Hound: no memory, no tools (docs/ROUTER.md) */
+    reviewKey: env("DITTO_ROUTER_REVIEW_KEY", ""),
     baseUrl: env("DITTO_ROUTER_BASE_URL", "https://router.heyditto.ai/v1"),
     background: (env("BACKGROUND_VIA", "saygm") === "ditto-router" ? "ditto-router" : "saygm") as "saygm" | "ditto-router",
     /** the model background work runs on, as the Router names it (e.g. z-ai/glm-5.3-flash), or an endpoint's slug */
@@ -190,6 +196,7 @@ function buildConfig() {
     /** Save every completed turn to Ditto as a memory ("turn") or not ("off"). */
     archive: env("DITTO_ARCHIVE", "turn") as "turn" | "off",
     source: env("DITTO_SOURCE", "bitbull"),
+    referralCode: env("DITTO_REFERRAL_CODE", ""),
   },
 
   /**

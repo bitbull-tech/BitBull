@@ -469,3 +469,14 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
   `skills/404-game-recipe`. Image now has Chromium (+ PUPPETEER_SKIP_DOWNLOAD /
   PUPPETEER_EXECUTABLE_PATH) so the recipe's puppeteer harness runs inside the sandbox.
 
+## Connect Ditto: Ditto Router as a second gateway (11 Nov 2026)
+
+- Settings → Integrations → Ditto → Connect Ditto (`server/src/dittoConnect.ts`, `web/src/DittoConnect.tsx`):
+  Ditto's device sign-in, then endpoints `bitbull` (memory, all tools) and `bitbull-review` (no memory,
+  no tools; re-enforced on every connect), a key each, and Ditto as `DEFAULT_MODEL`/background.
+- Router models are `ditto-router/<id>` everywhere (`chatModels()` in models.ts); OpenCode gets
+  per-shape Router providers plus `-review` twins for plan mode; the Claude engine runs any Router model.
+- The endpoint's MCP catalog (`GET /v1/mcp`) is attached by BitBull (router.ts), never injected
+  (`X-Ditto-Tool-Surface: mcp`): plan mode and QA Hound keep getting no MCP. Turn archive skips Router
+  turns the endpoint records itself. Prices from Ditto's catalog (account key). See docs/ROUTER.md.
+
