@@ -59,7 +59,7 @@ project was exported first).
 
 ## Owner and setup
 
-- Owner: Tom (tommyhgunz14 on GitHub). Repo: https://github.com/tommyhgunz14/BitBull (branch `main`).
+- Owner: Tom (tommyhgunz14 on GitHub). Repo: https://github.com/bitbull-tech/BitBull (branch `main`), in the `bitbull-tech` GitHub organisation; images at `ghcr.io/bitbull-tech/bitbull` and `…/bitbull-egress`.
 - Machine: Windows PC "TRIGGER", user `thetb`, Intel CPU, Node 24 on Windows. Working copy
   `D:\github\BitBull` (WSL path `/mnt/d/github/BitBull`).
 - Runtime: WSL2 distro **`bitbull`** (locked down) runs Docker Engine; containers `bitbull-agent`,

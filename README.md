@@ -28,7 +28,7 @@ OpenCode-vs-Agent-SDK proposal.
 Requires Node 22.13+ (uses Node's built-in SQLite, so nothing needs compiling).
 
 ```bash
-git clone https://github.com/tommyhgunz14/BitBull.git
+git clone https://github.com/bitbull-tech/BitBull.git
 cd BitBull
 cp .env.example .env          # fill in APP_TOKEN, SAYGM_API_KEY, DITTO_API_KEY
 npm run setup                 # installs server + web deps
@@ -245,7 +245,7 @@ bash scripts/bitbull-mac/backup.sh --keep 10           # to ~/Documents/BitBull 
 
 ```bash
 cp .env.example .env   # fill it in
-docker compose up -d   # pulls ghcr.io/tommyhgunz14/bitbull and ...-egress; nothing is built here
+docker compose up -d   # pulls ghcr.io/bitbull-tech/bitbull and ...-egress; nothing is built here
 ```
 
 Pick a version with `BITBULL_TAG` (a published release, e.g. `1.2.3`); the default is `latest`,

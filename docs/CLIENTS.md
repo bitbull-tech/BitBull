@@ -172,7 +172,7 @@ all. 5.3–5.5 are what make it feel like a product.
 
 ### 5.1 Published images, not a build on the user's machine — **done (5 Nov 2026)**
 
-`docker-compose.yml` now references `ghcr.io/tommyhgunz14/bitbull` and `…/bitbull-egress`
+`docker-compose.yml` now references `ghcr.io/bitbull-tech/bitbull` and `…/bitbull-egress`
 (overridable with `BITBULL_IMAGE` / `BITBULL_EGRESS_IMAGE`, versioned with `BITBULL_TAG`), and
 builds nothing. The `build:` keys moved to `docker-compose.dev.yml`, which `deploy.ps1`,
 `setup.ps1` and `test-stack.ps1` select through `COMPOSE_FILE`, so the development loop is
@@ -198,8 +198,8 @@ The original plan:
 plus two Docker builds inside the distro: minutes, and it requires the whole source tree to
 be present and a toolchain to work.
 
-- CI builds and pushes `ghcr.io/tommyhgunz14/bitbull:<version>` and
-  `ghcr.io/tommyhgunz14/bitbull-egress:<version>` on tag.
+- CI builds and pushes `ghcr.io/bitbull-tech/bitbull:<version>` and
+  `ghcr.io/bitbull-tech/bitbull-egress:<version>` on tag.
 - The compose file gets plain `image:` keys; the `build:` keys move behind a `dev` profile,
   so `docker compose --profile dev up --build` stays exactly today's inner loop.
 - First run becomes `docker compose pull` — seconds, and the source tree stops being needed

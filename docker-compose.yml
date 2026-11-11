@@ -36,7 +36,7 @@ x-hardening: &hardening
 services:
   bitbull-agent:
     <<: *hardening
-    image: ${BITBULL_IMAGE:-ghcr.io/tommyhgunz14/bitbull}:${BITBULL_TAG:-latest}
+    image: ${BITBULL_IMAGE:-ghcr.io/bitbull-tech/bitbull}:${BITBULL_TAG:-latest}
     container_name: bitbull-agent${BITBULL_SUFFIX:-}
     env_file: .env
     environment:
@@ -75,7 +75,7 @@ services:
 
   egress:
     <<: *hardening
-    image: ${BITBULL_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbull-egress}:${BITBULL_TAG:-latest}
+    image: ${BITBULL_EGRESS_IMAGE:-ghcr.io/bitbull-tech/bitbull-egress}:${BITBULL_TAG:-latest}
     container_name: bitbull-egress${BITBULL_SUFFIX:-}
     volumes:
       - ./egress/allowlist.txt:/etc/squid/allowlist.txt:ro
@@ -98,7 +98,7 @@ services:
 
   gateway:
     <<: *hardening
-    image: ${BITBULL_EGRESS_IMAGE:-ghcr.io/tommyhgunz14/bitbull-egress}:${BITBULL_TAG:-latest}
+    image: ${BITBULL_EGRESS_IMAGE:-ghcr.io/bitbull-tech/bitbull-egress}:${BITBULL_TAG:-latest}
     container_name: bitbull-gateway${BITBULL_SUFFIX:-}
     command: ["socat", "TCP-LISTEN:8787,fork,reuseaddr", "TCP:bitbull-agent:8787"]
     # Only reachable from this computer. Put a reverse proxy with HTTPS in front to expose it.

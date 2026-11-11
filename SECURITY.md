@@ -8,7 +8,7 @@ you run your own copy, so keep it updated (`git pull` + redeploy).
 ## Reporting a vulnerability
 
 **Please report privately via GitHub:** open a
-[security advisory](https://github.com/tommyhgunz14/BitBull/security/advisories/new)
+[security advisory](https://github.com/bitbull-tech/BitBull/security/advisories/new)
 (Security tab → Advisories → "Report a vulnerability").
 
 > Repository owner: enable **Private vulnerability reporting**
