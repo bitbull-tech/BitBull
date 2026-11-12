@@ -107,7 +107,7 @@ export function describeSettings() {
         row("DEFAULT_MODEL", "Default model", config.agent.defaultModel),
         row("SMALL_MODEL", "Small / background model", config.agent.smallModel, { hint: "Used for titles and cheap background work (on SayGM)" }),
         row("BACKGROUND_VIA", "Background work runs on", config.router.background, {
-          hint: "saygm = the small model above. ditto-router = the Ditto Router model chosen below (needs a Router key under Integrations → Ditto). Only the OpenCode engine's background calls move; chats stay on SayGM.",
+          hint: "saygm = the small model above. ditto-router = the Ditto Router model chosen below (needs a Router key under Integrations → Ditto). Chats run on whichever model you pick for them.",
         }),
         row("DITTO_ROUTER_MODEL", "Ditto Router background model", config.router.model, { hint: "Pick from the Router's model list below." }),
         row("ADVISOR_MODEL", "Advisor model", config.agent.advisorModel, { hint: "Answers \"Which model for this?\" on the home screen, from the live catalogue and your usage. A cheap model is enough; defaults to the small model." }),
@@ -142,15 +142,23 @@ export function describeSettings() {
     },
     {
       id: "ditto",
-      title: "Ditto memory",
+      title: "Ditto",
       rows: [
-        row("DITTO_API_KEY", "API key", config.ditto.apiKey, { secret: true }),
+        row("DITTO_API_KEY", "API key", config.ditto.apiKey, { secret: true, hint: "Your account key (Connect Ditto sets it). Archive, uploads, skill backups and model prices use it." }),
+        row("DITTO_REFERRAL_CODE", "Your referral code", config.ditto.referralCode, { hint: "The app owner's own Ditto referral code (like abcd-2345), for the signup link shown here." }),
         row("DITTO_MCP_URL", "MCP server", config.ditto.mcpUrl),
         row("DITTO_ARCHIVE", "Archive every turn", config.ditto.archive, { hint: "turn = save each exchange; off = only facts the agent saves" }),
         row("DITTO_SOURCE", "Source label", config.ditto.source),
         row("DITTO_ROUTER_KEY", "Router key (ditto_inf_…)", config.router.key, {
           secret: true,
-          hint: "A key from developer.heyditto.ai → Endpoints → your endpoint → API keys. Used only for background work when Configuration → Background work runs on = ditto-router.",
+          hint: "The chat endpoint's key (Connect Ditto sets it): its models in every model picker, next to SayGM's. Its tools are attached only when Ditto tools for the agent is on.",
+        }),
+        row("DITTO_ROUTER_REVIEW_KEY", "Review endpoint key", config.router.reviewKey, {
+          secret: true,
+          hint: "For plan mode and QA Hound on Ditto Router models: an endpoint with memory and tools off, so what they read stays out of your memory.",
+        }),
+        row("DITTO_ROUTER_TOOLS", "Ditto tools for the agent", config.router.tools, {
+          hint: "on = the chat endpoint's tools (Ditto memory tools and every app you have connected in Ditto, such as GitHub or Gmail) are attached to the agent in every chat, on SayGM models too. off = the Router key only adds models. Connect Ditto turns it on.",
         }),
         row("DITTO_ROUTER_BASE_URL", "Router base URL", config.router.baseUrl),
       ],

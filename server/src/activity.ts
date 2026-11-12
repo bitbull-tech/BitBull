@@ -9,7 +9,7 @@ import { config } from "./config.js";
  * survives restarts. Secrets are redacted before anything is stored.
  */
 export type Level = "debug" | "info" | "warn" | "error";
-export type Source = "server" | "config" | "saygm" | "agent" | "tool" | "subagent" | "upload" | "ditto" | "opencode" | "claude" | "integration" | "skills" | "storage" | "network" | "swarm";
+export type Source = "server" | "config" | "saygm" | "agent" | "tool" | "subagent" | "upload" | "ditto" | "opencode" | "claude" | "integration" | "skills" | "storage" | "network" | "swarm" | "compat";
 
 export interface ActivityEvent {
   id: number;
@@ -33,6 +33,8 @@ const secrets = () =>
   [
     config.saygm.apiKey,
     config.ditto.apiKey,
+    config.router.key,
+    config.router.reviewKey,
     config.appToken,
     config.integrations.atlas.apiKey,
     config.integrations.four04.modelKey,

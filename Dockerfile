@@ -71,8 +71,9 @@ COPY egress/allowlist.txt egress/allowlist.txt
 # What this image was built from (written by deploy.ps1). The bracket makes it optional, so a
 # plain `docker compose build` with no deploy still works — the server just reports "unknown".
 COPY --from=build /app/build-info.jso[n] ./
-# Ditto's CLI, for the server-side ditto_review tool (runs with the server's key, never in the agent's shell)
-RUN npm install -g @heyditto/cli@3.6.4 && npm cache clean --force
+# Ditto's CLI, for the server-side ditto_review tool and provider keys (providerKeys.ts); it runs with
+# the server's key, never in the agent's shell. 3.17.0 is the first release with `heyditto keys`.
+RUN npm install -g @heyditto/cli@3.17.0 && npm cache clean --force
 RUN mkdir -p /data && chown node:node /data
 # Non-root. The app and its code are root-owned and read-only to the agent.
 USER node

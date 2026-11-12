@@ -270,6 +270,11 @@ export function ModelPicker({
                       <div className="mp-sub">
                         <code>{m.id}</code>
                         <span className="tag">{API_LABEL[m.api]}</span>
+                        {m.gateway === 'ditto-router' && (
+                          <span className="tag" title="Runs through your Ditto Router endpoint">
+                            Ditto Router
+                          </span>
+                        )}
                         {m.vision && (
                           <span className="tag" title="Accepts images">
                             <IconEye size={11} /> Vision

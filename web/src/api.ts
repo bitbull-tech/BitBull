@@ -130,6 +130,8 @@ export interface Model {
   name: string
   family: 'anthropic' | 'openai' | 'google' | 'open' | 'other'
   api: 'anthropic' | 'responses' | 'google' | 'chat'
+  /** Served by Ditto Router (id `ditto-router/…`) instead of SayGM */
+  gateway?: 'ditto-router'
   provider?: string
   tier?: string
   confidential?: boolean
@@ -225,11 +227,48 @@ export interface Uploaded {
   size: number
 }
 
+/** A compatibility notice (server/src/compat.ts) */
+export interface CompatNotice {
+  id: string
+  level: 'info' | 'warn' | 'breaking'
+  source: 'saygm' | 'ditto' | 'bitbull'
+  title: string
+  detail: string
+  action?: 'update' | 'reconnect-ditto' | 'settings'
+}
+
+export type DittoConnectState =
+  | { status: 'idle' }
+  | { status: 'waiting'; userCode: string; url: string; expiresAt: number }
+  | { status: 'connected'; endpoint: string }
+  | { status: 'error'; message: string }
+
+/** Provider keys kept in Ditto (server/src/providerKeys.ts): metadata only, never a key. */
+export interface DittoKeys {
+  providers: { id: string; displayName: string; docsUrl: string; keyPrefixHints?: string[] }[]
+  keys: { id: string; provider: string; label?: string; configured: boolean; enabled: boolean }[]
+  /** BitBull has its own SayGM key that could be copied to Ditto */
+  saygmKey: boolean
+}
+export type DittoKeySaved = {
+  key: DittoKeys['keys'][number]
+  validation?: { ok: boolean; status?: number; error?: string }
+}
+
+/** A refused provider-key call, with the server's code (e.g. provider_keys_not_granted). */
+export class DittoKeyError extends Error {
+  code: string
+  constructor(message: string, code: string) {
+    super(message)
+    this.code = code
+  }
+}
+
 export interface AppConfig {
   engines: { id: EngineId; label: string }[]
   defaultEngine: EngineId
   defaultModel: string
-  ditto: { enabled: boolean; archive: string }
+  ditto: { enabled: boolean; archive: string; router: boolean; signupUrl: string; connectionsUrl: string }
 }
 
 export type TurnStatus = 'running' | 'done' | 'error' | 'aborted' | 'interrupted'
@@ -393,6 +432,17 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function keyReq<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}`, ...(init.headers ?? {}) },
+  })
+  if (res.status === 401) throw new Unauthorized('unauthorized')
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string }
+  if (!res.ok) throw new DittoKeyError(body.error ?? res.statusText, body.code ?? 'error')
+  return body
+}
+
 /** Errors from the server come back as {"error": "..."}: show the message, not the JSON. */
 async function failText(res: Response) {
   const t = await res.text()
@@ -460,6 +510,18 @@ export const api = {
     }),
   /** A page the browser extension sent, waiting to be attached (server/src/captures.ts) */
   nextCapture: () => req<{ capture: { id: string; at: number; url: string; title: string; screenshot?: string; summary: string } | null }>('/api/captures/next'),
+  /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
+  dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
+  dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  /** Notices that SayGM or Ditto changed something, a key lapsed, or a newer BitBull is out */
+  compat: (refresh = false) => req<{ checkedAt: string | null; notices: CompatNotice[] }>(`/api/compat${refresh ? '?refresh=1' : ''}`),
+  /** Provider keys in Ditto: list, save (or copy BitBull's SayGM key), turn on/off, remove */
+  dittoKeys: () => keyReq<DittoKeys>('/api/ditto/keys'),
+  saveDittoKey: (body: { provider: string; key?: string; label?: string; fromSaygm?: boolean }) =>
+    keyReq<DittoKeySaved>('/api/ditto/keys', { method: 'POST', body: JSON.stringify(body) }),
+  setDittoKeyEnabled: (id: string, enabled: boolean) =>
+    keyReq<{ key: DittoKeys['keys'][number] }>(`/api/ditto/keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+  removeDittoKey: (id: string) => keyReq<{ ok: true }>(`/api/ditto/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   routerModels: (refresh = false) =>
     req<{ configured: boolean; background: 'saygm' | 'ditto-router'; model: string; active: boolean; models: RouterModel[]; error?: string }>(
       `/api/router/models${refresh ? '?refresh=1' : ''}`,

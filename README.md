@@ -19,7 +19,9 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - Import existing conversations, projects and data from your existing coding agents
 - `POST /api/v1/chat` for scripts and other agents
 - **Which model for this?** (three picks with pros, cons and cost), a model picker with maker
-  filters and your own response speeds, optional **Ditto Router** for background work
+  filters and your own response speeds; **Connect Ditto** for Ditto Router models next to SayGM's,
+  with your Ditto memory and connected apps as the agent's tools, and your provider keys (GM,
+  OpenRouter, OpenAI, …) kept in Ditto instead of `.env`
 - **Voice**: talk to it and hear it answer, push-to-talk from anywhere, hands-free
 - Show it a window or send it a web page (browser extension), get every file a reply made with one
   click, archive and bulk-tidy chats
@@ -326,6 +328,26 @@ To get the agent's view on something: tick entries in the log and choose **Expla
 the **Ask agent** buttons that appear. Either way the excerpt is put in the message box with
 the request, so you can add your notes before sending.
 
+## Updates and compatibility notices
+
+BitBull depends on SayGM and Ditto, which change on their own schedule. A banner above the chat
+tells you when one of them has changed something BitBull relies on, is retiring part of its API,
+has stopped offering your default model, or no longer accepts a key (a Connect Ditto sign-in lasts
+three months), and when a newer BitBull is out. Notices are also written to Activity, and can be
+dismissed per computer. The server checks shortly after it starts and every six hours.
+
+To update: pull the latest code and deploy it again. Your data folder is never touched.
+
+```powershell
+cd <your BitBull folder>
+git pull
+.\scripts\bitbull-wsl\deploy.ps1          # Windows
+bash scripts/bitbull-mac/deploy.sh          # Mac
+docker compose up -d --build                # Linux and servers
+```
+
+What is checked, and how maintainers publish a notice to every install: [docs/COMPAT.md](docs/COMPAT.md).
+
 ## Make it yours (white-labelling)
 
 Name, tagline, logos and every colour come from `brand.json` in the data folder, with the
@@ -539,6 +561,11 @@ The repo's GitHub origin has to be enabled for Ditto Review in your Ditto worksp
 needs review access; until then the tool returns the service's refusal. `verify-changes` and
 `git-workflow` ask for it before a commit or PR. The CLI is in the image (`@heyditto/cli`).
 
+**Provider keys.** Settings → Integrations → Ditto → Provider keys saves a GM, Engy, Instant,
+OpenRouter, OpenAI, Anthropic or Google key to your Ditto account through the same CLI
+(`heyditto keys set`); BitBull keeps none of them, and your Ditto endpoints bill to them before
+Ditto credits. See docs/ROUTER.md.
+
 ## Keys: `.env` and the vault
 
 `.env` is what the stack boots on; it never leaves the PC and is copied into the distro by
@@ -673,10 +700,15 @@ run in the sandbox where you can see them and the reviewer can check them.
 
 ## Ditto Router and Ditto Review
 
-Optional: run background work (titles, compaction) on a model from Ditto Router instead of SayGM's
-small model, choose it from the Router's live model list, let the advisor's picks go straight to
-background work, and ask Ditto Review to review any branch's pull request from Repositories. See
-[docs/ROUTER.md](docs/ROUTER.md).
+Ditto Router is a second model gateway **next to SayGM, not instead of it**. Settings →
+Integrations → Ditto → **Connect Ditto**: one sign-in creates two Ditto Router endpoints (chats
+with memory and your connected apps; a review one with neither, for plan mode and QA Hound) and
+saves their keys. The endpoint's models join every model picker next to SayGM's, tagged *Ditto
+Router*, and run natively on both engines. Your default model and where background work runs stay
+as you set them: choose a Ditto Router model per chat, or make one the default in Configuration.
+Its tools are attached as MCP servers inside BitBull's fences (**Ditto tools for the agent**, on
+after Connect, off for a key pasted by hand), and **Manage connections** opens Ditto's Connections. Ask Ditto Review to review any branch's pull
+request from Repositories. See [docs/ROUTER.md](docs/ROUTER.md).
 
 ## 404: 3D as code
 
@@ -718,6 +750,10 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/models/usage` | Your record per model: turns, errors, stopped, cost, tokens, speed |
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
+| `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
+| `GET` | `/api/compat` | Compatibility notices: SayGM or Ditto changes, lapsed keys, a newer BitBull (`?refresh=1` checks now) |
+| `GET` / `POST` | `/api/ditto/keys` | Provider keys in Ditto: list (metadata only) / save one via the Ditto CLI |
+| `PATCH` / `DELETE` | `/api/ditto/keys/:id` | Turn a provider key on or off / remove it |
 | `GET` | `/api/voice` | Voice: Piper text-to-speech and its voices, and the speech-to-text model |
 | `POST` | `/api/voice/speak` | Text to speech in the container (`{text, voice?, speed?}` → WAV); nothing leaves the machine |
 | `POST` | `/api/voice/transcribe` | Speech to text: a WAV recording in, its words out (a Gemini model on SayGM) |

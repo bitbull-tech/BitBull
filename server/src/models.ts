@@ -1,3 +1,4 @@
+import { cachedRouterModels, cachedRouterReview, priceFor, ROUTER_PREFIX, routerModelId, routerModels, routerPrices, type RouterModel } from "./router.js";
 import { redact } from "./activity.js";
 import { config } from "./config.js";
 
@@ -6,8 +7,12 @@ export interface ModelInfo {
   name: string;
   /** Rough family used to route + group in the UI. */
   family: "anthropic" | "openai" | "google" | "open" | "other";
-  /** Native API SayGM serves this model on (from its api_shapes). */
+  /** Native API the gateway serves this model on (SayGM: from its api_shapes). */
   api: ModelApi;
+  /** The gateway that serves it: SayGM unless it is a Ditto Router model (id `ditto-router/…`). */
+  gateway?: "ditto-router";
+  /** Ditto Router: the endpoint itself (or an alias) rather than a catalog model */
+  endpoint?: boolean;
   contextLength?: number;
   /** Who makes it (owned_by), e.g. anthropic, openai, moonshot. */
   provider?: string;
@@ -130,9 +135,59 @@ export async function listModels(force = false): Promise<ModelInfo[]> {
   }
 }
 
-/** Estimated USD cost of a turn from SayGM's live per-model prices. */
+/** A Ditto Router model as a chat model. Claude models speak Messages there, the rest chat.completions. */
+export function fromRouter(m: RouterModel, prices = new Map<string, NonNullable<ModelInfo["price"]>>()): ModelInfo {
+  const family = familyOf(m.id);
+  return {
+    id: `${ROUTER_PREFIX}${m.id}`,
+    name: m.name,
+    family,
+    api: family === "anthropic" ? "anthropic" : "chat",
+    gateway: "ditto-router",
+    ...(m.endpoint ? { endpoint: true } : {}),
+    provider: m.owner,
+    contextLength: m.contextLength,
+    tools: true,
+    price: priceFor(m, prices),
+  };
+}
+
+/** Every chat model: SayGM's, then the Router endpoint's when a Router key is set. */
+export async function chatModels(force = false): Promise<ModelInfo[]> {
+  const saygm = await listModels(force);
+  if (!config.router.key) return saygm;
+  const [router, prices] = await Promise.all([
+    routerModels(force).catch((err) => {
+      console.error("[router] Couldn't load the Ditto Router model list:", errText(err));
+      return cachedRouterModels();
+    }),
+    routerPrices(),
+  ]);
+  return [...saygm, ...router.map((m) => fromRouter(m, prices))];
+}
+
+export const findModel = async (id: string) => (await chatModels()).find((m) => m.id === id);
+
+/**
+ * Why a turn can't run on a Ditto Router model (null when it can). Plan mode, and so QA Hound,
+ * needs the review endpoint, checked to have no memory and no tools (routerReview(), awaited by
+ * the engines first), so what a reviewer reads in a possibly hostile repo never reaches memory.
+ */
+export function routerRefusal(id: string, known: ModelInfo | undefined, plan?: boolean): string | null {
+  if (routerModelId(id) === null) return null;
+  if (!known) return `${id} isn't on your Ditto Router endpoint${config.router.key ? "" : " (no Router key is set)"}. Reload the model list or pick another model.`;
+  if (!plan) return null;
+  const review = cachedRouterReview();
+  if (!config.router.reviewKey || !review)
+    return "Plan mode and QA Hound on a Ditto Router model run on the review endpoint, so what they read stays out of your memory, and there is no working review key. Connect Ditto in Settings → Integrations → Ditto (or set DITTO_ROUTER_REVIEW_KEY), or pick a SayGM model.";
+  if (!review.safe)
+    return `The review endpoint (${review.slug}) has memory or tools switched on, or uses the chat endpoint's key, so plan mode and QA Hound won't run on it. Turn its memory and tools off on developer.heyditto.ai, or Connect Ditto again.`;
+  return null;
+}
+
+/** Estimated USD cost of a turn from the gateway's live per-model prices. */
 export async function estimateCost(modelId: string, inputTokens = 0, outputTokens = 0, cacheReadTokens = 0): Promise<number | undefined> {
-  const m = (await listModels()).find((x) => x.id === modelId);
+  const m = await findModel(modelId);
   if (!m?.price) return undefined;
   // cache reads are billed at their own (lower) rate when the gateway publishes one
   const cacheRate = m.price.cacheRead ?? m.price.input;
@@ -141,7 +196,7 @@ export async function estimateCost(modelId: string, inputTokens = 0, outputToken
 
 /** Model list for clients, without the raw gateway payload. */
 export async function publicModels(force = false) {
-  return (await listModels(force)).map(({ raw: _raw, ...rest }) => rest);
+  return (await chatModels(force)).map(({ raw: _raw, ...rest }) => rest);
 }
 
 /**
@@ -150,7 +205,7 @@ export async function publicModels(force = false) {
  * read it. Redacted like anything else user-visible, since the record is third-party data.
  */
 export async function modelDetail(id: string, force = false) {
-  const m = (await listModels(force)).find((x) => x.id === id);
+  const m = (await chatModels(force)).find((x) => x.id === id);
   if (!m) return null;
   return JSON.parse(redact(JSON.stringify(m))) as ModelInfo;
 }

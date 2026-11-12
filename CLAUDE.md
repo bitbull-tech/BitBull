@@ -31,18 +31,21 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   repos.ts           git clones in a workspace, read-only (status/branches via git); actions go via the agent
   vault.ts           keys from the UI, AES-256-GCM in DATA_DIR/vault.json; key held by the link helper (DPAPI), unlocked from the page
   swarm.ts           QA Hound: reviewer models in their own sessions (review → challenge), then the chat's model gives the verdict
-  engines/opencode.ts  OpenCode server (spawned), per-model native API routing, subagents, bitbull-guard plugin
-  engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models only)
+  engines/opencode.ts  OpenCode server (spawned), per-model native API routing (SayGM or Ditto Router), subagents, plugins
+  engines/claude.ts    Claude Agent SDK engine (Anthropic-shape SayGM models, or any Ditto Router model)
   config.ts          env + UI overrides (DATA_DIR/settings.local.json), live reloadConfig()
   settings.ts        Settings API (EDITABLE allowlist), status probes
   activity.ts        activity feed (memory + logs/activity.jsonl, SSE), redact()
   export.ts          chat/exchange export (full or compact) for other agents
   subagents.ts       loads subagents/*.md for both engines; read agents: no edits, no shell, no delegation
   integrations.ts    Atlas, 404, GitHub (+ probes); ditto.ts; models.ts; skills.ts; db.ts
+  router.ts          Ditto Router: models, endpoint MCP catalog, prices; dittoConnect.ts: Connect Ditto (docs/ROUTER.md)
+  providerKeys.ts    provider keys kept in Ditto, through the Ditto CLI (`heyditto keys`); BitBull stores none
+  compat.ts          checks that SayGM and Ditto still answer the way BitBull reads them; notices + update prompt (docs/COMPAT.md)
 web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ReposDialog, ExportMenu, activity.tsx)
   brand.ts           brand fetch + CSS-token injection;  BrandMark.tsx  logo/initials
   index.css          all colour lives in tokens at the top; the sidebar re-declares its own
-agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/bitbull-guard.js  secret guard
+agent/SYSTEM.md      base system prompt;  agent/opencode-plugin/bitbull-guard.js  secret guard;  ditto-router.js  Router thread per chat
 agent-readme.md      for agents USING BitBull (copied into the image at /app): services, rules, what they may touch
 skills/              skills mirrored into every workspace (.claude/skills) and backed up to Ditto
 subagents/           reviewer, challenger, debugger, tester, worker

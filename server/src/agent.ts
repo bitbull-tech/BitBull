@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { config, shellAllowed, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type ProjectRow, type SessionRow } from "./db.js";
 import { archiveTurn } from "./ditto.js";
+import { routerModelId, routerRecords } from "./router.js";
 import { claudeEngine } from "./engines/claude.js";
 import { opencodeEngine } from "./engines/opencode.js";
 import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
@@ -227,8 +228,11 @@ export async function* runTurn(
     }${ctrl.signal.aborted ? " · stopped by user" : ""}`,
   });
 
-  // Fire-and-forget: long-term memory shouldn't slow the UI down.
-  if (text.trim()) {
+  // Fire-and-forget: long-term memory shouldn't slow the UI down. Not archived: plan-mode turns
+  // (QA Hound reviewers read possibly hostile code, and what they quote must not become a memory
+  // every later chat trusts), and turns a Ditto Router endpoint already records itself.
+  const recordedByRouter = routerModelId(model) !== null && routerRecords();
+  if (text.trim() && !opts.plan && !recordedByRouter) {
     const fresh = sessions.get(session.id)!;
     void archiveTurn({
       sessionId: session.id,

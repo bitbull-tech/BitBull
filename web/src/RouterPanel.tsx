@@ -1,7 +1,7 @@
 /**
  * Configuration → Background work: where titles, compaction and other housekeeping run. SayGM's
  * small model by default; Ditto Router when chosen here, on a model picked from the Router's own
- * list (live, from your Router key). Chats are never moved.
+ * list (live, from your Router key). Chats run on whatever model each one picks.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { api, type RouterModel, type SettingGroup } from './api'
@@ -50,8 +50,8 @@ export function RouterPanel({ smallModel, onSaved }: { smallModel: string; onSav
     <section className="cfg-group router-panel">
       <h3>Background work</h3>
       <p className="muted small">
-        Titles, compaction and the other housekeeping the OpenCode engine does on its small model. Chats, subagents and QA Hound always stay on
-        SayGM. Ditto Router needs a Router key under Integrations → Ditto.
+        Titles, compaction and the other housekeeping the engines do on their small model. Chats pick their own model, from SayGM or Ditto
+        Router, in the model picker. Ditto Router needs a Router key under Integrations → Ditto.
       </p>
       <div className="seg" role="radiogroup" aria-label="Background work runs on">
         <button type="button" className={via === 'saygm' ? 'on' : ''} onClick={() => void save({ BACKGROUND_VIA: 'saygm' }, 'Background work runs on SayGM')}>

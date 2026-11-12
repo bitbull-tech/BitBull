@@ -90,7 +90,20 @@ secrets (GAPS #11). Until then, everything below should be read with this in min
 
 ### R2 — Claude engine hands the SayGM key to the shell
 `ANTHROPIC_API_KEY` is set for the Claude SDK and inherited by every shell it spawns; the
-bitbull-guard plugin exists only for OpenCode. Prefer the OpenCode engine for untrusted work.
+bitbull-guard plugin exists only for OpenCode. Prefer the OpenCode engine for untrusted work. On a Ditto Router model the same
+goes for the Router endpoint key (`ANTHROPIC_AUTH_TOKEN`): it reaches the endpoint's tools on
+`.heyditto.ai`, the same tools the turn already has, behind Ditto's approval gate. Plan turns carry
+the review endpoint's key instead, which reaches no tools and no memory (docs/ROUTER.md).
+With `DITTO_ROUTER_TOOLS=on` the agent can act on the apps connected in Ditto (GitHub, Gmail, …)
+in every chat outside plan mode, so injected instructions in something it reads have more to aim
+at; Ditto's approval gate is the control, and the setting is off unless the owner connects or
+turns it on.
+After a Connect approved for key access, the Ditto account key can also save and replace provider
+keys in Ditto (never read them back), so a leaked account key could swap in a key of the
+attacker's. It is scrubbed from both engines' environments and hidden by the guard; the server
+hands it only to its own `heyditto keys` child (server/src/providerKeys.ts). The one place an
+engine holds it is the older account-key Ditto MCP server, which BitBull attaches only when the
+endpoint's catalog has no `ditto` server (not after Connect); there the R1/R2 caveats apply.
 
 ### R3 — Redaction is exact-substring only
 Server `redact()` and bitbull-guard match configured values verbatim. Base64, case changes,

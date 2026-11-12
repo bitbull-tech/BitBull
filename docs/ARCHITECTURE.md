@@ -79,9 +79,10 @@ Other options considered:
   smallest runtime, but you rebuild file editing, shell, compaction, sessions and
   permissions yourself. Worth it only if you outgrow both engines. It would slot in as a
   third `AgentEngine`.
-- **Ditto Router** (`router.heyditto.ai/v1`) — Ditto also offers a model router with
-  memory recall/record built in. It overlaps with SayGM; keep SayGM for models/pricing
-  and use Ditto purely as memory, as here.
+- **Ditto Router** (`router.heyditto.ai/v1`) — Ditto's model gateway, wired in as a second
+  gateway next to SayGM (docs/ROUTER.md): Connect Ditto creates the endpoints, their models are
+  `ditto-router/<id>` in the model list, both engines route them natively, and the endpoint's
+  tools (memory included) are MCP servers BitBull attaches, so plan mode still gets none.
 
 ## Portability and access
 

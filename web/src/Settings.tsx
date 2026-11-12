@@ -10,6 +10,7 @@ import { HELPER_HINT, vaultKeyFromThisPc } from './linkHelper'
 import settingsArt from './assets/settings-dog.webp'
 import { VoicePanel } from './voice/VoicePanel'
 import { RouterPanel } from './RouterPanel'
+import { DittoConnect } from './DittoConnect'
 
 type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'voice' | 'appearance'
 
@@ -29,6 +30,7 @@ export function Settings({
   onModelsRefreshed: () => void
 }) {
   const [tab, setTab] = useState<Tab>('status')
+  const [ditto, setDitto] = useState(cfg.ditto)
   const [status, setStatus] = useState<Status | null>(null)
   const [groups, setGroups] = useState<SettingGroup[] | null>(null)
   const [checking, setChecking] = useState(false)
@@ -42,6 +44,7 @@ export function Settings({
     setGroups(next)
     setSaveMsg({ ok: true, text })
     void check()
+    void api.config().then((updated) => setDitto(updated.ditto)).catch(() => {})
   }
   /** From a Status card to that service's card under Integrations */
   const openIntegration = (id: string) => {
@@ -167,6 +170,15 @@ export function Settings({
                           Docs
                         </a>
                       </div>
+                      {svc.id === 'ditto' && (
+                        <DittoConnect
+                          ditto={ditto}
+                          onConnected={() => {
+                            void api.settings().then((r) => onRowSaved(r.groups, 'Connected to Ditto'))
+                            onModelsRefreshed()
+                          }}
+                        />
+                      )}
                       <div className="int-status small">{st.loading ? 'Checking…' : st.detail}</div>
                       {g && (
                         <div className="cfg-table">
@@ -553,7 +565,7 @@ function StatusCard({ title, ok, loading, detail }: { title: string; ok?: boolea
 /** The outside services, in the order Status and Integrations show them. Ids match the server's setting groups. */
 const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
   { id: 'saygm', name: 'SayGM', blurb: 'The model gateway: one key, every model in the picker.', docs: 'https://saygm.com' },
-  { id: 'ditto', name: 'Ditto memory', blurb: 'Long-term memory shared by every chat and model.', docs: 'https://heyditto.ai' },
+  { id: 'ditto', name: 'Ditto', blurb: 'Memory shared by every chat and model, your connected apps as tools, and Ditto Router models.', docs: 'https://heyditto.ai' },
   { id: 'github', name: 'GitHub', blurb: 'Clone, pull, push and open PRs from the agent’s shell.', docs: 'https://github.com/settings/personal-access-tokens' },
   { id: 'taostats', name: 'Taostats', blurb: 'Bittensor network data (subnets, validators, prices) for the taostats-api skill.', docs: 'https://docs.taostats.io' },
   { id: 'atlas', name: 'Atlas AI Studio', blurb: 'Images, video, 3D and animation workflows.', docs: 'https://docs.atlas.design' },

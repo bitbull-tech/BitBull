@@ -10,6 +10,7 @@ import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, Ico
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { HelpDialog } from './HelpDialog'
+import { CompatBanner } from './CompatBanner'
 import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
@@ -746,6 +747,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       <div className="scrim" onClick={() => setNavOpen(false)} />
 
       <main className="main">
+        <CompatBanner onOpenSettings={() => setSettingsOpen(true)} />
         <header className="topbar">
           <button className="icon-btn menu" onClick={() => setNavOpen(true)} aria-label="Open chats">
             <IconMenu />

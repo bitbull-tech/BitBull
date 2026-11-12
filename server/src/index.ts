@@ -27,7 +27,10 @@ import { collect, contentType, disposition, insideReal, outputsDuring, zip } fro
 import { insideWorkspace, mirrorFile, newEncryptionKey, resetStorage, restoreFile, resumeMirror, storageEnabled } from "./storage.js";
 import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
-import { routerBackground, routerModels } from "./router.js";
+import { routerBackground, routerMcpServers, routerModels, routerReview } from "./router.js";
+import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
+import { compatState, runCompat, scheduleCompat } from "./compat.js";
+import { copySaygmKey, listKeyProviders, listProviderKeys, ProviderKeyError, removeProviderKey, saveProviderKey, setProviderKeyEnabled } from "./providerKeys.js";
 import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
@@ -123,7 +126,14 @@ app.get("/api/config", async (c) =>
     engines: Object.values(engines).map((e) => ({ id: e.id, label: e.label })),
     defaultEngine: config.agent.defaultEngine,
     defaultModel: config.agent.defaultModel,
-    ditto: { enabled: dittoEnabled(), archive: config.ditto.archive },
+    ditto: {
+      enabled: dittoEnabled(),
+      archive: config.ditto.archive,
+      router: !!config.router.key,
+      // the app owner's referral code, so signups from this link count for them (Ditto's own /r/<code> link)
+      signupUrl: /^[a-z2-7]{4}-[a-z2-7]{4}$/.test(config.ditto.referralCode.toLowerCase()) ? `https://heyditto.ai/r/${config.ditto.referralCode.toLowerCase()}` : "https://app.heyditto.ai/",
+      connectionsUrl: CONNECTIONS_URL,
+    },
   }),
 );
 
@@ -211,8 +221,8 @@ app.put("/api/settings", async (c) => {
   if (!body.values || typeof body.values !== "object") return c.json({ error: "values required" }, 400);
   try {
     const changed = await updateSettings(body.values);
-    // the Router's model details go into OpenCode's config, so fetch them before it restarts
-    if (routerBackground()) await routerModels(true).catch(() => {});
+    // the Router's models and tools go into OpenCode's config, so fetch them before it restarts
+    if (config.router.key) await Promise.all([routerModels(true).catch(() => {}), routerMcpServers(true), routerReview(true)]);
     void reloadOpencode().catch(() => {}); // restarts now if idle, otherwise before the next turn
     return c.json({ changed, groups: describeSettings() });
   } catch (e) {
@@ -220,6 +230,74 @@ app.put("/api/settings", async (c) => {
   }
 });
 app.get("/api/status", async (c) => c.json(await status()));
+
+/**
+ * Compatibility notices (server/src/compat.ts): SayGM or Ditto changed something BitBull relies on,
+ * a key lapsed, or a newer BitBull is out. ?refresh=1 checks again now.
+ */
+app.get("/api/compat", async (c) => {
+  if (c.req.query("refresh")) await runCompat(buildInfo).catch(() => {});
+  const { at, notices } = compatState();
+  return c.json({ checkedAt: at ? new Date(at).toISOString() : null, build: { commit: buildInfo.commit, committed: buildInfo.committed }, notices });
+});
+
+/** Connect Ditto (server/src/dittoConnect.ts): start the sign-in, then poll until it's connected. */
+app.post("/api/ditto/connect", async (c) => {
+  try {
+    return c.json(await startConnect());
+  } catch (e) {
+    return c.json({ status: "error", message: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+app.get("/api/ditto/connect", (c) => c.json(connectState()));
+
+/**
+ * Provider keys in Ditto (server/src/providerKeys.ts): BitBull passes them to the Ditto CLI and
+ * keeps none. Responses carry metadata and the provider's check only, never a key.
+ */
+const keyFailure = (c: Context, e: unknown) =>
+  e instanceof ProviderKeyError
+    ? c.json({ error: e.message, code: e.code }, e.status as 400)
+    : c.json({ error: e instanceof Error ? e.message : String(e), code: "error" }, 502);
+app.get("/api/ditto/keys", async (c) => {
+  try {
+    const [{ providers }, { keys }] = await Promise.all([listKeyProviders(), listProviderKeys()]);
+    return c.json({ providers, keys, saygmKey: !!config.saygm.apiKey });
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
+app.post("/api/ditto/keys", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
+  const body = z
+    .object({ provider: z.string(), key: z.string().max(4096).optional(), label: z.string().max(64).optional(), fromSaygm: z.boolean().optional() })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Expected a provider and a key", code: "bad_request" }, 400);
+  try {
+    const saved = body.data.fromSaygm ? await copySaygmKey() : await saveProviderKey(body.data.provider, body.data.key ?? "", body.data.label);
+    const named = saved.key.label ? ` named “${saved.key.label}”` : "";
+    record({ level: "info", source: "ditto", message: `Saved a ${saved.key.provider} key${named} to Ditto (value not logged)` });
+    return c.json(saved);
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
+app.patch("/api/ditto/keys/:id", async (c) => {
+  const body = z.object({ enabled: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Expected enabled", code: "bad_request" }, 400);
+  try {
+    return c.json(await setProviderKeyEnabled(c.req.param("id"), body.data.enabled));
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
+app.delete("/api/ditto/keys/:id", async (c) => {
+  try {
+    await removeProviderKey(c.req.param("id"));
+    return c.json({ ok: true });
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
 
 /** Ditto Router's models (for Configuration → Background work), and whether background work is on it. */
 app.get("/api/router/models", async (c) => {
@@ -1210,8 +1288,9 @@ if (existsSync(config.webDist)) {
 resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
 await syncSkills().catch((e) => console.error("[skills]", e));
-// background work on Ditto Router: have its model details ready for OpenCode's config
-if (routerBackground()) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
+// Ditto Router: have its models ready for the model list and OpenCode's config
+if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
+scheduleCompat(buildInfo);
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });
