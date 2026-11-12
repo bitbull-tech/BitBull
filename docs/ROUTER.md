@@ -20,10 +20,20 @@ endpoint keys an earlier Connect from this BitBull made, once the new ones are s
 | `DITTO_API_KEY` | your account key from the sign-in (lasts three months; connect again to renew) |
 | `DITTO_ROUTER_KEY` | the `bitbull` endpoint's key |
 | `DITTO_ROUTER_REVIEW_KEY` | the `bitbull-review` endpoint's key |
-| `DEFAULT_MODEL` | `ditto-router/bitbull`: the endpoint's own model (change it on developer.heyditto.ai) |
-| `BACKGROUND_VIA`, `DITTO_ROUTER_MODEL` | `ditto-router`, `bitbull`: titles and compaction follow the endpoint's background routes |
+| `DITTO_ROUTER_TOOLS` | `on`: the endpoint's tools are attached to the agent (below) |
+| `DITTO_ROUTER_MODEL` | `bitbull`, only if it was empty: ready to choose for background work |
 
-SayGM stays: its models are in every picker next to Ditto's, and `DEFAULT_MODEL` can go back to one.
+**Ditto Router is a parallel choice, not the default.** Connect does not touch `DEFAULT_MODEL` or
+`BACKGROUND_VIA`: chats keep starting on the model you had, and background work stays where it
+was. Ditto's models are in every picker next to SayGM's; to prefer one, pick it in a chat, set
+`DEFAULT_MODEL` to it (for example `ditto-router/bitbull`, the endpoint's own model) or switch
+**Background work runs on** to *Ditto Router* in Configuration.
+
+Connect replaces `DITTO_API_KEY` with the key from the sign-in. If you had set a key for a
+separate BitBull agent account (see `.env.example`), memories saved from then on belong to the
+account you signed in with; set the old key again afterwards to keep the two apart, at the cost
+of provider keys and Router prices, which need the Connect key. When the sign-in lapses after
+three months BitBull says so (docs/COMPAT.md).
 
 **Manage connections** opens Ditto's Connections (app.heyditto.ai/connections/apps). GitHub, Gmail,
 Linear or an MCP server connected there becomes the agent's tools in BitBull within ten minutes
@@ -87,11 +97,20 @@ chat.completions under one endpoint key, and translates between them. With a Rou
 
 ## Tools and memory: attached by BitBull, not injected by the Router
 
+**Opt-in.** Tools are attached only when **Ditto tools for the agent** (`DITTO_ROUTER_TOOLS`) is
+`on`. Connect turns it on; a Router key pasted by hand only adds models until you do. With it on,
+the tools are attached to every chat outside plan mode, on SayGM models too, and they act on your
+accounts (an endpoint created by Connect offers every app you have connected in Ditto, such as
+GitHub or Gmail). A web page or repo the agent reads could try to steer it into using them;
+Ditto's approval gate is the fence, so keep approvals on for anything that sends or deletes, or
+narrow the endpoint's tools on developer.heyditto.ai.
+
 The `bitbull` endpoint's tools come from its MCP catalog (`GET /v1/mcp`): Ditto's built-ins
 (`search_memories`, `save_memory`, …) as `ditto`, and each connected source as `ditto-<source>`
 (`ditto-github`, …). BitBull attaches them to the agent as remote MCP servers (server/src/router.ts);
 each call still runs on Ditto (`/v1/mcp/<server>`) with the credentials Ditto holds, behind the
-endpoint's approval gate. When the catalog has `ditto`, it replaces the account-key memory server.
+endpoint's approval gate. A catalog entry whose URL is not on the Router's own origin is dropped:
+the endpoint key travels with every call, so it only ever goes to the Router. When the catalog has `ditto`, it replaces the account-key memory server.
 
 Every inference request says `X-Ditto-Tool-Surface: mcp`, so the Router adds no tools of its own.
 Tools the Router injected would run on Ditto out of BitBull's sight; attached ones stay inside

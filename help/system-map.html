@@ -225,7 +225,7 @@ a { color: var(--accent); }
   <text class="s" x="56" y="888">SayGM: every chat model with</text>
   <text class="s" x="56" y="904">one key, and speech to text</text>
   <text class="s" x="56" y="926">Ditto Router (optional):</text>
-  <text class="s" x="56" y="942">its models for chats too</text>
+  <text class="s" x="56" y="942">its models, side by side</text>
 
   <rect class="net" x="330" y="840" width="250" height="130" rx="10"/>
   <text class="t" x="346" y="866">Memory and review</text>
@@ -274,7 +274,7 @@ a { color: var(--accent); }
   <li>You type or speak in the browser or the desktop app. Push-to-talk turns speech into text with a SayGM model.</li>
   <li>The message enters through the gateway, the only door, which answers on your own machine only.</li>
   <li>The server saves it and starts a <strong>turn</strong>. Turns run in the container, so you can close the tab and come back later.</li>
-  <li>The chat's engine (OpenCode or the Claude Agent SDK) calls the model you picked on SayGM, through the egress proxy.</li>
+  <li>The chat's engine (OpenCode or the Claude Agent SDK) calls the model you picked, on SayGM or on Ditto Router, through the egress proxy.</li>
   <li>The agent uses its tools inside the container: the shell, files in the workspace, its own browser, skills, subagents and MCP servers such as Ditto.</li>
   <li>Anything it needs from the internet goes through the proxy. A site that isn't approved yet waits for your yes.</li>
   <li>The reply streams back to you. Files it made are listed under the reply to download, the turn is archived to Ditto, and Piper reads it out if voice is on.</li>
@@ -298,12 +298,13 @@ a { color: var(--accent); }
     <tr><td>SayGM</td><td>Every chat model through one key, plus speech to text for voice</td><td><code>SAYGM_API_KEY</code> <span class="tag req">needed</span></td></tr>
     <tr><td>Ditto</td><td>Long-term memory, a thread per chat, project sync</td><td><code>DITTO_API_KEY</code> <span class="tag req">needed</span></td></tr>
     <tr><td>Your BitBull</td><td>The password for the UI and the API</td><td><code>APP_TOKEN</code> <span class="tag req">needed</span></td></tr>
-    <tr><td>Ditto Router</td><td>Its endpoint's models in every model picker, your Ditto memory and connected apps as tools, background work, your provider keys kept in Ditto</td><td>Connect Ditto <span class="tag">optional</span></td></tr>
+    <tr><td>Ditto Router</td><td>A second model gateway next to SayGM: its models in every model picker (your default stays yours), and if you choose, background work, your Ditto memory and connected apps as the agent's tools, and provider keys kept in Ditto</td><td>Connect Ditto <span class="tag">optional</span></td></tr>
     <tr><td>Ditto Review</td><td>A review of a branch's pull request, from Repositories</td><td>Uses your GitHub token <span class="tag">optional</span></td></tr>
     <tr><td>GitHub</td><td>Clones, branches, pull requests and QA Hound verdicts</td><td><code>GITHUB_TOKEN</code> <span class="tag">optional</span></td></tr>
     <tr><td>Taostats</td><td>Bittensor subnet and network data</td><td>Taostats key <span class="tag">optional</span></td></tr>
     <tr><td>Atlas</td><td>Image and video generation</td><td>Atlas key <span class="tag">optional</span></td></tr>
     <tr><td>404</td><td>3D objects as Three.js code, from the public game recipe</td><td>None <span class="tag">no key</span></td></tr>
+    <tr><td>Update checks</td><td>Checks that SayGM and Ditto still answer the way BitBull expects, and tells you when to update, reconnect or pick another model</td><td>None <span class="tag">built in</span></td></tr>
     <tr><td>Hippius</td><td>Backing up workspace files to decentralised storage</td><td>Hippius sub-token <span class="tag">optional</span></td></tr>
   </tbody>
 </table>

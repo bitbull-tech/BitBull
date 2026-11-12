@@ -94,6 +94,10 @@ bitbull-guard plugin exists only for OpenCode. Prefer the OpenCode engine for un
 goes for the Router endpoint key (`ANTHROPIC_AUTH_TOKEN`): it reaches the endpoint's tools on
 `.heyditto.ai`, the same tools the turn already has, behind Ditto's approval gate. Plan turns carry
 the review endpoint's key instead, which reaches no tools and no memory (docs/ROUTER.md).
+With `DITTO_ROUTER_TOOLS=on` the agent can act on the apps connected in Ditto (GitHub, Gmail, …)
+in every chat outside plan mode, so injected instructions in something it reads have more to aim
+at; Ditto's approval gate is the control, and the setting is off unless the owner connects or
+turns it on.
 After a Connect approved for key access, the Ditto account key can also save and replace provider
 keys in Ditto (never read them back), so a leaked account key could swap in a key of the
 attacker's. It is scrubbed from both engines' environments and hidden by the guard; the server

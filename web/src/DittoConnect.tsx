@@ -68,7 +68,7 @@ export function DittoConnect({ ditto, onConnected }: { ditto: AppConfig['ditto']
           and check the code is <code>{state.userCode}</code>. This page updates when you're done.
         </p>
       )}
-      {state.status === 'connected' && <p className="small">Connected: chats run on your “bitbull” Ditto endpoint with your memory and connected apps.</p>}
+      {state.status === 'connected' && <p className="small">Connected: your Ditto Router models are in every model picker next to SayGM's, and your Ditto memory and connected apps are the agent's tools. Your default model hasn't changed; pick a Ditto Router model in any chat, or make one the default under Configuration.</p>}
       {state.status === 'error' && <p className="small lv-error-text">{state.message}</p>}
       {ditto.enabled && state.status !== 'waiting' && <ProviderKeys onReconnect={() => void connect()} />}
     </div>

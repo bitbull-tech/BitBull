@@ -45,6 +45,9 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   // Ditto Router (docs/ROUTER.md); the base URL stays .env-only
   DITTO_ROUTER_KEY: {},
   DITTO_ROUTER_REVIEW_KEY: {},
+  // Attach the Router endpoint's tools (Ditto memory tools, connected apps) to the agent. Off until
+  // the owner turns it on or connects with Connect Ditto: a key alone only adds models.
+  DITTO_ROUTER_TOOLS: { options: ["off", "on"] },
   BACKGROUND_VIA: { options: ["saygm", "ditto-router"] },
   DITTO_ROUTER_MODEL: {},
   ADVISOR_MODEL: {},
@@ -184,6 +187,8 @@ function buildConfig() {
     key: env("DITTO_ROUTER_KEY", ""),
     /** the review endpoint's key, for plan mode and QA Hound: no memory, no tools (docs/ROUTER.md) */
     reviewKey: env("DITTO_ROUTER_REVIEW_KEY", ""),
+    /** attach the chat endpoint's MCP catalog (memory tools, connected apps) to the agent */
+    tools: (env("DITTO_ROUTER_TOOLS", "off") === "on" ? "on" : "off") as "on" | "off",
     baseUrl: env("DITTO_ROUTER_BASE_URL", "https://router.heyditto.ai/v1"),
     background: (env("BACKGROUND_VIA", "saygm") === "ditto-router" ? "ditto-router" : "saygm") as "saygm" | "ditto-router",
     /** the model background work runs on, as the Router names it (e.g. z-ai/glm-5.3-flash), or an endpoint's slug */

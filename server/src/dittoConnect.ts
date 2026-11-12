@@ -9,8 +9,9 @@
  *  - "bitbull-review" for plan mode and QA Hound, which read possibly hostile code: no memory and
  *    no tools, enforced again on every connect.
  *
- * The keys are saved like keys typed into Settings (the vault when it is unlocked), and Ditto
- * becomes the default: the "bitbull" endpoint is the default model and does background work.
+ * The keys are saved like keys typed into Settings (the vault when it is unlocked). Ditto Router
+ * then sits next to SayGM: its models join every picker and its tools are attached, but the
+ * default model and background work stay where the owner set them.
  * Nothing here reaches the web UI except the sign-in code and link.
  *
  * The sign-in asks for key access too (device intent "keys"), so Settings can save provider keys
@@ -19,7 +20,7 @@
 import os from "node:os";
 import { config } from "./config.js";
 import { record } from "./activity.js";
-import { ROUTER_PREFIX, routerMcpServers, routerModels, routerReview } from "./router.js";
+import { routerMcpServers, routerModels, routerReview } from "./router.js";
 import { updateSettings } from "./settings.js";
 
 export const CHAT_ENDPOINT = "bitbull";
@@ -131,7 +132,7 @@ type Key = { id: string; name?: string; revokedAt?: string | null };
 
 const keyName = () => `BitBull on ${os.hostname()}`.slice(0, 100);
 
-/** Create or reuse BitBull's two endpoints, mint a key for each, and make Ditto the default. */
+/** Create or reuse BitBull's two endpoints, mint a key for each, and save them (defaults untouched). */
 async function provision(accountKey: string) {
   const { endpoints = [] } = await dittoApi<{ endpoints?: Endpoint[] }>("/api/v5/inference/endpoints", { key: accountKey });
   const keys: Record<string, string> = {};
@@ -160,11 +161,12 @@ async function provision(accountKey: string) {
     DITTO_API_KEY: accountKey,
     DITTO_ROUTER_KEY: keys[CHAT_ENDPOINT],
     DITTO_ROUTER_REVIEW_KEY: keys[REVIEW_ENDPOINT],
-    // Ditto by default: the endpoint routes to its own model, and its background routes take titles
-    // and compaction; SayGM models stay one pick away
-    DEFAULT_MODEL: `${ROUTER_PREFIX}${CHAT_ENDPOINT}`,
-    BACKGROUND_VIA: "ditto-router",
-    DITTO_ROUTER_MODEL: CHAT_ENDPOINT,
+    // Connecting is the owner's yes to Ditto's tools (the approval page lists them)
+    DITTO_ROUTER_TOOLS: "on",
+    // Ditto Router sits next to SayGM, it does not replace it: the default model and where
+    // background work runs stay as the owner set them. Only an empty background model is filled
+    // in, so switching background work to the Router later is one choice in Configuration.
+    ...(config.router.model ? {} : { DITTO_ROUTER_MODEL: CHAT_ENDPOINT }),
   });
   for (const r of replaced) {
     await dittoApi(`/api/v5/inference/endpoints/${encodeURIComponent(r.endpoint)}/keys/${encodeURIComponent(r.key)}`, { method: "DELETE", key: accountKey }).catch((err) =>

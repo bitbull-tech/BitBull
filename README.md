@@ -328,6 +328,26 @@ To get the agent's view on something: tick entries in the log and choose **Expla
 the **Ask agent** buttons that appear. Either way the excerpt is put in the message box with
 the request, so you can add your notes before sending.
 
+## Updates and compatibility notices
+
+BitBull depends on SayGM and Ditto, which change on their own schedule. A banner above the chat
+tells you when one of them has changed something BitBull relies on, is retiring part of its API,
+has stopped offering your default model, or no longer accepts a key (a Connect Ditto sign-in lasts
+three months), and when a newer BitBull is out. Notices are also written to Activity, and can be
+dismissed per computer. The server checks shortly after it starts and every six hours.
+
+To update: pull the latest code and deploy it again. Your data folder is never touched.
+
+```powershell
+cd <your BitBull folder>
+git pull
+.\scripts\bitbull-wsl\deploy.ps1          # Windows
+bash scripts/bitbull-mac/deploy.sh          # Mac
+docker compose up -d --build                # Linux and servers
+```
+
+What is checked, and how maintainers publish a notice to every install: [docs/COMPAT.md](docs/COMPAT.md).
+
 ## Make it yours (white-labelling)
 
 Name, tagline, logos and every colour come from `brand.json` in the data folder, with the
@@ -680,11 +700,14 @@ run in the sandbox where you can see them and the reviewer can check them.
 
 ## Ditto Router and Ditto Review
 
-Settings → Integrations → Ditto → **Connect Ditto**: one sign-in creates two Ditto Router
-endpoints (chats with memory and your connected apps; a review one with neither, for plan mode
-and QA Hound) and saves their keys. The endpoint's models join every model picker next to SayGM's
-and run natively on both engines, its tools are attached as MCP servers inside BitBull's fences,
-and **Manage connections** opens Ditto's Connections. Ask Ditto Review to review any branch's pull
+Ditto Router is a second model gateway **next to SayGM, not instead of it**. Settings →
+Integrations → Ditto → **Connect Ditto**: one sign-in creates two Ditto Router endpoints (chats
+with memory and your connected apps; a review one with neither, for plan mode and QA Hound) and
+saves their keys. The endpoint's models join every model picker next to SayGM's, tagged *Ditto
+Router*, and run natively on both engines. Your default model and where background work runs stay
+as you set them: choose a Ditto Router model per chat, or make one the default in Configuration.
+Its tools are attached as MCP servers inside BitBull's fences (**Ditto tools for the agent**, on
+after Connect, off for a key pasted by hand), and **Manage connections** opens Ditto's Connections. Ask Ditto Review to review any branch's pull
 request from Repositories. See [docs/ROUTER.md](docs/ROUTER.md).
 
 ## 404: 3D as code
@@ -728,6 +751,7 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
 | `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
+| `GET` | `/api/compat` | Compatibility notices: SayGM or Ditto changes, lapsed keys, a newer BitBull (`?refresh=1` checks now) |
 | `GET` / `POST` | `/api/ditto/keys` | Provider keys in Ditto: list (metadata only) / save one via the Ditto CLI |
 | `PATCH` / `DELETE` | `/api/ditto/keys/:id` | Turn a provider key on or off / remove it |
 | `GET` | `/api/voice` | Voice: Piper text-to-speech and its voices, and the speech-to-text model |

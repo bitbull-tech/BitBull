@@ -227,6 +227,16 @@ export interface Uploaded {
   size: number
 }
 
+/** A compatibility notice (server/src/compat.ts) */
+export interface CompatNotice {
+  id: string
+  level: 'info' | 'warn' | 'breaking'
+  source: 'saygm' | 'ditto' | 'bitbull'
+  title: string
+  detail: string
+  action?: 'update' | 'reconnect-ditto' | 'settings'
+}
+
 export type DittoConnectState =
   | { status: 'idle' }
   | { status: 'waiting'; userCode: string; url: string; expiresAt: number }
@@ -503,6 +513,8 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  /** Notices that SayGM or Ditto changed something, a key lapsed, or a newer BitBull is out */
+  compat: (refresh = false) => req<{ checkedAt: string | null; notices: CompatNotice[] }>(`/api/compat${refresh ? '?refresh=1' : ''}`),
   /** Provider keys in Ditto: list, save (or copy BitBull's SayGM key), turn on/off, remove */
   dittoKeys: () => keyReq<DittoKeys>('/api/ditto/keys'),
   saveDittoKey: (body: { provider: string; key?: string; label?: string; fromSaygm?: boolean }) =>

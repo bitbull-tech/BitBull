@@ -1,7 +1,7 @@
 /**
  * Connect Ditto against a stand-in for Ditto's API: sign-in, then BitBull's two endpoints (the
  * chat one created with memory and every tool; an existing review one forced back to no memory
- * and no tools), a key for each, and Ditto as the default. It asks for key access (intent "keys")
+ * and no tools), a key for each, with the default model and background work left on SayGM. It asks for key access (intent "keys")
  * and falls back to a plain login on a Ditto without it.
  */
 import assert from "node:assert/strict";
@@ -53,7 +53,9 @@ const { connectState, startConnect } = await import("./dittoConnect.js");
 const { config } = await import("./config.js");
 const { routerRecords } = await import("./router.js");
 
-test("Connect Ditto sets up both endpoints and makes Ditto the default", async () => {
+test("Connect Ditto sets up both endpoints and leaves SayGM as the default", async () => {
+  const defaultBefore = config.agent.defaultModel;
+  assert.equal(config.router.tools, "off");
   const first = await startConnect();
   assert.equal(first.status, "waiting");
   assert.equal(first.status === "waiting" && first.userCode, "WXYZ-2345");
@@ -74,9 +76,12 @@ test("Connect Ditto sets up both endpoints and makes Ditto the default", async (
   assert.equal(config.ditto.apiKey, "ditto_mcp_account");
   assert.equal(config.router.key, "ditto_inf_ep-chat");
   assert.equal(config.router.reviewKey, "ditto_inf_ep-review");
-  assert.equal(config.agent.defaultModel, "ditto-router/bitbull");
-  assert.equal(config.router.background, "ditto-router");
+  // a parallel choice: SayGM keeps the default model and background work
+  assert.equal(config.agent.defaultModel, defaultBefore);
+  assert.equal(config.router.background, "saygm");
+  // ready to pick for background work, and the endpoint's tools are on
   assert.equal(config.router.model, "bitbull");
+  assert.equal(config.router.tools, "on");
   // the endpoint records its own turns, so BitBull won't archive them again
   assert.equal(routerRecords(), true);
   // only this BitBull's earlier, still-live key is revoked, after the new ones are saved

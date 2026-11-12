@@ -151,11 +151,14 @@ export function describeSettings() {
         row("DITTO_SOURCE", "Source label", config.ditto.source),
         row("DITTO_ROUTER_KEY", "Router key (ditto_inf_…)", config.router.key, {
           secret: true,
-          hint: "The chat endpoint's key (Connect Ditto sets it): its models in every model picker, its memory and its connected apps as the agent's tools.",
+          hint: "The chat endpoint's key (Connect Ditto sets it): its models in every model picker, next to SayGM's. Its tools are attached only when Ditto tools for the agent is on.",
         }),
         row("DITTO_ROUTER_REVIEW_KEY", "Review endpoint key", config.router.reviewKey, {
           secret: true,
           hint: "For plan mode and QA Hound on Ditto Router models: an endpoint with memory and tools off, so what they read stays out of your memory.",
+        }),
+        row("DITTO_ROUTER_TOOLS", "Ditto tools for the agent", config.router.tools, {
+          hint: "on = the chat endpoint's tools (Ditto memory tools and every app you have connected in Ditto, such as GitHub or Gmail) are attached to the agent in every chat, on SayGM models too. off = the Router key only adds models. Connect Ditto turns it on.",
         }),
         row("DITTO_ROUTER_BASE_URL", "Router base URL", config.router.baseUrl),
       ],

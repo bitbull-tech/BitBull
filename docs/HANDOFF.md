@@ -473,7 +473,8 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
 
 - Settings → Integrations → Ditto → Connect Ditto (`server/src/dittoConnect.ts`, `web/src/DittoConnect.tsx`):
   Ditto's device sign-in, then endpoints `bitbull` (memory, all tools) and `bitbull-review` (no memory,
-  no tools; re-enforced on every connect), a key each, and Ditto as `DEFAULT_MODEL`/background.
+  no tools; re-enforced on every connect) and a key each. (As first built it also made Ditto the
+  `DEFAULT_MODEL` and background route; changed the next day, see the 12 Nov entry.)
 - Router models are `ditto-router/<id>` everywhere (`chatModels()` in models.ts); OpenCode gets
   per-shape Router providers plus `-review` twins for plan mode; the Claude engine runs any Router model.
 - The endpoint's MCP catalog (`GET /v1/mcp`) is attached by BitBull (router.ts), never injected
@@ -491,3 +492,25 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
   `DITTO_MCP_URL`, the image's pinned version (no self-update), and `DITTO_CLI` in host mode.
   Covered by `mcp.test.ts`.
 
+
+
+## Ditto Router as a parallel choice; compatibility checks (12 Nov 2026)
+
+- Review of PR #1 (Connect Ditto). Kept as built, with four changes so Ditto Router sits next to
+  SayGM rather than ahead of it:
+  1. Connect no longer sets `DEFAULT_MODEL` or `BACKGROUND_VIA` (it did: `ditto-router/bitbull`,
+     `ditto-router`). `DITTO_ROUTER_MODEL` is filled in only when empty.
+  2. `DITTO_ROUTER_TOOLS` (off | on, default off; Connect sets on) gates attaching the endpoint's
+     MCP catalog. Without it, anyone who already had a Router key for background work would have
+     gained Ditto's tools (and the catalog's `ditto` server in place of the account-key one) on
+     upgrade without asking.
+  3. `parseMcpCatalog` drops servers whose URL is off the Router's origin (the endpoint key is
+     sent with every call).
+  4. Docs say what Connect overwrites (`DITTO_API_KEY`) and that the sign-in lasts three months.
+- Behaviour changes that came with the PR and stay: plan-mode turns are no longer archived to
+  Ditto on any gateway; Router turns are not archived by BitBull when the endpoint records them;
+  the Claude engine runs any Router model; the image's Ditto CLI is 3.17.0 (was 3.6.4).
+- `server/src/compat.ts` (+ test, `web/src/CompatBanner.tsx`, `compat.json`, docs/COMPAT.md):
+  contract probes for SayGM and Ditto responses BitBull parses, deprecation headers, lapsed keys,
+  published notices from `compat.json` on main, and a newer-build check. `GET /api/compat`.
+  When adding a dependency on a gateway field, add a probe for it.

@@ -32,8 +32,10 @@ process.env.BACKGROUND_VIA = "ditto-router";
 process.env.DITTO_ROUTER_MODEL = "z-ai/glm-5.3-flash";
 const { fromRouter, routerRefusal } = await import("./models.js");
 const { config } = await import("./config.js");
-const { parseMcpCatalog, parsePrices, parseRouterModels, priceFor, routerModelId, routerReview } = await import("./router.js");
+const { parseMcpCatalog, parsePrices, parseRouterModels, priceFor, routerMcpServers, routerModelId, routerReview } = await import("./router.js");
 const { buildConfig, gatewayHint } = await import("./engines/opencode.js");
+/** the stand-in Router's /v1: catalog URLs must be on its origin */
+const R = config.router.baseUrl.replace(/\/+$/, "");
 const base = process.env.DITTO_ROUTER_BASE_URL.replace(/\/$/, "");
 await routerReview(true);
 
@@ -73,15 +75,15 @@ test("Router models get prefixed ids and their native API", () => {
   assert.equal(routerModelId("claude-sonnet-5"), null);
 });
 
-test("the MCP catalog: Ditto's built-ins stay \"ditto\", sources get a prefix, odd names and empty servers are left out", () => {
+test("the MCP catalog: Ditto's built-ins stay \"ditto\", sources get a prefix, odd names and empty servers are left out", async () => {
   const servers = parseMcpCatalog(
     {
       clientApprovals: true,
       servers: [
-        { name: "ditto", url: "https://router.example/v1/mcp/ditto", tools: [{ name: "search_memories", approval: false }, { name: "notify_me", approval: true }] },
-        { name: "github", url: "https://router.example/v1/mcp/github", tools: [{ name: "create_issue", approval: true }] },
-        { name: "bad name", url: "https://router.example/v1/mcp/x", tools: [{ name: "t" }] },
-        { name: "empty", url: "https://router.example/v1/mcp/empty", tools: [] },
+        { name: "ditto", url: `${R}/mcp/ditto`, tools: [{ name: "search_memories", approval: false }, { name: "notify_me", approval: true }] },
+        { name: "github", url: `${R}/mcp/github`, tools: [{ name: "create_issue", approval: true }] },
+        { name: "bad name", url: `${R}/mcp/x`, tools: [{ name: "t" }] },
+        { name: "empty", url: `${R}/mcp/empty`, tools: [] },
       ],
     },
     "ditto_inf_test",
@@ -90,8 +92,13 @@ test("the MCP catalog: Ditto's built-ins stay \"ditto\", sources get a prefix, o
   assert.equal(servers[0].headers.Authorization, "Bearer ditto_inf_test");
   // client approvals: BitBull can't ask mid-turn, so the gated tools are refused
   assert.deepEqual(servers[0].deny, ["notify_me"]);
-  assert.deepEqual(parseMcpCatalog({ clientApprovals: false, servers: [{ name: "github", url: "u", tools: [{ name: "a", approval: true }] }] }, "k")[0].deny, []);
+  assert.deepEqual(parseMcpCatalog({ clientApprovals: false, servers: [{ name: "github", url: `${R}/mcp/github`, tools: [{ name: "a", approval: true }] }] }, "k")[0].deny, []);
   assert.throws(() => parseMcpCatalog({ nope: 1 }, "k"));
+  // a Router key alone adds models, not tools: nothing is fetched or attached until DITTO_ROUTER_TOOLS is on
+  assert.equal(config.router.tools, "off");
+  assert.deepEqual(await routerMcpServers(true), []);
+  // the endpoint key rides on every call: a catalog URL off the Router's origin is dropped
+  assert.deepEqual(parseMcpCatalog({ servers: [{ name: "evil", url: "https://elsewhere.example/v1/mcp/x", tools: [{ name: "t" }] }, { name: "junk", url: "not a url", tools: [{ name: "t" }] }] }, "k"), []);
 });
 
 test("OpenCode sends Router models to the Router: chat key, review key in plan mode", () => {
@@ -145,17 +152,17 @@ test("the endpoint's MCP servers replace Ditto's account MCP, with client-approv
     {
       clientApprovals: true,
       servers: [
-        { name: "ditto", url: "https://router.example/v1/mcp/ditto", tools: [{ name: "search_memories" }] },
-        { name: "github", url: "https://router.example/v1/mcp/github", tools: [{ name: "create_issue", approval: true }] },
+        { name: "ditto", url: `${R}/mcp/ditto`, tools: [{ name: "search_memories" }] },
+        { name: "github", url: `${R}/mcp/github`, tools: [{ name: "create_issue", approval: true }] },
       ],
     },
     "ditto_inf_test",
   );
   const cfg = buildConfig([], routerMcp);
   const mcp = cfg.mcp as Record<string, { url: string; headers: Record<string, string> }>;
-  assert.equal(mcp.ditto.url, "https://router.example/v1/mcp/ditto");
+  assert.equal(mcp.ditto.url, `${R}/mcp/ditto`);
   assert.equal(mcp.ditto.headers.Authorization, "Bearer ditto_inf_test");
-  assert.equal(mcp["ditto-github"].url, "https://router.example/v1/mcp/github");
+  assert.equal(mcp["ditto-github"].url, `${R}/mcp/github`);
   assert.equal((cfg.permission as Record<string, unknown>)["ditto-github_create_issue"], "deny");
 });
 

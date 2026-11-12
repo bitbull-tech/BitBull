@@ -29,6 +29,7 @@ import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
 import { routerBackground, routerMcpServers, routerModels, routerReview } from "./router.js";
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
+import { compatState, runCompat, scheduleCompat } from "./compat.js";
 import { copySaygmKey, listKeyProviders, listProviderKeys, ProviderKeyError, removeProviderKey, saveProviderKey, setProviderKeyEnabled } from "./providerKeys.js";
 import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
@@ -229,6 +230,16 @@ app.put("/api/settings", async (c) => {
   }
 });
 app.get("/api/status", async (c) => c.json(await status()));
+
+/**
+ * Compatibility notices (server/src/compat.ts): SayGM or Ditto changed something BitBull relies on,
+ * a key lapsed, or a newer BitBull is out. ?refresh=1 checks again now.
+ */
+app.get("/api/compat", async (c) => {
+  if (c.req.query("refresh")) await runCompat(buildInfo).catch(() => {});
+  const { at, notices } = compatState();
+  return c.json({ checkedAt: at ? new Date(at).toISOString() : null, build: { commit: buildInfo.commit, committed: buildInfo.committed }, notices });
+});
 
 /** Connect Ditto (server/src/dittoConnect.ts): start the sign-in, then poll until it's connected. */
 app.post("/api/ditto/connect", async (c) => {
@@ -1279,6 +1290,7 @@ resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspac
 await syncSkills().catch((e) => console.error("[skills]", e));
 // Ditto Router: have its models ready for the model list and OpenCode's config
 if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
+scheduleCompat(buildInfo);
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });

@@ -279,6 +279,8 @@ export function parseMcpCatalog(body: unknown, key: string): RouterMcpServer[] {
   for (const raw of catalog.servers as Array<Record<string, unknown>>) {
     const tools = Array.isArray(raw?.tools) ? (raw.tools as Array<{ name?: unknown; approval?: unknown }>) : [];
     if (typeof raw?.name !== "string" || !SAFE_SERVER.test(raw.name) || typeof raw.url !== "string" || !tools.length) continue;
+    // the endpoint key goes out with every call to this URL: only ever to the Router itself
+    if (!onRouter(raw.url)) continue;
     out.push({
       name: raw.name === "ditto" ? "ditto" : `ditto-${raw.name}`,
       url: raw.url,
@@ -289,12 +291,22 @@ export function parseMcpCatalog(body: unknown, key: string): RouterMcpServer[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** A catalog URL on the Router's own origin (what DITTO_ROUTER_BASE_URL names), over the same scheme. */
+function onRouter(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(routerBaseUrl()).origin;
+  } catch {
+    return false;
+  }
+}
+
 const mcp = keyed<RouterMcpServer[]>([]);
 
 /** The chat endpoint's MCP servers (the last good list while the Router is down). */
 export async function routerMcpServers(refresh = false): Promise<RouterMcpServer[]> {
   const key = config.router.key;
-  if (!key) return [];
+  // opt-in (DITTO_ROUTER_TOOLS): a Router key alone adds models, not tools
+  if (!key || config.router.tools !== "on") return [];
   return mcp.get(key, async () => parseMcpCatalog(await routerGet("/mcp", key), key), refresh).catch((err) => {
     console.warn("[router] Couldn't load the endpoint's MCP servers:", err instanceof Error ? err.message : err);
     return mcp.peek(key);
