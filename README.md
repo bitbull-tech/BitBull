@@ -314,6 +314,14 @@ The page itself is not a way round the proxy: a Content-Security-Policy lets the
 images, media and scripts only from BitBull, so a reply or brand file that points at
 `https://evil/?<data>` is never fetched. Images in replies are shown as links.
 
+## Help and the user guide
+
+The **?** button at the bottom of the sidebar opens **Help**: this guide, page by page, and the
+system map, inside BitBull. Type a question into **Ask BitBull how to do something** and it opens
+a new chat with the question ready to send; BitBull answers from the guide (the `bitbull-guide`
+skill reads the same pages from `help/`) and tells you which page the answer came from. You can
+also just ask in any chat: "how do I link a folder?" works the same way.
+
 ## Activity and errors
 
 The **Activity** bar under the chat (collapsed by default) shows the latest event and a red

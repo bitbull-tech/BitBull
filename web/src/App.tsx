@@ -9,7 +9,7 @@ import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
 import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck, IconHelp } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
-import { HelpDialog } from './HelpDialog'
+import { HelpDialog, helpQuestion } from './HelpDialog'
 import { CompatBanner } from './CompatBanner'
 import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
@@ -833,7 +833,17 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
       <SelectionAsk />
 
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {helpOpen && (
+        <HelpDialog
+          onClose={() => setHelpOpen(false)}
+          onAsk={(q) => {
+            // a fresh chat with the question in the message box, ready to send or edit
+            setHelpOpen(false)
+            newChat()
+            window.setTimeout(() => composeInChat(helpQuestion(q)), 250)
+          }}
+        />
+      )}
       {settingsOpen && (
         <Settings
           cfg={cfg}

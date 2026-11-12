@@ -1,0 +1,92 @@
+[
+  {
+    "slug": "getting-started",
+    "title": "Getting started",
+    "description": "What you get, and which way to install BitBull is right for you.",
+    "order": 1
+  },
+  {
+    "slug": "windows",
+    "title": "Install on Windows",
+    "description": "From a guided install to every step by hand, with WSL explained.",
+    "order": 2
+  },
+  {
+    "slug": "mac",
+    "title": "Install on a Mac",
+    "description": "Homebrew, BitBull's own VM, and starting at login. Beta.",
+    "order": 3
+  },
+  {
+    "slug": "server",
+    "title": "Linux and servers",
+    "description": "Docker on a Linux PC, home server or VPS, and reaching it safely.",
+    "order": 4
+  },
+  {
+    "slug": "source",
+    "title": "Run from source",
+    "description": "For developers changing BitBull itself.",
+    "order": 5
+  },
+  {
+    "slug": "security",
+    "title": "How it is locked down",
+    "description": "The three layers, where your data lives, and how network access works.",
+    "order": 6
+  },
+  {
+    "slug": "keys",
+    "title": "Keys and settings",
+    "description": "What lives in .env, what you can change in the UI, and the vault.",
+    "order": 7
+  },
+  {
+    "slug": "files",
+    "title": "Files, folders and windows",
+    "description": "Copy or link folders, get files out, and show BitBull what you see.",
+    "order": 8
+  },
+  {
+    "slug": "qa-hound",
+    "title": "QA Hound and subagents",
+    "description": "Set several models on a repo to review it and argue it out.",
+    "order": 9
+  },
+  {
+    "slug": "memory",
+    "title": "Memory with Ditto",
+    "description": "Identity, per-chat threads, project sync, Router and Review.",
+    "order": 10
+  },
+  {
+    "slug": "import",
+    "title": "Bring your work in",
+    "description": "Move your Claude.ai projects, chats and memory into BitBull.",
+    "order": 11
+  },
+  {
+    "slug": "import-agents",
+    "title": "Import from other agents",
+    "description": "Bring your chat history from Claude Code, Codex, Cursor or any other agent.",
+    "order": 12
+  },
+  {
+    "slug": "models-voice",
+    "title": "Models and voice",
+    "description": "Let BitBull pick a model for the job, and talk to him.",
+    "order": 13
+  },
+  {
+    "slug": "everyday",
+    "title": "Everyday use",
+    "description": "Help, activity and errors, updates, exports, archive, GitHub, 404 and white-labelling.",
+    "order": 14
+  },
+  {
+    "slug": "api",
+    "title": "API and internals",
+    "description": "The HTTP API, the code layout, adding an engine, and the licence.",
+    "order": 15
+  }
+]

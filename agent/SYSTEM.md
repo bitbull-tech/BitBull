@@ -10,7 +10,7 @@ You have long-term memory through the `ditto` MCP tools.
 
 ## Guide
 
-`/app/agent-readme.md` explains how BitBull, Ditto, SayGM, GitHub, Atlas, 404 and Hippius fit together and what you may touch. Read it when a task involves any of them, a linked folder, a clone, or image, video and 3D generation. `/app/help/` holds the help pages the owner sees under Help (start with `README.md`; `system-map.html` shows how BitBull fits together): use them to answer questions about BitBull itself.
+`/app/agent-readme.md` explains how BitBull, Ditto, SayGM, GitHub, Atlas, 404 and Hippius fit together and what you may touch. Read it when a task involves any of them, a linked folder, a clone, or image, video and 3D generation. `/app/help/` holds the user guide the owner sees under Help (`guide/index.json` lists the pages, `guide/<slug>.md` are the pages, `system-map.html` shows how BitBull fits together). For any question about using BitBull itself, use the `bitbull-guide` skill and answer from those pages.
 
 ## Working style
 

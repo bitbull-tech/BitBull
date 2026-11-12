@@ -21,6 +21,7 @@ Git is the source of truth; Ditto is the backup/searchable copy.
 | `code-review` | Verified, severity-ranked review of a diff or PR |
 | `debug-systematically` | Reproduce → hypothesise → isolate → fix → prove |
 | `repo-onboarding` | Map a repo and record it in `AGENTS.md` |
+| `bitbull-guide` | Answers "how do I…" questions about BitBull from the user guide in `help/` |
 | `project-recall` | Catch up on a project from Ditto memory |
 | `404-game-recipe` | 3D objects and games as Three.js code with 404 (subnet 17): recipe, verifier, jam gate |
 | `atlas-studio` | Generate video/images/3D via Atlas MCP and exported workflow APIs |
