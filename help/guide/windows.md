@@ -21,7 +21,7 @@ You install WSL once. After that, BitBull takes care of it.
 If you use an AI coding agent on this PC, paste this into it:
 
 ```text
-Set up BitBull for me. Fetch https://www.bitbull.tech/get-started.md and follow it.
+Set up BitBull for me. Fetch https://www.bitbull.tech/get-started and follow it.
 ```
 
 It will ask before installing anything, and tell you when BitBull is ready.

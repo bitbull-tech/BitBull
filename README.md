@@ -30,7 +30,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 
 Installing for the first time? The step-by-step guide for Windows, Mac and Linux is at
 **[bitbull.tech/guide](https://www.bitbull.tech/guide/getting-started)**, or paste this into the AI
-agent you already use: *Set up BitBull for me. Fetch https://www.bitbull.tech/get-started.md and
+agent you already use: *Set up BitBull for me. Fetch https://www.bitbull.tech/get-started and
 follow it.*
 
 New here (or a new agent session)? Start with [CLAUDE.md](CLAUDE.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
@@ -236,15 +236,33 @@ run more than one.
 macOS 13 (Ventura) or later, Apple Silicon or Intel. The same three containers as on Windows run
 in a Linux VM; `scripts/bitbull-mac/` does what `scripts/bitbull-wsl/` does there.
 
+**One command** (paste into Terminal): installs Homebrew and git if needed, downloads BitBull to
+`~/BitBull`, asks for your keys with the typing hidden and writes `.env`, then sets up and starts
+BitBull and opens it. Run it again to update; it keeps your keys.
+
 ```bash
-cp .env.example .env                                   # fill in APP_TOKEN, SAYGM_API_KEY, DITTO_API_KEY
-bash scripts/bitbull-mac/setup.sh                      # once: Colima VM "bitbull", first build, start
-bash scripts/bitbull-mac/setup.sh --runtime docker     # or: use the Docker Desktop / OrbStack you already run
-bash scripts/bitbull-mac/deploy.sh                     # ship code and .env changes, rebuild
-bash scripts/bitbull-mac/start.sh --install-at-login   # keep BitBull running; start it (and the app) at login
-bash scripts/bitbull-mac/start.sh --stop
-bash scripts/bitbull-mac/backup.sh --keep 10           # to ~/Documents/BitBull backups
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bitbull-tech/BitBull/main/scripts/bitbull-mac/install.sh)"
 ```
+
+Or by hand, from the `BitBull` folder:
+
+| To | Run |
+| --- | --- |
+| Create your settings, then fill in `APP_TOKEN`, `SAYGM_API_KEY`, `DITTO_API_KEY` | `cp .env.example .env` |
+| Set up once: Colima VM "bitbull", first build, start | `bash scripts/bitbull-mac/setup.sh` |
+| …or use the Docker Desktop / OrbStack you already run | `bash scripts/bitbull-mac/setup.sh --runtime docker` |
+| Ship code and `.env` changes, rebuild | `bash scripts/bitbull-mac/deploy.sh` |
+| Keep BitBull running; start it (and the app) at login | `bash scripts/bitbull-mac/start.sh --install-at-login` |
+| Stop | `bash scripts/bitbull-mac/start.sh --stop` |
+| Back up to `~/Documents/BitBull backups` | `bash scripts/bitbull-mac/backup.sh --keep 10` |
+
+**Terminal on a Mac.** Its default shell is zsh, which treats `#` in a pasted line as text, not a
+comment, so paste commands without anything after them. Always start the scripts with `bash …`
+(they are written for the bash 3.2 macOS ships). On Apple Silicon, Homebrew lives in
+`/opt/homebrew`: if `brew` isn't found after installing it, run
+`eval "$(/opt/homebrew/bin/brew shellenv)"` (the installer above adds this to `~/.zprofile` for
+you). `.env` is hidden in Finder (⌘⇧. shows hidden files); edit it with
+`nano .env` rather than TextEdit, which can turn quotes into “smart” quotes.
 
 - **The VM.** By default BitBull gets its own Colima VM (installed with Homebrew if missing), which
   can only see BitBull's folder, `~/Library/Application Support/BitBull`: the deployed code

@@ -14,7 +14,7 @@ using ready-made images, so nothing is compiled on the machine.
 Or paste this into an AI agent running on the machine:
 
 ```text
-Set up BitBull for me. Fetch https://www.bitbull.tech/get-started.md and follow it.
+Set up BitBull for me. Fetch https://www.bitbull.tech/get-started and follow it.
 ```
 
 ## Install

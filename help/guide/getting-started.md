@@ -46,7 +46,7 @@ If you already use an AI coding agent (Claude Code, Codex, Cursor, Gemini CLI or
 this into it:
 
 ```text
-Set up BitBull for me. Fetch https://www.bitbull.tech/get-started.md and follow it.
+Set up BitBull for me. Fetch https://www.bitbull.tech/get-started and follow it.
 ```
 
 It checks your computer, installs what's missing (asking you first), downloads BitBull, sets up
