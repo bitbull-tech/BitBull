@@ -482,9 +482,9 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
 - Provider keys in Ditto (`server/src/providerKeys.ts`, `web/src/ProviderKeys.tsx`): paste a GM/Engy/
   Instant/OpenRouter/OpenAI/Anthropic/Google key and Save; the server runs `heyditto keys set` with the key
   on stdin and stores nothing. Connect asks for Ditto's `keys` sign-in (falls back to `login` on an older
-  Ditto) and creates endpoints with `billingMode: both`. Open: bump the image's `@heyditto/cli` pin to the
-  first release with `heyditto keys` (ditto-cli `peyton/keys-commands`) once it ships; the backend side is
-  ditto backend `peyton/provider-keys-intent`, the approval page ditto-app `peyton/device-keys-intent`.
+  Ditto) and creates endpoints with `billingMode: both`. The image pins `@heyditto/cli@3.17.0`, the
+  first release with `heyditto keys` (ditto-cli #157); the backend side is ditto backend #4526, the approval
+  page ditto-app #4129, all merged 12 Nov 2026 (Jira DITTO-2746).
 - `ditto_review` now runs the CLI with the same environment as provider keys (`dittoCliEnv` in
   providerKeys.ts): it was missing `NODE_USE_ENV_PROXY`, so in the sandbox Node's fetch ignored
   `HTTPS_PROXY` and the review could not reach Ditto; it also gets Ditto's API origin from

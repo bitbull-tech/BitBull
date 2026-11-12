@@ -59,8 +59,8 @@ falls back to a plain login, and saving says so and offers **Reconnect Ditto**.
 
 The CLI (server/src/providerKeys.ts) gets the Ditto account key and the proxy settings, none of
 BitBull's other secrets, a fresh config folder per run, and no self-updates. It is the `heyditto`
-in the image (Dockerfile); `DITTO_CLI` points at another one for host mode. Provider keys need a
-CLI with `heyditto keys`, newer than the image's current pin.
+in the image (Dockerfile); `DITTO_CLI` points at another one for host mode. The image pins
+`@heyditto/cli@3.17.0`, the first release with `heyditto keys`.
 
 ## Models: Ditto Router next to SayGM
 
