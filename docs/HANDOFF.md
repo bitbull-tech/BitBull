@@ -485,4 +485,9 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
   Ditto) and creates endpoints with `billingMode: both`. Open: bump the image's `@heyditto/cli` pin to the
   first release with `heyditto keys` (ditto-cli `peyton/keys-commands`) once it ships; the backend side is
   ditto backend `peyton/provider-keys-intent`, the approval page ditto-app `peyton/device-keys-intent`.
+- `ditto_review` now runs the CLI with the same environment as provider keys (`dittoCliEnv` in
+  providerKeys.ts): it was missing `NODE_USE_ENV_PROXY`, so in the sandbox Node's fetch ignored
+  `HTTPS_PROXY` and the review could not reach Ditto; it also gets Ditto's API origin from
+  `DITTO_MCP_URL`, the image's pinned version (no self-update), and `DITTO_CLI` in host mode.
+  Covered by `mcp.test.ts`.
 

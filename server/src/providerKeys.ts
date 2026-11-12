@@ -31,8 +31,30 @@ const PROVIDER_ID = /^[a-z0-9][a-z0-9_-]{0,39}$/; // never a flag: argv to the C
 const LABEL_MAX = 64; // Ditto's limit on a key's name
 const KEY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** The Ditto CLI in the image (Dockerfile, as for ditto_review in mcp.ts); `DITTO_CLI` overrides it. */
-const cli = () => process.env.DITTO_CLI?.trim() || "heyditto";
+/** The Ditto CLI in the image (Dockerfile); `DITTO_CLI` overrides it. Also runs ditto_review (mcp.ts). */
+export const cli = () => process.env.DITTO_CLI?.trim() || "heyditto";
+
+/**
+ * What every run of the Ditto CLI gets: BitBull's Ditto account key and none of its other secrets,
+ * Ditto's API origin, the image's version (never a self-update), and the sandbox's egress proxy.
+ */
+export function dittoCliEnv(configDir: string): Record<string, string> {
+  return {
+    PATH: process.env.PATH ?? "",
+    DITTO_CONFIG_DIR: configDir,
+    DITTO_API_KEY: config.ditto.apiKey,
+    DITTO_API_BASE: new URL(config.ditto.mcpUrl).origin,
+    // the version in the image, never a self-update
+    DITTO_CLI_AUTO_UPDATE: "0",
+    DITTO_CLI_PINNED: "1",
+    NO_COLOR: "1",
+    // in the sandbox the server reaches Ditto through the egress proxy
+    ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTPS_PROXY } : {}),
+    ...(process.env.NO_PROXY ? { NO_PROXY: process.env.NO_PROXY } : {}),
+    // Node's fetch only honours HTTPS_PROXY with this (docker-compose.yml sets it for the server)
+    ...(process.env.NODE_USE_ENV_PROXY ? { NODE_USE_ENV_PROXY: process.env.NODE_USE_ENV_PROXY } : {}),
+  };
+}
 
 /** Run `heyditto <args> --output json`; resolves to its JSON or throws its `{error}`. */
 export async function heyditto<T>(args: string[], stdin = ""): Promise<T> {
@@ -42,23 +64,7 @@ export async function heyditto<T>(args: string[], stdin = ""): Promise<T> {
     const { code, stdout, stderr } = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
       const child = spawn(cli(), [...args, "--output", "json"], {
         stdio: ["pipe", "pipe", "pipe"],
-        // only what the CLI needs: none of BitBull's other secrets
-        env: {
-          PATH: process.env.PATH ?? "",
-          HOME: home,
-          DITTO_CONFIG_DIR: home,
-          DITTO_API_KEY: config.ditto.apiKey,
-          DITTO_API_BASE: new URL(config.ditto.mcpUrl).origin,
-          // the version in the image, never a self-update
-          DITTO_CLI_AUTO_UPDATE: "0",
-          DITTO_CLI_PINNED: "1",
-          NO_COLOR: "1",
-          // in the sandbox the server reaches Ditto through the egress proxy
-          ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTPS_PROXY } : {}),
-          ...(process.env.NO_PROXY ? { NO_PROXY: process.env.NO_PROXY } : {}),
-          // Node's fetch only honours HTTPS_PROXY with this (docker-compose.yml sets it for the server)
-          ...(process.env.NODE_USE_ENV_PROXY ? { NODE_USE_ENV_PROXY: process.env.NODE_USE_ENV_PROXY } : {}),
-        },
+        env: { ...dittoCliEnv(home), HOME: home },
         timeout: 45_000,
       });
       let out = "";

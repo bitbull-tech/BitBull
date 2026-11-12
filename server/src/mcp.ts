@@ -10,6 +10,7 @@ import { projects, sessions, workspaceFor } from "./db.js";
 import { proxied, requestAccess } from "./egress.js";
 import { execCapableConfig } from "./repos.js";
 import { record } from "./activity.js";
+import { cli, dittoCliEnv } from "./providerKeys.js";
 
 /**
  * BitBull's own MCP server, attached to both engines as "bitbull": tools that need the user or the
@@ -125,14 +126,15 @@ function build(sessionHint: string | undefined) {
       record({ level: "info", source: "ditto", sessionId: sid, sessionTitle: session?.title, message: `Ditto Review ${preview ? "preview" : "started"}: ${rel || "."} (${mode}, ${profile})` });
       return await new Promise((resolve) => {
         execFile(
-          "heyditto",
+          cli(),
           args,
           {
             cwd: dir,
             timeout: preview ? 60_000 : 960_000,
             maxBuffer: 16 * 1024 * 1024,
             env: {
-              PATH: process.env.PATH ?? "",
+              // the Ditto key, API origin, pinned version and egress proxy (as for provider keys)
+              ...dittoCliEnv(path.join(cliHome, "config")),
               // Its own HOME, and no user/system git config at all: $HOME is writable by the
               // agent (it shares this uid), so a planted ~/.gitconfig must not steer the git
               // the CLI runs. Nothing else of BitBull's environment is passed on.
@@ -143,10 +145,6 @@ function build(sessionHint: string | undefined) {
               // neutralise its exec knobs with env-level config, which outranks repo config.
               GIT_CONFIG_PARAMETERS: "'core.fsmonitor=' 'diff.external=' 'core.pager=cat'",
               GIT_TERMINAL_PROMPT: "0",
-              DITTO_API_KEY: config.ditto.apiKey,
-              DITTO_CONFIG_DIR: path.join(cliHome, "config"),
-              ...(process.env.HTTPS_PROXY ? { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTPS_PROXY } : {}),
-              ...(process.env.NO_PROXY ? { NO_PROXY: process.env.NO_PROXY } : {}),
             },
           },
           (err, stdout, stderr) => {
