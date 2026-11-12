@@ -2,10 +2,11 @@
  * Integrations → Ditto: one sign-in sets BitBull up on Ditto (server/src/dittoConnect.ts). The
  * server waits for the approval and saves the keys; this only shows the code and link, then
  * reloads Settings. Connected: a link to Ditto's Connections, where GitHub, Gmail, Linear, …
- * connected once become the agent's tools here.
+ * connected once become the agent's tools here, and the provider keys kept in Ditto.
  */
 import { useEffect, useRef, useState } from 'react'
 import { api, type AppConfig, type DittoConnectState } from './api'
+import { ProviderKeys } from './ProviderKeys'
 
 export function DittoConnect({ ditto, onConnected }: { ditto: AppConfig['ditto']; onConnected: () => void }) {
   const [state, setState] = useState<DittoConnectState>({ status: 'idle' })
@@ -69,6 +70,7 @@ export function DittoConnect({ ditto, onConnected }: { ditto: AppConfig['ditto']
       )}
       {state.status === 'connected' && <p className="small">Connected: chats run on your “bitbull” Ditto endpoint with your memory and connected apps.</p>}
       {state.status === 'error' && <p className="small lv-error-text">{state.message}</p>}
+      {ditto.enabled && state.status !== 'waiting' && <ProviderKeys onReconnect={() => void connect()} />}
     </div>
   )
 }

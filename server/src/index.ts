@@ -29,6 +29,7 @@ import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
 import { routerBackground, routerMcpServers, routerModels, routerReview } from "./router.js";
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
+import { copySaygmKey, listKeyProviders, listProviderKeys, ProviderKeyError, removeProviderKey, saveProviderKey, setProviderKeyEnabled } from "./providerKeys.js";
 import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
@@ -238,6 +239,51 @@ app.post("/api/ditto/connect", async (c) => {
   }
 });
 app.get("/api/ditto/connect", (c) => c.json(connectState()));
+
+/**
+ * Provider keys in Ditto (server/src/providerKeys.ts): BitBull passes them to the Ditto CLI and
+ * keeps none. Responses carry metadata and the provider's check only, never a key.
+ */
+const keyFailure = (c: Context, e: unknown) =>
+  e instanceof ProviderKeyError
+    ? c.json({ error: e.message, code: e.code }, e.status as 400)
+    : c.json({ error: e instanceof Error ? e.message : String(e), code: "error" }, 502);
+app.get("/api/ditto/keys", async (c) => {
+  try {
+    const [{ providers }, { keys }] = await Promise.all([listKeyProviders(), listProviderKeys()]);
+    return c.json({ providers, keys, saygmKey: !!config.saygm.apiKey });
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
+app.post("/api/ditto/keys", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
+  const body = z.object({ provider: z.string(), key: z.string().max(4096).optional(), fromSaygm: z.boolean().optional() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Expected a provider and a key", code: "bad_request" }, 400);
+  try {
+    const saved = body.data.fromSaygm ? await copySaygmKey() : await saveProviderKey(body.data.provider, body.data.key ?? "");
+    record({ level: "info", source: "ditto", message: `Saved a ${saved.key.provider} key to Ditto (value not logged)` });
+    return c.json(saved);
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
+app.patch("/api/ditto/keys/:id", async (c) => {
+  const body = z.object({ enabled: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Expected enabled", code: "bad_request" }, 400);
+  try {
+    return c.json(await setProviderKeyEnabled(c.req.param("id"), body.data.enabled));
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
+app.delete("/api/ditto/keys/:id", async (c) => {
+  try {
+    await removeProviderKey(c.req.param("id"));
+    return c.json({ ok: true });
+  } catch (e) {
+    return keyFailure(c, e);
+  }
+});
 
 /** Ditto Router's models (for Configuration → Background work), and whether background work is on it. */
 app.get("/api/router/models", async (c) => {

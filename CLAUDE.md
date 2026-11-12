@@ -40,6 +40,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   subagents.ts       loads subagents/*.md for both engines; read agents: no edits, no shell, no delegation
   integrations.ts    Atlas, 404, GitHub (+ probes); ditto.ts; models.ts; skills.ts; db.ts
   router.ts          Ditto Router: models, endpoint MCP catalog, prices; dittoConnect.ts: Connect Ditto (docs/ROUTER.md)
+  providerKeys.ts    provider keys kept in Ditto, through the Ditto CLI (`heyditto keys`); BitBull stores none
 web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ReposDialog, ExportMenu, activity.tsx)
   brand.ts           brand fetch + CSS-token injection;  BrandMark.tsx  logo/initials
   index.css          all colour lives in tokens at the top; the sidebar re-declares its own

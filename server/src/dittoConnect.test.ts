@@ -1,7 +1,8 @@
 /**
  * Connect Ditto against a stand-in for Ditto's API: sign-in, then BitBull's two endpoints (the
  * chat one created with memory and every tool; an existing review one forced back to no memory
- * and no tools), a key for each, and Ditto as the default.
+ * and no tools), a key for each, and Ditto as the default. It asks for key access (intent "keys")
+ * and falls back to a plain login on a Ditto without it.
  */
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -20,6 +21,8 @@ const api = http.createServer((req, res) => {
     calls.push({ method: req.method!, url: req.url!, auth: req.headers.authorization, body });
     const send = (status: number, json: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(json));
     const route = `${req.method} ${req.url}`;
+    // today's Ditto, before the "keys" intent: Connect falls back to a plain login
+    if (route === "POST /api/v2/mcp/device-code" && body?.intent === "keys") return send(400, { message: "intent must be one of: login, claude, codex" });
     if (route === "POST /api/v2/mcp/device-code")
       return send(200, { device_code: "dev-1", user_code: "WXYZ-2345", verification_url: "https://app.example/device", expires_in: 600, interval: 1 });
     if (route === "POST /api/v2/mcp/device-token") return send(200, { access_token: "ditto_mcp_account", token_type: "Bearer" });
@@ -61,7 +64,9 @@ test("Connect Ditto sets up both endpoints and makes Ditto the default", async (
   // the chat endpoint: memory and every tool
   const created = calls.find((c) => c.method === "POST" && c.url === "/api/v5/inference/endpoints")!;
   assert.equal(created.auth, "Bearer ditto_mcp_account");
-  assert.deepEqual(created.body, { slug: "bitbull", name: "BitBull", tools: ["*"], recallEnabled: true, recordEnabled: true });
+  assert.deepEqual(created.body, { slug: "bitbull", name: "BitBull", tools: ["*"], recallEnabled: true, recordEnabled: true, billingMode: "both" });
+  // asked for key access first, then fell back to a plain login
+  assert.deepEqual(calls.filter((c) => c.url === "/api/v2/mcp/device-code").map((c) => c.body?.intent), ["keys", "login"]);
   // the review endpoint already existed: memory and tools forced off again
   const patched = calls.find((c) => c.method === "PATCH")!;
   assert.deepEqual(patched.body, { name: "BitBull review", tools: [], recallEnabled: false, recordEnabled: false, recordAttachments: false, recordTrace: false });

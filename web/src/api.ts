@@ -233,6 +233,27 @@ export type DittoConnectState =
   | { status: 'connected'; endpoint: string }
   | { status: 'error'; message: string }
 
+/** Provider keys kept in Ditto (server/src/providerKeys.ts): metadata only, never a key. */
+export interface DittoKeys {
+  providers: { id: string; displayName: string; docsUrl: string; keyPrefixHints?: string[] }[]
+  keys: { id: string; provider: string; label?: string; configured: boolean; enabled: boolean }[]
+  /** BitBull has its own SayGM key that could be copied to Ditto */
+  saygmKey: boolean
+}
+export type DittoKeySaved = {
+  key: DittoKeys['keys'][number]
+  validation?: { ok: boolean; status?: number; error?: string }
+}
+
+/** A refused provider-key call, with the server's code (e.g. provider_keys_not_granted). */
+export class DittoKeyError extends Error {
+  code: string
+  constructor(message: string, code: string) {
+    super(message)
+    this.code = code
+  }
+}
+
 export interface AppConfig {
   engines: { id: EngineId; label: string }[]
   defaultEngine: EngineId
@@ -401,6 +422,17 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function keyReq<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${getToken()}`, ...(init.headers ?? {}) },
+  })
+  if (res.status === 401) throw new Unauthorized('unauthorized')
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string }
+  if (!res.ok) throw new DittoKeyError(body.error ?? res.statusText, body.code ?? 'error')
+  return body
+}
+
 /** Errors from the server come back as {"error": "..."}: show the message, not the JSON. */
 async function failText(res: Response) {
   const t = await res.text()
@@ -471,6 +503,13 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  /** Provider keys in Ditto: list, save (or copy BitBull's SayGM key), turn on/off, remove */
+  dittoKeys: () => keyReq<DittoKeys>('/api/ditto/keys'),
+  saveDittoKey: (body: { provider: string; key?: string; fromSaygm?: boolean }) =>
+    keyReq<DittoKeySaved>('/api/ditto/keys', { method: 'POST', body: JSON.stringify(body) }),
+  setDittoKeyEnabled: (id: string, enabled: boolean) =>
+    keyReq<{ key: DittoKeys['keys'][number] }>(`/api/ditto/keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+  removeDittoKey: (id: string) => keyReq<{ ok: true }>(`/api/ditto/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   routerModels: (refresh = false) =>
     req<{ configured: boolean; background: 'saygm' | 'ditto-router'; model: string; active: boolean; models: RouterModel[]; error?: string }>(
       `/api/router/models${refresh ? '?refresh=1' : ''}`,

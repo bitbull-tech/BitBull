@@ -20,7 +20,8 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - `POST /api/v1/chat` for scripts and other agents
 - **Which model for this?** (three picks with pros, cons and cost), a model picker with maker
   filters and your own response speeds; **Connect Ditto** for Ditto Router models next to SayGM's,
-  with your Ditto memory and connected apps as the agent's tools
+  with your Ditto memory and connected apps as the agent's tools, and your provider keys (GM,
+  OpenRouter, OpenAI, …) kept in Ditto instead of `.env`
 - **Voice**: talk to it and hear it answer, push-to-talk from anywhere, hands-free
 - Show it a window or send it a web page (browser extension), get every file a reply made with one
   click, archive and bulk-tidy chats
@@ -540,6 +541,11 @@ The repo's GitHub origin has to be enabled for Ditto Review in your Ditto worksp
 needs review access; until then the tool returns the service's refusal. `verify-changes` and
 `git-workflow` ask for it before a commit or PR. The CLI is in the image (`@heyditto/cli`).
 
+**Provider keys.** Settings → Integrations → Ditto → Provider keys saves a GM, Engy, Instant,
+OpenRouter, OpenAI, Anthropic or Google key to your Ditto account through the same CLI
+(`heyditto keys set`); BitBull keeps none of them, and your Ditto endpoints bill to them before
+Ditto credits. See docs/ROUTER.md.
+
 ## Keys: `.env` and the vault
 
 `.env` is what the stack boots on; it never leaves the PC and is copied into the distro by
@@ -722,6 +728,8 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
 | `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
+| `GET` / `POST` | `/api/ditto/keys` | Provider keys in Ditto: list (metadata only) / save one via the Ditto CLI |
+| `PATCH` / `DELETE` | `/api/ditto/keys/:id` | Turn a provider key on or off / remove it |
 | `GET` | `/api/voice` | Voice: Piper text-to-speech and its voices, and the speech-to-text model |
 | `POST` | `/api/voice/speak` | Text to speech in the container (`{text, voice?, speed?}` → WAV); nothing leaves the machine |
 | `POST` | `/api/voice/transcribe` | Speech to text: a WAV recording in, its words out (a Gemini model on SayGM) |

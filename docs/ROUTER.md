@@ -34,6 +34,29 @@ your endpoint → **Create a key** (`ditto_inf_…`). These are runtime settings
 (`.env` or Settings), not GitHub Actions secrets or build-time variables: the published image
 carries no keys. `DITTO_ROUTER_BASE_URL` (default `https://router.heyditto.ai/v1`) is `.env`-only.
 
+## Provider keys, kept in Ditto
+
+Ditto is the key manager. Settings → Integrations → Ditto → **Provider keys**: pick GM, Engy,
+Instant, OpenRouter, OpenAI, Anthropic, Google (or any provider Ditto lists), paste the key and
+press **Save**. BitBull runs the Ditto CLI on the server (`heyditto keys set <provider>`, the key
+on stdin) and keeps nothing: the key lives in your Ditto account, alongside the ones in the Ditto
+app's Settings → Usage → Provider keys, and is never shown back. The provider checks it straight
+away and the panel says whether it was accepted. Keys can be turned off, on, or removed there too,
+and **Copy BitBull's SayGM key to Ditto** saves the `SAYGM_API_KEY` BitBull already has as your
+`gm` key.
+
+Endpoints Connect creates bill with `billingMode: both`: your own keys first, Ditto credits when
+none of them serves the model. An endpoint that already existed keeps the billing you chose.
+
+Saving needs a Connect approved for key access: Connect asks for Ditto's `keys` sign-in, and the
+approval page says what it allows. A Connect made before that, or against a Ditto without it,
+falls back to a plain login, and saving says so and offers **Reconnect Ditto**.
+
+The CLI (server/src/providerKeys.ts) gets the Ditto account key and the proxy settings, none of
+BitBull's other secrets, a fresh config folder per run, and no self-updates. It is the `heyditto`
+in the image (Dockerfile); `DITTO_CLI` points at another one for host mode. Provider keys need a
+CLI with `heyditto keys`, newer than the image's current pin.
+
 ## Models: Ditto Router next to SayGM
 
 Ditto Router (`router.heyditto.ai/v1`) serves Anthropic Messages, OpenAI Responses and

@@ -479,4 +479,10 @@ the docs. Atlas, 404, Hippius, Ditto and linked folders stay as general Bittenso
 - The endpoint's MCP catalog (`GET /v1/mcp`) is attached by BitBull (router.ts), never injected
   (`X-Ditto-Tool-Surface: mcp`): plan mode and QA Hound keep getting no MCP. Turn archive skips Router
   turns the endpoint records itself. Prices from Ditto's catalog (account key). See docs/ROUTER.md.
+- Provider keys in Ditto (`server/src/providerKeys.ts`, `web/src/ProviderKeys.tsx`): paste a GM/Engy/
+  Instant/OpenRouter/OpenAI/Anthropic/Google key and Save; the server runs `heyditto keys set` with the key
+  on stdin and stores nothing. Connect asks for Ditto's `keys` sign-in (falls back to `login` on an older
+  Ditto) and creates endpoints with `billingMode: both`. Open: bump the image's `@heyditto/cli` pin to the
+  first release with `heyditto keys` (ditto-cli `peyton/keys-commands`) once it ships; the backend side is
+  ditto backend `peyton/provider-keys-intent`, the approval page ditto-app `peyton/device-keys-intent`.
 

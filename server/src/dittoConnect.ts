@@ -12,6 +12,9 @@
  * The keys are saved like keys typed into Settings (the vault when it is unlocked), and Ditto
  * becomes the default: the "bitbull" endpoint is the default model and does background work.
  * Nothing here reaches the web UI except the sign-in code and link.
+ *
+ * The sign-in asks for key access too (device intent "keys"), so Settings can save provider keys
+ * to Ditto (providerKeys.ts), and new endpoints bill to those keys first, then Ditto credits.
  */
 import os from "node:os";
 import { config } from "./config.js";
@@ -72,12 +75,18 @@ async function dittoApi<T>(path: string, init: { method?: string; body?: unknown
   return body;
 }
 
+type DeviceCode = { device_code: string; user_code: string; verification_url: string; verification_uri_complete?: string; expires_in: number; interval: number };
+
+const deviceCode = (intent: "keys" | "login") =>
+  dittoApi<DeviceCode>("/api/v2/mcp/device-code", { method: "POST", body: { client: "bitbull", intent, hostname: `BitBull on ${os.hostname()}`.slice(0, 128) } });
+
 /** Start Ditto's sign-in; the UI shows the code and link, the server waits for approval. */
 export async function startConnect(): Promise<ConnectState> {
-  const code = await dittoApi<{ device_code: string; user_code: string; verification_url: string; verification_uri_complete?: string; expires_in: number; interval: number }>(
-    "/api/v2/mcp/device-code",
-    { method: "POST", body: { client: "bitbull", intent: "login", hostname: `BitBull on ${os.hostname()}`.slice(0, 128) } },
-  );
+  // with key access when Ditto offers it; a Ditto without the "keys" intent refuses it with a 400
+  const code = await deviceCode("keys").catch((err) => {
+    if (err instanceof Error && err.message.startsWith("Ditto said 400")) return deviceCode("login");
+    throw err;
+  });
   const url = code.verification_uri_complete || `${code.verification_url}${code.verification_url.includes("?") ? "&" : "?"}code=${encodeURIComponent(code.user_code)}`;
   const mine = ++attempt;
   state = { status: "waiting", userCode: code.user_code, url, expiresAt: Date.now() + (code.expires_in || 600) * 1000 };
@@ -130,7 +139,9 @@ async function provision(accountKey: string) {
   const replaced: Array<{ endpoint: string; key: string }> = [];
   for (const [slug, settings] of Object.entries(ENDPOINTS)) {
     let ep = endpoints.find((e) => e.slug === slug);
-    if (!ep) ep = await dittoApi<Endpoint>("/api/v5/inference/endpoints", { method: "POST", key: accountKey, body: { slug, ...settings } });
+    // new endpoints use the account's own provider keys first, then Ditto credits; an existing
+    // endpoint keeps the billing its owner chose
+    if (!ep) ep = await dittoApi<Endpoint>("/api/v5/inference/endpoints", { method: "POST", key: accountKey, body: { slug, ...settings, billingMode: "both" } });
     else {
       if (slug === REVIEW_ENDPOINT) await dittoApi(`/api/v5/inference/endpoints/${encodeURIComponent(ep.id)}`, { method: "PATCH", key: accountKey, body: settings });
       const listed = await dittoApi<{ keys?: Key[] } | Key[]>(`/api/v5/inference/endpoints/${encodeURIComponent(ep.id)}/keys`, { key: accountKey }).catch(() => []);
