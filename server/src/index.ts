@@ -1271,7 +1271,11 @@ if (existsSync(config.webDist)) {
     if (!c.req.path.startsWith("/api/")) c.header("content-security-policy", c.req.path.startsWith("/help/") ? HELP_CSP : CSP);
   });
   // help/ in the repo: the system map and other help pages (help/README.md lists them)
-  if (existsSync(path.join(ROOT, "help"))) app.use("/help/*", serveStatic({ root: path.relative(process.cwd(), ROOT) }));
+  // ("." when the server runs from the repo root, as it does in the image: an empty root would
+  // make serveStatic look for /help/... at the top of the filesystem)
+  if (existsSync(path.join(ROOT, "help"))) app.use("/help/*", serveStatic({ root: path.relative(process.cwd(), ROOT) || "." }));
+  // a help page that isn't there is a 404, never the app itself in Help's frame
+  app.all("/help/*", (c) => c.text("Not found", 404));
   const index = readFileSync(path.join(config.webDist, "index.html"), "utf8");
   // index.html must never be cached: it names the hashed bundle, and a stale copy after a deploy
   // keeps showing the old UI (the bundles themselves are content-hashed, so they may cache).

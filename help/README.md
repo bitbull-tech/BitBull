@@ -3,7 +3,8 @@
 The user guide and reference pages shown under **Help** in the sidebar, served at `/help/<file>`.
 The agent reads this folder too (`/app/help/` in the container, through the `bitbull-guide`
 skill), so it answers "how do I…" questions from the same pages you see. **Ask BitBull** in the
-Help window opens a new chat with your question.
+Help window is a chat beside the guide; the page you were on, your question and the conversation
+are kept when Help is closed.
 
 | What | Where | Made from |
 | --- | --- | --- |

@@ -513,6 +513,9 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  /** Help's own chat: one question, the whole answer back (the scripts API, POST /api/v1/chat) */
+  helpChat: (message: string, sessionId?: string) =>
+    req<{ sessionId: string; text: string; errors: string[] }>('/api/v1/chat', { method: 'POST', body: JSON.stringify({ message, ...(sessionId ? { sessionId } : {}) }) }),
   /** Notices that SayGM or Ditto changed something, a key lapsed, or a newer BitBull is out */
   compat: (refresh = false) => req<{ checkedAt: string | null; notices: CompatNotice[] }>(`/api/compat${refresh ? '?refresh=1' : ''}`),
   /** Provider keys in Ditto: list, save (or copy BitBull's SayGM key), turn on/off, remove */

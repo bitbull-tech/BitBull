@@ -1,9 +1,11 @@
 ## Help and the user guide
 The **?** button at the bottom of the sidebar opens **Help**: this guide, page by page, and the
-system map, inside BitBull. Type a question into **Ask BitBull how to do something** and it opens
-a new chat with the question ready to send; BitBull answers from the guide (the `bitbull-guide`
-skill reads the same pages from `help/`) and tells you which page the answer came from. You can
-also just ask in any chat: "how do I link a folder?" works the same way.
+system map, with a help chat beside it. Ask how to do something under **Ask BitBull** and the
+answer appears there, taken from the guide (the `bitbull-guide` skill reads the same pages from
+`help/`), with a link to the page it came from. Help remembers where you were: close it to try a
+suggestion and the page, your question and the conversation are there when you open it again.
+**Open as a chat** carries the conversation on in the main window, and you can also just ask in
+any chat: "how do I link a folder?" works the same way.
 
 ## Activity and errors
 The **Activity** bar under the chat (collapsed by default) shows the latest event and a red
