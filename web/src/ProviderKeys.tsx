@@ -8,8 +8,14 @@ import { api, DittoKeyError, type DittoKeys, type DittoKeySaved } from './api'
 
 type Msg = { ok: boolean; text: string; reconnect?: boolean }
 
+/** "GM", or "GM “work”" for a named key */
+function keyName(k: { provider: string; label?: string }, names: Map<string, string>) {
+  const name = names.get(k.provider) ?? k.provider
+  return k.label ? `${name} “${k.label}”` : name
+}
+
 function describe(saved: DittoKeySaved, names: Map<string, string>): Msg {
-  const name = names.get(saved.key.provider) ?? saved.key.provider
+  const name = keyName(saved.key, names)
   const v = saved.validation
   if (!v) return { ok: true, text: `Saved your ${name} key to Ditto.` }
   if (v.ok) return { ok: true, text: `Saved your ${name} key to Ditto, and ${name} accepted it.` }
@@ -20,6 +26,8 @@ function describe(saved: DittoKeySaved, names: Map<string, string>): Msg {
 function failure(e: unknown): Msg {
   if (e instanceof DittoKeyError && e.code === 'provider_keys_not_granted')
     return { ok: false, reconnect: true, text: 'This Ditto connection can’t save keys yet. Reconnect Ditto and approve key access.' }
+  if (e instanceof DittoKeyError && e.code === 'provider_key_limit')
+    return { ok: false, text: 'Your Ditto plan allows no more keys for this provider. Save under an existing name to replace one, remove one, or upgrade your Ditto plan.' }
   return { ok: false, text: e instanceof Error ? e.message : String(e) }
 }
 
@@ -27,6 +35,7 @@ export function ProviderKeys({ onReconnect }: { onReconnect: () => void }) {
   const [data, setData] = useState<DittoKeys | null>(null)
   const [provider, setProvider] = useState('')
   const [key, setKey] = useState('')
+  const [label, setLabel] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg | null>(null)
 
@@ -58,8 +67,9 @@ export function ProviderKeys({ onReconnect }: { onReconnect: () => void }) {
 
   const save = () =>
     run(async () => {
-      const saved = await api.saveDittoKey({ provider, key })
+      const saved = await api.saveDittoKey({ provider, key, ...(label.trim() ? { label: label.trim() } : {}) })
       setKey('')
+      setLabel('')
       return describe(saved, names)
     })
 
@@ -71,7 +81,8 @@ export function ProviderKeys({ onReconnect }: { onReconnect: () => void }) {
     <div className="provider-keys">
       <b className="small">Provider keys</b>
       <p className="muted small">
-        Kept in your Ditto account, not in BitBull. Your “bitbull” endpoint uses them first, then Ditto credits.
+        Kept in your Ditto account, not in BitBull. Your “bitbull” endpoint uses them first, then Ditto credits. Name a key to
+        keep more than one for a provider.
       </p>
       {data && data.keys.length > 0 && (
         <ul className="provider-key-list">
@@ -89,7 +100,7 @@ export function ProviderKeys({ onReconnect }: { onReconnect: () => void }) {
                 className="link"
                 disabled={busy}
                 onClick={() =>
-                  confirm(`Remove your ${names.get(k.provider) ?? k.provider} key from Ditto?`) &&
+                  confirm(`Remove your ${keyName(k, names)} key from Ditto?`) &&
                   void run(() => api.removeDittoKey(k.id).then(() => ({ ok: true, text: 'Removed.' })))
                 }
               >
@@ -120,6 +131,15 @@ export function ProviderKeys({ onReconnect }: { onReconnect: () => void }) {
             onChange={(e) => setKey(e.target.value)}
             placeholder={chosen?.keyPrefixHints?.[0] ? `${chosen.keyPrefixHints[0]}…` : 'Paste the key'}
             aria-label="Provider key"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Name (optional)"
+            aria-label="Key name"
+            maxLength={64}
             autoComplete="off"
             spellCheck={false}
           />

@@ -505,7 +505,7 @@ export const api = {
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
   /** Provider keys in Ditto: list, save (or copy BitBull's SayGM key), turn on/off, remove */
   dittoKeys: () => keyReq<DittoKeys>('/api/ditto/keys'),
-  saveDittoKey: (body: { provider: string; key?: string; fromSaygm?: boolean }) =>
+  saveDittoKey: (body: { provider: string; key?: string; label?: string; fromSaygm?: boolean }) =>
     keyReq<DittoKeySaved>('/api/ditto/keys', { method: 'POST', body: JSON.stringify(body) }),
   setDittoKeyEnabled: (id: string, enabled: boolean) =>
     keyReq<{ key: DittoKeys['keys'][number] }>(`/api/ditto/keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),

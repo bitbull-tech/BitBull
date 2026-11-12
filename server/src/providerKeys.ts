@@ -28,6 +28,7 @@ export class ProviderKeyError extends Error {
 }
 
 const PROVIDER_ID = /^[a-z0-9][a-z0-9_-]{0,39}$/; // never a flag: argv to the CLI
+const LABEL_MAX = 64; // Ditto's limit on a key's name
 const KEY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The Ditto CLI in the image (Dockerfile, as for ditto_review in mcp.ts); `DITTO_CLI` overrides it. */
@@ -94,11 +95,17 @@ export async function heyditto<T>(args: string[], stdin = ""): Promise<T> {
 export const listProviderKeys = () => heyditto<{ keys: ProviderKey[] }>(["keys", "list"]);
 export const listKeyProviders = () => heyditto<{ providers: KeyProvider[] }>(["keys", "providers"]);
 
-/** Save (or replace) the key for one provider in Ditto, and report the provider's check. */
-export async function saveProviderKey(provider: string, key: string) {
+/**
+ * Save (or replace) a key in Ditto, and report the provider's check. A label names the key, so one
+ * provider can hold several; the same provider and label replaces that key, no label the original.
+ */
+export async function saveProviderKey(provider: string, key: string, label = "") {
   if (!PROVIDER_ID.test(provider)) throw new ProviderKeyError("provider_not_supported", "Pick a provider from the list.", 400);
   if (!key.trim()) throw new ProviderKeyError("empty_key", "Paste a key first.", 400);
-  return heyditto<{ key: ProviderKey; validation?: KeyValidation }>(["keys", "set", provider], key.trim());
+  const name = label.trim();
+  if (name.length > LABEL_MAX || /\p{Cc}/u.test(name)) throw new ProviderKeyError("bad_label", `Use a name of up to ${LABEL_MAX} characters.`, 400);
+  // `--label=<name>`, one argv entry, so a name like "--help" is never read as a flag
+  return heyditto<{ key: ProviderKey; validation?: KeyValidation }>(["keys", "set", provider, ...(name ? [`--label=${name}`] : [])], key.trim());
 }
 
 export async function setProviderKeyEnabled(id: string, enabled: boolean) {

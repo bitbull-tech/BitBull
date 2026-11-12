@@ -257,11 +257,14 @@ app.get("/api/ditto/keys", async (c) => {
   }
 });
 app.post("/api/ditto/keys", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
-  const body = z.object({ provider: z.string(), key: z.string().max(4096).optional(), fromSaygm: z.boolean().optional() }).safeParse(await c.req.json().catch(() => null));
+  const body = z
+    .object({ provider: z.string(), key: z.string().max(4096).optional(), label: z.string().max(64).optional(), fromSaygm: z.boolean().optional() })
+    .safeParse(await c.req.json().catch(() => null));
   if (!body.success) return c.json({ error: "Expected a provider and a key", code: "bad_request" }, 400);
   try {
-    const saved = body.data.fromSaygm ? await copySaygmKey() : await saveProviderKey(body.data.provider, body.data.key ?? "");
-    record({ level: "info", source: "ditto", message: `Saved a ${saved.key.provider} key to Ditto (value not logged)` });
+    const saved = body.data.fromSaygm ? await copySaygmKey() : await saveProviderKey(body.data.provider, body.data.key ?? "", body.data.label);
+    const named = saved.key.label ? ` named “${saved.key.label}”` : "";
+    record({ level: "info", source: "ditto", message: `Saved a ${saved.key.provider} key${named} to Ditto (value not logged)` });
     return c.json(saved);
   } catch (e) {
     return keyFailure(c, e);

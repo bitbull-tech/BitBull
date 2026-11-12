@@ -45,6 +45,11 @@ away and the panel says whether it was accepted. Keys can be turned off, on, or 
 and **Copy BitBull's SayGM key to Ditto** saves the `SAYGM_API_KEY` BitBull already has as your
 `gm` key.
 
+A provider can hold several keys: fill in **Name** to save a named one (`heyditto keys set gm
+--label=work`), and saving under a name that exists replaces that key. Leave it empty for the
+provider's original key. How many keys a provider may hold depends on the Ditto plan (one on
+Free); past that, saving says so.
+
 Endpoints Connect creates bill with `billingMode: both`: your own keys first, Ditto credits when
 none of them serves the model. An endpoint that already existed keeps the billing you chose.
 

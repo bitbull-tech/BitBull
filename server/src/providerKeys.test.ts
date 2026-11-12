@@ -26,7 +26,8 @@ process.stdin.on("end", () => {
   if (cmd === "list") return out({ keys: [{ id: "11111111-1111-4111-8111-111111111111", provider: "openrouter", configured: true, enabled: true }] });
   if (cmd === "providers") return out({ providers: [{ id: "gm", displayName: "GM", docsUrl: "https://saygm.com" }] });
   if (cmd === "set" && stdin === "refused-by-ditto") return out({ error: { code: "provider_keys_not_granted", message: "This sign-in can't manage provider keys.", status: 403 } }, 1);
-  if (cmd === "set") return out({ key: { id: "k", provider: target, configured: true, enabled: true }, validation: { ok: true, checkedAt: "now" } });
+  const label = args.find((a) => a.startsWith("--label="))?.slice("--label=".length);
+  if (cmd === "set") return out({ key: { id: "k", provider: target, ...(label ? { label } : {}), configured: true, enabled: true }, validation: { ok: true, checkedAt: "now" } });
   if (cmd === "enable" || cmd === "disable") return out({ key: { id: target, provider: "openrouter", configured: true, enabled: cmd === "enable" } });
   if (cmd === "remove") return out({ removed: { id: target } });
   process.stderr.write("error: unknown command\\n");
@@ -63,6 +64,19 @@ test("a pasted key goes to `heyditto keys set` on stdin, with only the Ditto acc
   assert.equal(call.env.HTTPS_PROXY, "http://egress.test:3128");
   assert.equal(call.env.NODE_USE_ENV_PROXY, "1");
   assert.ok(call.env.DITTO_CONFIG_DIR.startsWith(tmpdir()) || call.env.DITTO_CONFIG_DIR.includes("bitbull-heyditto-"));
+});
+
+test("a named key is one --label= argument, so a name is never read as a flag", async () => {
+  const saved = await keys.saveProviderKey("gm", "gm-second", "  --help  ");
+  assert.equal(saved.key.label, "--help");
+  const call = calls().at(-1)!;
+  assert.deepEqual(call.args, ["keys", "set", "gm", "--label=--help", "--output", "json"]);
+  assert.equal(call.stdin, "gm-second");
+  const before = calls().length;
+  for (const bad of ["x".repeat(65), "work\nline"]) {
+    await assert.rejects(keys.saveProviderKey("gm", "k", bad), (e: unknown) => e instanceof keys.ProviderKeyError && e.code === "bad_label");
+  }
+  assert.equal(calls().length, before);
 });
 
 test("BitBull's own SayGM key can be copied to Ditto as the gm key", async () => {
