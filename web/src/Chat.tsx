@@ -71,7 +71,7 @@ function toView(m: Message): ViewMessage {
 
 const PROJECT_SUGGESTIONS = [
   { title: 'Map a subnet', text: 'Pick a Bittensor subnet with me, then pull its current state from Taostats (registration, emissions, validators, miners) and summarise what it would take to build on it.' },
-  { title: 'Plan a feature', text: 'Help me plan a feature for the code in this project: ask what it should do, then propose the design, the files involved and the tests.' },
+  { title: 'Build an agent team', text: 'Help me build a small team of AI agents for real work in this project: ask me a few questions first, recommend one use case, then design the roles, workflow and checks.' },
   { title: 'Set up a codebase', text: 'Clone a repository into this project and onboard it: map the code, run the build and tests, and write AGENTS.md. Ask me for the URL.' },
   { title: 'Catch me up', text: 'Catch me up on this project from memory and from the files in the workspace: where it stands and what is still open.' },
 ]
@@ -79,7 +79,7 @@ const PROJECT_SUGGESTIONS = [
 const SUGGESTIONS = [
   { title: 'Catch me up', text: 'Catch me up on my most recent projects from memory: where each one stands and what is still open.' },
   { title: 'Plan my day', text: 'Help me plan today. Ask me what is on my plate, then turn it into a prioritised schedule.' },
-  { title: 'Compare models', text: 'Which SayGM models would you pick for coding, long documents and cheap quick answers, and why?' },
+  { title: 'Build an agent team', text: 'Help me build a small team of AI agents for real work: ask me a few questions first, recommend one use case, then design the roles, workflow and checks.' },
   { title: 'Remember something', text: 'Remember this for future chats: ' },
 ]
 

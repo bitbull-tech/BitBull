@@ -15,7 +15,42 @@ export interface Subagent {
   access: "read" | "write";
   /** "inherit" or a SayGM model id */
   model: string;
+  /** the system prompt as the engines get it: the file's body, then its contract */
   prompt: string;
+  /** what it is responsible for, what it takes and returns, when it stops, and when it is done */
+  contract: Contract;
+}
+
+/**
+ * A subagent's contract, from optional front-matter keys. Clear handoffs are what make a team of
+ * agents work: each one knows what it owns, the main agent knows what to give it and what comes
+ * back, and anything that needs the owner comes back as ESCALATE instead of being decided.
+ */
+export interface Contract {
+  /** what it is responsible for, and what it must leave alone */
+  owns?: string;
+  /** what the brief must contain */
+  input?: string;
+  /** the shape of its report */
+  output?: string;
+  /** when it stops and reports ESCALATE rather than deciding */
+  escalate?: string;
+  /** its success criteria */
+  done?: string;
+}
+
+const CONTRACT_KEYS = ["owns", "input", "output", "escalate", "done"] as const;
+
+/** The contract as the last section of the subagent's own prompt. */
+export function contractSection(c: Contract): string {
+  const lines = [
+    c.owns && `- **You own:** ${c.owns}`,
+    c.input && `- **Your brief gives you:** ${c.input}. If something essential is missing, say what and stop; don't guess.`,
+    c.output && `- **Return:** ${c.output}`,
+    c.escalate && `- **Stop and escalate when:** ${c.escalate}. Then start your report with \`ESCALATE:\` and the decision the owner must make; don't decide it yourself.`,
+    c.done && `- **You are done when:** ${c.done}`,
+  ].filter(Boolean);
+  return lines.length ? `\n\n## Your contract\n\n${lines.join("\n")}` : "";
 }
 
 /** Minimal front-matter parser: `key: value` lines between --- fences. */
@@ -77,6 +112,8 @@ export function listSubagents(dir = config.subagentsDir): Subagent[] {
       warnOnce(`skipping ${f}: another file already defines "${name}"`);
       continue;
     }
+    const contract: Contract = {};
+    for (const k of CONTRACT_KEYS) if (parsed.fm[k]) contract[k] = parsed.fm[k].slice(0, 600);
     const envKey = `SUBAGENT_MODEL_${name.toUpperCase().replace(/-/g, "_")}`;
     const fmModel = parsed.fm.model && parsed.fm.model !== "inherit" ? parsed.fm.model : "";
     const model = process.env[envKey] || fmModel || config.agent.subagentModel || "inherit";
@@ -85,7 +122,8 @@ export function listSubagents(dir = config.subagentsDir): Subagent[] {
       description: parsed.fm.description,
       access: parsed.fm.access === "write" ? "write" : "read",
       model,
-      prompt: parsed.body,
+      prompt: parsed.body + contractSection(contract),
+      contract,
     });
   }
   cache = { at: Date.now(), dir, list };
@@ -142,7 +180,15 @@ export function subagentGuide(engine: "opencode" | "claude", list = listSubagent
     `You can delegate to specialist subagents with the ${tool}. Each runs in its own context and returns a report; you see only the report, so give each a complete, self-contained brief (goal, relevant files, how to verify, what to return).`,
     "Start independent subagents in parallel by issuing several task calls in the same response. Never give two write-access agents the same files. Read-only agents can read files but have no shell and cannot change files or start other agents: put the diff or the exact files in their brief, and use `tester` to run tests.",
     "",
-    ...list.map((a) => `- **${a.name}** (${a.access === "write" ? "can edit" : "read-only"}): ${a.description}`),
+    ...list.map(
+      (a) =>
+        `- **${a.name}** (${a.access === "write" ? "can edit" : "read-only"}): ${a.description}` +
+        (a.contract.input ? ` Brief it with: ${a.contract.input}.` : "") +
+        (a.contract.output ? ` It returns: ${a.contract.output}.` : ""),
+    ),
     ...(habits.length ? ["", `Default habits: ${habits.join("; ")}. Act on their findings or explain why not.`] : []),
+    "",
+    "A report that starts with `ESCALATE:` needs the owner: put the decision to them in plain words and wait for their answer before continuing that part of the work.",
+    "If the workspace has a `TEAM.md`, this project runs as an agent team: read it before starting work and follow its roles, handoffs and approval points (the `team-architect` skill explains the format).",
   ].join("\n");
 }

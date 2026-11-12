@@ -89,3 +89,30 @@ test("write agents: shell and edits follow the sandbox settings", () => {
   assert.equal(noShell.permission.bash, "deny");
   assert.equal(noShell.permission.edit, "deny");
 });
+
+test("a contract in the front matter becomes the last section of the prompt, and the guide's briefing hint", () => {
+  const d = dirWith({
+    "r.md": agent(
+      "rev",
+      "owns: the review, never the fix\ninput: the goal and the diff\noutput: findings ranked by severity\nescalate: a finding needs a product decision\ndone: every changed file is read\n",
+    ),
+    "plain.md": agent("plain"),
+  });
+  const [plain, rev] = listSubagents(d);
+  assert.deepEqual(rev.contract, {
+    owns: "the review, never the fix",
+    input: "the goal and the diff",
+    output: "findings ranked by severity",
+    escalate: "a finding needs a product decision",
+    done: "every changed file is read",
+  });
+  assert.match(rev.prompt, /^You are rev\.\n\n## Your contract\n/);
+  assert.match(rev.prompt, /start your report with `ESCALATE:`/);
+  // no contract keys: the prompt is the body, unchanged
+  assert.equal(plain.prompt, "You are plain.");
+  assert.deepEqual(plain.contract, {});
+  const g = subagentGuide("opencode", [plain, rev]);
+  assert.match(g, /\*\*rev\*\* \(read-only\): does rev things Brief it with: the goal and the diff\. It returns: findings ranked by severity\./);
+  assert.match(g, /ESCALATE:/);
+  assert.match(g, /TEAM\.md/);
+});

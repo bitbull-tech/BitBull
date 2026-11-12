@@ -26,9 +26,21 @@ partial (and comment, saying so, on your own PR, which GitHub won't let you appr
 
 ## Subagents
 The agent can start specialists in parallel, like Claude Code's Task tool: `reviewer`,
-`challenger`, `debugger`, `tester` and `worker`, defined in
+`challenger`, `debugger`, `tester`, `worker` and `specialist`, defined in
 [`subagents/`](https://github.com/bitbull-tech/BitBull/blob/main/subagents/README.md). Their progress shows live under each reply. Give them
 a different model for a second opinion, e.g. `SUBAGENT_MODEL_REVIEWER=gpt-5.5`.
+
+Each has a **contract**: what it owns, what its brief must contain, what it returns, when it
+stops to ask you (its report then starts with `ESCALATE:` and BitBull puts the question to you),
+and when it is done. That keeps their work from overlapping and their handoffs predictable.
+
+**Agent teams.** Choose **Build an agent team** on a project's home screen (or just ask). BitBull
+asks a few questions, recommends one use case, and designs a team of three to five roles with a
+workflow, review checkpoints, the points where it must ask you (publishing, sending, deleting,
+spending), a short test plan and a 7-day launch plan. Once you approve it, it is saved as
+`TEAM.md` in the project, and from then on work you ask for there runs through the team. Each
+role runs on one of the subagents above, so it keeps their limits: read-only roles can't change
+anything. The `team-architect` skill holds the method.
 
 ## Repositories
 **Repos** (top bar), the branch icon on a project, or right-click a project → **Repositories**
