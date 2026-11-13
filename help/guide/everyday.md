@@ -49,7 +49,8 @@ three months), and when a newer BitBull is out. Notices are also written to Acti
 dismissed per computer. The server checks shortly after it starts and every six hours.
 
 **To update.** In the BitBull app, open the launcher (from the menu-bar or tray icon) and press
-**Update**: it gets the latest BitBull from GitHub and rebuilds. Your chats, files and settings
+**Update**: it gets the latest BitBull from GitHub and rebuilds. On a Mac it also brings the app
+itself up to the latest release and restarts it when the update has finished. Your chats, files and settings
 are never touched. The same from a terminal, in your BitBull folder:
 
 | On | Run |
@@ -60,9 +61,11 @@ are never touched. The same from a terminal, in your BitBull folder:
 
 The launcher's **Version** row compares what is running with your copy of the code on this
 computer, not with GitHub, so "same as your copy" can still be behind: **Update** is what fetches
-anything newer. A new version of the app itself is on the
-[releases page](https://github.com/bitbull-tech/BitBull/releases/latest); on a Mac, running the
-one-command installer again updates the app too.
+anything newer. On a Mac, `bash scripts/bitbull-mac/app.sh` installs or updates just the app; if the app is open
+it is asked to quit, replaced and reopened. **Quitting the app** (⌘Q, or Quit on its Dock or
+menu-bar icon) closes only the app: BitBull keeps running, and clicking the Dock icon brings its
+window back. On Windows a new app is on the
+[releases page](https://github.com/bitbull-tech/BitBull/releases/latest).
 
 What is checked, and how maintainers publish a notice to every install: [docs/COMPAT.md](https://github.com/bitbull-tech/BitBull/blob/main/docs/COMPAT.md).
 

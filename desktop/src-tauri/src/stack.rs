@@ -426,7 +426,8 @@ pub fn command_for(platform: Platform, action: Action, repo: &Path, distro: &str
             Action::Start => sh(script("start"), &[]),
             Action::Stop => sh(script("start"), &["--stop"]),
             Action::Deploy => sh(script("deploy"), &[]),
-            Action::Update => sh(script("update"), &[]),
+            // --from-app: the app is updated too, in place, and the launcher restarts it afterwards
+            Action::Update => sh(script("update"), &["--from-app"]),
             Action::Backup => sh(script("backup"), &[]),
             Action::InstallAtLogin => sh(script("start"), &["--install-at-login"]),
             Action::Logs => sh(script("logs"), &[]),
@@ -604,7 +605,8 @@ mod tests {
         assert!(a[4].ends_with("start.sh"));
         assert_eq!(&a[5..], &["--stop"]);
         let (_, a) = command_for(m, Action::Update, &dir, "bitbull", 8787, None).unwrap();
-        assert!(a[4].ends_with("update.sh") && a.len() == 5);
+        assert!(a[4].ends_with("update.sh"));
+        assert_eq!(&a[5..], &["--from-app"]);
         assert_eq!(serde_json::from_str::<Action>("\"update\"").unwrap(), Action::Update);
         let (_, a) = command_for(m, Action::Setup, &dir, "bitbull", 8787, Some("docker")).unwrap();
         assert_eq!(&a[5..], &["--runtime", "docker"]);

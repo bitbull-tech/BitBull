@@ -36,7 +36,6 @@ RUNTIME=colima
 ASK_KEYS=0
 START=1
 USE_APP=1
-APP_DMG_URL="https://github.com/bitbull-tech/BitBull/releases/latest/download/BitBull-macos.dmg"
 APP_ID="io.bitbull.desktop"
 REPO_URL="https://github.com/bitbull-tech/BitBull.git"
 BREW_INSTALL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
@@ -233,38 +232,6 @@ bash scripts/bitbull-mac/start.sh --install-at-login || exit $?
 
 # ---- 7. The BitBull app (its own window and menu-bar icon), or the browser ----
 
-# Download the app from BitBull's latest release and put it in Applications. Prints where it is
-# and returns 0, or returns 1 (no release yet, no network, not the app we expect): the caller
-# then falls back to the app already installed, or the browser.
-install_app() {
-  local tmp dmg mnt src id dest_dir dest
-  tmp="$(mktemp -d "${TMPDIR:-/tmp}/bitbull-app.XXXXXX")" || return 1
-  dmg="$tmp/BitBull.dmg"
-  mnt="$tmp/mnt"
-  if ! curl -fsSL --retry 2 --max-time 300 -o "$dmg" "$APP_DMG_URL" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
-  mkdir -p "$mnt"
-  if ! hdiutil attach -nobrowse -readonly -quiet -mountpoint "$mnt" "$dmg" >/dev/null 2>&1; then rm -rf "$tmp"; return 1; fi
-  src=""
-  for a in "$mnt"/*.app; do [ -d "$a" ] && { src="$a"; break; }; done
-  # only ever BitBull's own app
-  id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$src/Contents/Info.plist" 2>/dev/null)"
-  if [ -z "$src" ] || [ "$id" != "$APP_ID" ]; then hdiutil detach -quiet "$mnt" >/dev/null 2>&1; rm -rf "$tmp"; return 1; fi
-  # /Applications when this account may write there (administrators), else your own Applications
-  if [ -w /Applications ]; then dest_dir=/Applications; else dest_dir="$HOME/Applications"; mkdir -p "$dest_dir"; fi
-  dest="$dest_dir/BitBull.app"
-  osascript -e "tell application id \"$APP_ID\" to quit" >/dev/null 2>&1 || true
-  rm -rf "$dest.new"
-  if ditto "$src" "$dest.new" 2>/dev/null; then
-    rm -rf "$dest" && mv "$dest.new" "$dest"
-  else
-    rm -rf "$dest.new"; dest=""
-  fi
-  hdiutil detach -quiet "$mnt" >/dev/null 2>&1
-  rm -rf "$tmp"
-  [ -n "$dest" ] && [ -d "$dest" ] || return 1
-  printf '%s' "$dest"
-}
-
 # The app finds BitBull in the usual folders by itself; told where it is when it's elsewhere.
 # Only written when the app has no settings yet, and only for a path JSON can hold as it is.
 app_settings() {
@@ -278,12 +245,10 @@ app_settings() {
 say "BitBull is running: http://localhost:8787"
 app=""
 if [ "$USE_APP" = 1 ]; then
-  note "Getting the BitBull app..."
-  app="$(install_app)" || app=""
-  if [ -z "$app" ]; then
-    # no download just now: use the app if it is already here
-    for a in /Applications/BitBull.app "$HOME/Applications/BitBull.app"; do [ -d "$a" ] && { app="$a"; break; }; done
-  fi
+  # installs it, or updates it; an app left open from before is closed, replaced and reopened
+  # by this (scripts/bitbull-mac/app.sh), so an update never leaves an old one stuck in the Dock
+  bash scripts/bitbull-mac/app.sh --no-open || true
+  for a in /Applications/BitBull.app "$HOME/Applications/BitBull.app"; do [ -d "$a" ] && { app="$a"; break; }; done
 fi
 if [ -n "$app" ]; then
   app_settings

@@ -274,6 +274,20 @@ fn show_bitbull_later(app: &AppHandle) {
     });
 }
 
+/// Start the app again from its (possibly just replaced) files: the last step of an update that
+/// brought a newer app. BitBull itself is not touched.
+#[tauri::command]
+fn restart_app(app: AppHandle) {
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(t) = app2.remove_tray_by_id(TRAY_ID) {
+            let _ = t.set_visible(false);
+            drop(t);
+        }
+        app2.restart();
+    });
+}
+
 #[tauri::command]
 fn show_launcher(app: AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -584,15 +598,24 @@ pub fn run() {
                 sign_in_if_local(webview.app_handle(), webview, payload.url());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_settings, set_settings, pick_repo, get_status, run_action, cancel_action, open_bitbull, show_launcher])
+        .invoke_handler(tauri::generate_handler![get_settings, set_settings, pick_repo, get_status, run_action, cancel_action, open_bitbull, show_launcher, restart_app])
         .build(tauri::generate_context!())
         .expect("error while building BitBull desktop")
-        .run(|_app, event| {
-            // keep running in the tray when every window is hidden/closed
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                if code.is_none() {
+        .run(|app, event| match event {
+            // Windows: keep running in the tray when every window is closed. On a Mac windows are
+            // only ever hidden, so a request to exit there is the user choosing Quit (⌘Q, or Quit
+            // on the Dock icon), or the system or an update asking the app to close: honour it,
+            // or the app can't be closed and its icon is stuck in the Dock. BitBull keeps running.
+            tauri::RunEvent::ExitRequested { api, code, .. } => {
+                if code.is_none() && !cfg!(target_os = "macos") {
                     api.prevent_exit();
                 }
+            }
+            // Mac: clicking the Dock icon when no window is showing brings BitBull back
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { has_visible_windows: false, .. } => show_bitbull_later(app),
+            _ => {
+                let _ = app;
             }
         });
 }

@@ -299,8 +299,22 @@ function setButtons() {
   else document.querySelectorAll('button[data-action]').forEach((b) => (b.disabled = running));
 }
 
-listen('bitbull-log', (e) => log(e.payload.line, e.payload.line.startsWith('! ')));
-listen('bitbull-done', (e) => { log(`(finished, exit code ${e.payload.code})`, e.payload.code !== 0); running = false; setButtons(); refresh(); });
+// An update that also brought a newer app says so in its output (scripts/bitbull-mac/app.sh);
+// once the whole update has finished, the app restarts itself from the new files.
+let appUpdated = false;
+listen('bitbull-log', (e) => {
+  if (e.payload.line.trim() === 'BITBULL-APP-UPDATED') { appUpdated = true; return; }
+  log(e.payload.line, e.payload.line.startsWith('! '));
+});
+listen('bitbull-done', (e) => {
+  log(`(finished, exit code ${e.payload.code})`, e.payload.code !== 0);
+  running = false; setButtons(); refresh();
+  if (appUpdated) {
+    appUpdated = false;
+    log('The BitBull app was updated too: restarting it in a moment…');
+    setTimeout(() => invoke('restart_app').catch((err) => log('Close and reopen the BitBull app to finish the update. ' + err, true)), 2500);
+  }
+});
 
 (async () => {
   await loadSettings();
