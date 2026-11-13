@@ -89,7 +89,7 @@
       <tr><td class="k" id="k_docker">Docker in distro</td><td class="v" id="c_docker">…</td></tr>
       <tr><td class="k">Containers</td><td class="v" id="c_containers">…</td></tr>
       <tr><td class="k">BitBull</td><td class="v" id="c_health">…</td></tr>
-      <tr><td class="k">GitHub version</td><td class="v" id="c_build">…</td></tr>
+      <tr><td class="k">Version</td><td class="v" id="c_build">…</td></tr>
     </table>
     <div class="cta" id="cta">
       <p class="hint" id="next"></p>
@@ -104,7 +104,8 @@
       <button class="accent" id="open" disabled>Open BitBull</button>
       <button class="primary" data-action="start">Start</button>
       <button data-action="stop">Stop</button>
-      <button data-action="deploy" title="Copy the code from the repo into the distro and rebuild the containers">Deploy</button>
+      <button data-action="update" title="Get the latest BitBull from GitHub, then rebuild from it. Your chats, files and settings are kept.">Update</button>
+      <button data-action="deploy" title="Copy the code from the repo into the distro and rebuild the containers (after you change the code or .env yourself)">Deploy</button>
       <button data-action="logs">Logs</button>
       <button data-action="backup">Back up</button>
       <button data-action="install-at-login">Start at login</button>
@@ -258,7 +259,8 @@ async function refresh() {
     !!built && (current || !head),
     !built
       ? (s.healthy ? 'this build predates version stamping — deploy once to record it' : 'unknown until BitBull answers')
-      : built + (head ? (current ? '  ·  matches your checkout' : '  ·  your checkout is on ' + head + ' — deploy to update') : ''),
+      // "the same as your copy" says nothing about GitHub: Update is what fetches anything newer
+      : built + (head ? (current ? '  ·  same as your copy of the code. Update gets anything newer from GitHub' : '  ·  your copy of the code is on ' + head + ': press Deploy to run it') : ''),
     !built && !s.healthy, // only "not applicable" when there is nothing to ask yet
   );
   $('dot').className = 'dot ' + (s.healthy ? 'ok' : 'bad');
@@ -277,6 +279,7 @@ $('open').onclick = () => invoke('open_bitbull').catch((e) => log(String(e), tru
 async function runAction(action) {
   const mac = status?.platform === 'macos';
   if (action === 'setup' && !confirm(mac ? 'Set BitBull up now? This can install Colima with Homebrew, create the bitbull VM and build the containers, and takes about 10 minutes.' : 'Create the bitbull distro now? This downloads and verifies a clean Ubuntu image (or uses the distro you named) and can take several minutes.')) return;
+  if (action === 'update' && !confirm('Update BitBull now? This gets the latest version from GitHub and rebuilds, which takes a few minutes. BitBull restarts when it is done; your chats, files and settings are kept.')) return;
   if (action === 'stop' && !confirm(mac ? 'Stop BitBull (and its VM, if it has its own)?' : 'Stop BitBull and shut the distro down?')) return;
   try {
     running = true; setButtons();

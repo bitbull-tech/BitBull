@@ -48,15 +48,21 @@ has stopped offering your default model, or no longer accepts a key (a Connect D
 three months), and when a newer BitBull is out. Notices are also written to Activity, and can be
 dismissed per computer. The server checks shortly after it starts and every six hours.
 
-To update: pull the latest code and deploy it again. Your data folder is never touched.
+**To update.** In the BitBull app, open the launcher (from the menu-bar or tray icon) and press
+**Update**: it gets the latest BitBull from GitHub and rebuilds. Your chats, files and settings
+are never touched. The same from a terminal, in your BitBull folder:
 
-```powershell
-cd <your BitBull folder>
-git pull
-.\scripts\bitbull-wsl\deploy.ps1          # Windows
-bash scripts/bitbull-mac/deploy.sh          # Mac
-docker compose up -d --build                # Linux and servers
-```
+| On | Run |
+| --- | --- |
+| Windows | `powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\update.ps1` |
+| Mac | `bash scripts/bitbull-mac/update.sh` |
+| Linux and servers | `git pull` then `docker compose up -d --build` |
+
+The launcher's **Version** row compares what is running with your copy of the code on this
+computer, not with GitHub, so "same as your copy" can still be behind: **Update** is what fetches
+anything newer. A new version of the app itself is on the
+[releases page](https://github.com/bitbull-tech/BitBull/releases/latest); on a Mac, running the
+one-command installer again updates the app too.
 
 What is checked, and how maintainers publish a notice to every install: [docs/COMPAT.md](https://github.com/bitbull-tech/BitBull/blob/main/docs/COMPAT.md).
 

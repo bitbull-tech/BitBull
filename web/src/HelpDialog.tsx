@@ -62,6 +62,9 @@ function set(patch: Partial<HelpState>) {
   }
   listeners.forEach((l) => l())
 }
+/** Open Help on a guide page next time it is shown (the update notice uses this). */
+export const showHelpPage = (slug: string) => set({ shown: { kind: 'guide', slug } })
+
 const useHelp = () =>
   useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),

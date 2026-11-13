@@ -9,7 +9,7 @@ import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
 import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck, IconHelp, IconClock, IconBars } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
-import { HelpDialog } from './HelpDialog'
+import { HelpDialog, showHelpPage } from './HelpDialog'
 import { SchedulesDialog } from './SchedulesDialog'
 import { UsageDialog } from './UsageDialog'
 import { CompatBanner } from './CompatBanner'
@@ -764,7 +764,14 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       <div className="scrim" onClick={() => setNavOpen(false)} />
 
       <main className="main">
-        <CompatBanner onOpenSettings={() => setSettingsOpen(true)} />
+        <CompatBanner
+          onOpenSettings={() => setSettingsOpen(true)}
+          onHowToUpdate={() => {
+            // the guide page with the update steps, inside BitBull (no browser tab needed)
+            showHelpPage('everyday')
+            setHelpOpen(true)
+          }}
+        />
         <FirstRun cfg={cfg} onSaygmReady={() => void loadModels()} />
         <header className="topbar">
           <button className="icon-btn menu" onClick={() => setNavOpen(true)} aria-label="Open chats">

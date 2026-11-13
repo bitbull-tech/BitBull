@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type CompatNotice } from './api'
 import { IconX } from './icons'
+import { inDesktopApp } from './linkHelper'
 
 /**
  * Compatibility notices (server/src/compat.ts): SayGM or Ditto changed something BitBull relies
@@ -8,7 +9,6 @@ import { IconX } from './icons'
  * computer; a notice comes back only if it changes (its id does).
  */
 const KEY = 'bitbull.compat.dismissed'
-const UPDATE_GUIDE = 'https://www.bitbull.tech/guide/everyday#updates-and-compatibility-notices'
 
 function dismissed(): string[] {
   try {
@@ -19,7 +19,7 @@ function dismissed(): string[] {
   }
 }
 
-export function CompatBanner({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function CompatBanner({ onOpenSettings, onHowToUpdate }: { onOpenSettings: () => void; onHowToUpdate: () => void }) {
   const [notices, setNotices] = useState<CompatNotice[]>([])
   const [hidden, setHidden] = useState<string[]>(dismissed)
 
@@ -53,12 +53,15 @@ export function CompatBanner({ onOpenSettings }: { onOpenSettings: () => void })
         <div key={n.id} className={`compat-item lv-${n.level}`}>
           <div className="compat-text">
             <strong>{n.title}</strong>
-            <span>{n.detail}</span>
+            <span>
+              {n.detail}
+              {n.action === 'update' && inDesktopApp && ' In the BitBull app: open the launcher from its menu-bar or tray icon and press Update.'}
+            </span>
           </div>
           {n.action === 'update' && (
-            <a className="btn sm" href={UPDATE_GUIDE} target="_blank" rel="noreferrer" title="Pull the latest BitBull and deploy it">
+            <button className="btn sm" onClick={onHowToUpdate} title="The steps, in Help">
               How to update
-            </a>
+            </button>
           )}
           {(n.action === 'reconnect-ditto' || n.action === 'settings') && (
             <button className="btn sm" onClick={onOpenSettings}>

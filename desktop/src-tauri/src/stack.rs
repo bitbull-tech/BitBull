@@ -373,6 +373,8 @@ pub enum Action {
     Stop,
     /// deploy.ps1 (copy code in, rebuild containers)
     Deploy,
+    /// update.ps1 / update.sh (git pull, then deploy)
+    Update,
     /// backup.ps1
     Backup,
     /// start.ps1 -InstallAtLogin
@@ -388,6 +390,7 @@ impl Action {
             Action::Start => "Start BitBull",
             Action::Stop => "Stop BitBull",
             Action::Deploy => "Deploy (copy code in and rebuild)",
+            Action::Update => "Update BitBull (latest from GitHub, then rebuild)",
             Action::Backup => "Back up BitBull data",
             Action::InstallAtLogin => "Start BitBull at login",
             Action::Logs => "Container logs",
@@ -423,6 +426,7 @@ pub fn command_for(platform: Platform, action: Action, repo: &Path, distro: &str
             Action::Start => sh(script("start"), &[]),
             Action::Stop => sh(script("start"), &["--stop"]),
             Action::Deploy => sh(script("deploy"), &[]),
+            Action::Update => sh(script("update"), &[]),
             Action::Backup => sh(script("backup"), &[]),
             Action::InstallAtLogin => sh(script("start"), &["--install-at-login"]),
             Action::Logs => sh(script("logs"), &[]),
@@ -448,6 +452,7 @@ pub fn command_for(platform: Platform, action: Action, repo: &Path, distro: &str
         Action::Start => ps(script("start"), &[]),
         Action::Stop => ps(script("start"), &["-Stop"]),
         Action::Deploy => ps(script("deploy"), &[]),
+        Action::Update => ps(script("update"), &[]),
         Action::Backup => ps(script("backup"), &[]),
         Action::InstallAtLogin => ps(script("start"), &["-InstallAtLogin"]),
         Action::Logs => (
@@ -598,6 +603,9 @@ mod tests {
         assert_eq!(&a[1..4], &["BITBULL_PROFILE=bitbull", "BITBULL_PORT=8788", "/bin/bash"]);
         assert!(a[4].ends_with("start.sh"));
         assert_eq!(&a[5..], &["--stop"]);
+        let (_, a) = command_for(m, Action::Update, &dir, "bitbull", 8787, None).unwrap();
+        assert!(a[4].ends_with("update.sh") && a.len() == 5);
+        assert_eq!(serde_json::from_str::<Action>("\"update\"").unwrap(), Action::Update);
         let (_, a) = command_for(m, Action::Setup, &dir, "bitbull", 8787, Some("docker")).unwrap();
         assert_eq!(&a[5..], &["--runtime", "docker"]);
         let (_, a) = command_for(m, Action::Setup, &dir, "bitbull", 8787, Some(" ")).unwrap();

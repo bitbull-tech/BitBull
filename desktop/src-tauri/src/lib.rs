@@ -283,6 +283,44 @@ fn show_launcher(app: AppHandle) {
     }
 }
 
+/// Hand a web link to the default browser. Only http(s), and the URL is one argument to a fixed
+/// program, never part of a command line.
+fn open_in_browser(url: &tauri::Url) {
+    if !matches!(url.scheme(), "http" | "https") {
+        return;
+    }
+    let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+        ("/usr/bin/open", vec![url.as_str()])
+    } else if cfg!(windows) {
+        ("rundll32.exe", vec!["url.dll,FileProtocolHandler", url.as_str()])
+    } else {
+        ("xdg-open", vec![url.as_str()])
+    };
+    let _ = std::process::Command::new(program).args(args).spawn();
+}
+
+/// Pages that belong in the BitBull window: BitBull itself on this computer, and the browser's own
+/// internal addresses (blob:, data:, about:) that downloads and previews use.
+fn stays_in_window(url: &tauri::Url) -> bool {
+    match url.scheme() {
+        "http" | "https" => matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")),
+        _ => true,
+    }
+}
+
+/// `dir/name`, or `dir/name (2).ext`, `(3)`… when that is taken, so a download never replaces a file.
+fn free_path(dir: &std::path::Path, name: &std::path::Path) -> PathBuf {
+    let stem = name.file_stem().and_then(|s| s.to_str()).filter(|s| !s.is_empty()).unwrap_or("bitbull-download").to_string();
+    let ext = name.extension().and_then(|s| s.to_str()).map(|e| format!(".{e}")).unwrap_or_default();
+    let mut p = dir.join(format!("{stem}{ext}"));
+    let mut n = 2;
+    while p.exists() && n < 1000 {
+        p = dir.join(format!("{stem} ({n}){ext}"));
+        n += 1;
+    }
+    p
+}
+
 fn show_bitbull(app: &AppHandle) -> Result<(), String> {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
     if let Some(w) = app.get_webview_window("bitbull") {
@@ -298,6 +336,35 @@ fn show_bitbull(app: &AppHandle) -> Result<(), String> {
         .min_inner_size(720.0, 480.0)
         // tells the page that holding the shortcut works from anywhere (Settings → Voice says so)
         .initialization_script("window.__BITBULL_DESKTOP={globalPtt:true};")
+        // A link that opens a new tab (the guide, GitHub, a provider's page) goes to the default
+        // browser: this window only ever shows BitBull itself. Without this a Mac ignores the click.
+        .on_new_window(|url, _features| {
+            open_in_browser(&url);
+            tauri::webview::NewWindowResponse::Deny
+        })
+        // The same for a link that would replace BitBull in this window: anywhere that isn't
+        // BitBull itself (this computer) opens in the browser and the window stays where it is.
+        .on_navigation(|url| {
+            if stays_in_window(url) {
+                return true;
+            }
+            open_in_browser(url);
+            false
+        })
+        // Files BitBull hands over (an exported chat, a reply's files, the activity log) are saved
+        // to the Downloads folder under their own name, never over a file already there.
+        .on_download({
+            let app = app.clone();
+            move |_webview, event| {
+                if let tauri::webview::DownloadEvent::Requested { destination, .. } = event {
+                    if let Ok(dir) = app.path().download_dir() {
+                        let name = destination.file_name().map(|n| n.to_os_string()).unwrap_or_else(|| "bitbull-download".into());
+                        *destination = free_path(&dir, std::path::Path::new(&name));
+                    }
+                }
+                true
+            }
+        })
         .build()
         .map_err(|e| e.to_string())?;
     let app2 = app.clone();
@@ -528,4 +595,37 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_bitbull_itself_stays_in_the_window() {
+        let u = |s: &str| s.parse::<tauri::Url>().unwrap();
+        assert!(stays_in_window(&u("http://localhost:8787/")));
+        assert!(stays_in_window(&u("http://127.0.0.1:8787/help/system-map.html")));
+        assert!(stays_in_window(&u("blob:http://localhost:8787/1b2c")));
+        assert!(stays_in_window(&u("about:blank")));
+        // everything else goes to the browser, including look-alike hosts
+        assert!(!stays_in_window(&u("https://app.heyditto.ai/device?code=ABCD")));
+        assert!(!stays_in_window(&u("https://www.bitbull.tech/ditto")));
+        assert!(!stays_in_window(&u("http://localhost.evil.example/")));
+        assert!(!stays_in_window(&u("https://saygm.com")));
+    }
+
+    #[test]
+    fn a_download_never_replaces_a_file() {
+        let dir = std::env::temp_dir().join(format!("bitbull-desktop-dl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = std::path::Path::new("chat.md");
+        assert_eq!(free_path(&dir, name), dir.join("chat.md"));
+        std::fs::write(dir.join("chat.md"), "").unwrap();
+        assert_eq!(free_path(&dir, name), dir.join("chat (2).md"));
+        std::fs::write(dir.join("chat (2).md"), "").unwrap();
+        assert_eq!(free_path(&dir, name), dir.join("chat (3).md"));
+        assert_eq!(free_path(&dir, std::path::Path::new("notes")), dir.join("notes"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

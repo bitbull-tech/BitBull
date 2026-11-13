@@ -168,7 +168,7 @@ Run these from the `BitBull` folder in Terminal.
 
 | To | Run |
 |---|---|
-| Update to the latest version | `git pull && bash scripts/bitbull-mac/deploy.sh` |
+| Update to the latest version | `bash scripts/bitbull-mac/update.sh` (or **Update** in the BitBull app's launcher) |
 | Apply changes to `.env` | `bash scripts/bitbull-mac/deploy.sh` |
 | Stop BitBull | `bash scripts/bitbull-mac/start.sh --stop` |
 | Back up chats, projects and settings | `bash scripts/bitbull-mac/backup.sh --keep 10` |
