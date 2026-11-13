@@ -81,7 +81,11 @@ The same app and launcher window, built for macOS 13+ (universal: Apple Silicon 
   on GitHub's macOS runners, on a `v*` tag or by hand (Actions → macos → Run workflow). On a Mac
   yourself: `xcode-select --install`, rustup with both Apple targets, then
   `cd desktop && npm ci && npx tauri build --target universal-apple-darwin --bundles app,dmg`.
-- **Unsigned for now.** Gatekeeper blocks the first open ("Apple cannot check it"): right-click
+- **Releases.** On a `v*` tag the workflow attaches the `.dmg` to that release as
+  `BitBull-macos.dmg`; `scripts/bitbull-mac/install.sh` downloads
+  `releases/latest/download/BitBull-macos.dmg`, checks it is BitBull's bundle (`io.bitbull.desktop`),
+  copies it to Applications and opens it. Without a release it falls back to the browser.
+- **Not notarised.** Ad-hoc signed only (`signingIdentity: "-"`). Gatekeeper blocks the first open ("Apple cannot check it"): right-click
   BitBull → Open, once. Signing and notarising need an Apple Developer ID (CLIENTS.md 5.5); until
   then each new build is a new identity to the Keychain, which may ask once to let it read the
   vault key again.

@@ -2,8 +2,13 @@ name: macos
 # The BitBull desktop app for macOS: one universal .dmg (Apple Silicon and Intel, macOS 13+).
 # Built on GitHub's macOS runners, so nobody needs a Mac to make it, only to test it.
 #
-# Unsigned for now: the first launch shows "can't be opened because Apple cannot check it";
-# right-click the app → Open once. Signing and notarising need an Apple Developer ID
+# On a v* tag the .dmg is also attached to that tag's GitHub Release as BitBull-macos.dmg, which
+# is where the Mac installer (scripts/bitbull-mac/install.sh) downloads the app from:
+#   https://github.com/bitbull-tech/BitBull/releases/latest/download/BitBull-macos.dmg
+#
+# Ad-hoc signed only (tauri.conf.json signingIdentity "-"), not notarised: opened from Finder
+# after a browser download, the first launch shows "can't be opened because Apple cannot check
+# it"; right-click the app → Open once. Signing and notarising need an Apple Developer ID
 # (docs/CLIENTS.md, 5.5); add those secrets and a signing step here when there is one.
 on:
   push:
@@ -41,3 +46,27 @@ jobs:
           name: BitBull-macos
           path: desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
+
+  # Tags only: attach the .dmg to the tag's release under a fixed name, so "latest" always
+  # points at the newest app. The only job here that may write to the repository.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: dmg
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Fetch the .dmg this run built
+        run: gh run download "$GITHUB_RUN_ID" --name BitBull-macos --dir dmg
+      - name: Attach it to the release
+        run: |
+          set -eu
+          file="$(ls dmg/*.dmg | head -n 1)"
+          cp "$file" BitBull-macos.dmg
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "BitBull $TAG" --generate-notes
+          gh release upload "$TAG" BitBull-macos.dmg --clobber

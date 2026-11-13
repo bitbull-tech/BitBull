@@ -238,7 +238,9 @@ in a Linux VM; `scripts/bitbull-mac/` does what `scripts/bitbull-wsl/` does ther
 
 **One command** (paste into Terminal) is the whole install: it installs Homebrew and git if
 needed, downloads BitBull to `~/BitBull`, creates `.env` with a strong `APP_TOKEN`, sets up and
-starts BitBull, and opens it in your browser already signed in. It asks nothing, except your Mac
+starts BitBull, installs the **BitBull app** from the latest release into Applications and opens
+it, signed in (BitBull in its own window, with a menu-bar icon). If the app can't be downloaded
+it opens in your browser instead, also signed in; `-- --browser` after the command skips the app. It asks nothing, except your Mac
 password once if Homebrew has to be installed. BitBull's first screen then asks for the two things
 only you have: your SayGM key (pasted there) and Ditto (a sign-in, nothing to copy). Run it again
 to update; it keeps your settings.
@@ -278,7 +280,9 @@ you). `.env` is hidden in Finder (⌘⇧. shows hidden files); edit it with
 - **The link helper is the app.** Linking folders, Open in Finder and unlocking the vault go
   through the BitBull app (it stays in the menu bar); the vault key is kept in your login Keychain.
 - **The app.** The same launcher as on Windows, built as a universal `.dmg` by the `macos` GitHub
-  workflow. Unsigned for now: the first time, right-click BitBull → Open.
+  workflow and attached to each `v*` release as `BitBull-macos.dmg`, which is what the installer
+  downloads. Ad-hoc signed, not notarised: if macOS refuses the first launch, right-click
+  BitBull → Open.
 
 ## Run with Docker (any server)
 

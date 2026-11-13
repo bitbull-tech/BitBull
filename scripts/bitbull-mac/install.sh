@@ -10,8 +10,11 @@
 #     (~/.zprofile), which Homebrew's installer leaves you to do by hand on Apple Silicon.
 #   - git: Apple's Command Line Tools come with Homebrew; nothing else to install.
 #   - .env: created for you, with a strong APP_TOKEN (your BitBull password). No file to edit.
-#   - Then setup.sh and start.sh --install-at-login, and BitBull opens in your browser already
-#     signed in. Its first screen asks for the two things only you have: your SayGM key (paste it
+#   - Then setup.sh and start.sh --install-at-login.
+#   - The BitBull app: downloaded from BitBull's latest release into Applications and opened, so
+#     BitBull has its own window and menu-bar icon, signed in. If the app can't be installed (no
+#     release yet, no network), BitBull opens in your browser instead, also signed in.
+#   - BitBull's first screen asks for the two things only you have: your SayGM key (paste it
 #     there) and Ditto (a sign-in, nothing to copy).
 #
 # Run it again any time: it updates the code (git pull) and keeps everything already in .env.
@@ -20,6 +23,7 @@
 #   ... --runtime docker         use the Docker Desktop / OrbStack you already run (default: Colima)
 #   ... --ask-keys               ask for the SayGM and Ditto keys here in Terminal (typing hidden)
 #                                instead of on BitBull's first screen
+#   ... --browser                don't install the app; open BitBull in the browser
 #   ... --no-start               stop once .env is ready; run setup.sh yourself later
 #
 # Written for the bash that ships with macOS (3.2). Prompts read from the terminal (/dev/tty), so
@@ -31,6 +35,9 @@ DIR="$HOME/BitBull"
 RUNTIME=colima
 ASK_KEYS=0
 START=1
+USE_APP=1
+APP_DMG_URL="https://github.com/bitbull-tech/BitBull/releases/latest/download/BitBull-macos.dmg"
+APP_ID="io.bitbull.desktop"
 REPO_URL="https://github.com/bitbull-tech/BitBull.git"
 BREW_INSTALL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 
@@ -44,6 +51,7 @@ while [ $# -gt 0 ]; do
     --runtime) RUNTIME="${2:-}"; shift 2 ;;
     --ask-keys) ASK_KEYS=1; shift ;;
     --no-keys) ASK_KEYS=0; shift ;; # the default now; kept so older instructions still work
+    --browser) USE_APP=0; shift ;;
     --no-start) START=0; shift ;;
     -h|--help) sed -n '2,27p' "$0" 2>/dev/null || echo "See https://www.bitbull.tech/guide/mac"; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
@@ -223,12 +231,78 @@ else
 fi
 bash scripts/bitbull-mac/start.sh --install-at-login || exit $?
 
-# start.sh has waited for BitBull to answer. Open it signed in: a private page (readable only by
-# you, gone in a few seconds) hands the browser the APP_TOKEN, so it is never on a command line
-# and there is nothing to copy. BitBull takes it out of the address bar at once.
+# ---- 7. The BitBull app (its own window and menu-bar icon), or the browser ----
+
+# Download the app from BitBull's latest release and put it in Applications. Prints where it is
+# and returns 0, or returns 1 (no release yet, no network, not the app we expect): the caller
+# then falls back to the app already installed, or the browser.
+install_app() {
+  local tmp dmg mnt src id dest_dir dest
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/bitbull-app.XXXXXX")" || return 1
+  dmg="$tmp/BitBull.dmg"
+  mnt="$tmp/mnt"
+  if ! curl -fsSL --retry 2 --max-time 300 -o "$dmg" "$APP_DMG_URL" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
+  mkdir -p "$mnt"
+  if ! hdiutil attach -nobrowse -readonly -quiet -mountpoint "$mnt" "$dmg" >/dev/null 2>&1; then rm -rf "$tmp"; return 1; fi
+  src=""
+  for a in "$mnt"/*.app; do [ -d "$a" ] && { src="$a"; break; }; done
+  # only ever BitBull's own app
+  id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$src/Contents/Info.plist" 2>/dev/null)"
+  if [ -z "$src" ] || [ "$id" != "$APP_ID" ]; then hdiutil detach -quiet "$mnt" >/dev/null 2>&1; rm -rf "$tmp"; return 1; fi
+  # /Applications when this account may write there (administrators), else your own Applications
+  if [ -w /Applications ]; then dest_dir=/Applications; else dest_dir="$HOME/Applications"; mkdir -p "$dest_dir"; fi
+  dest="$dest_dir/BitBull.app"
+  osascript -e "tell application id \"$APP_ID\" to quit" >/dev/null 2>&1 || true
+  rm -rf "$dest.new"
+  if ditto "$src" "$dest.new" 2>/dev/null; then
+    rm -rf "$dest" && mv "$dest.new" "$dest"
+  else
+    rm -rf "$dest.new"; dest=""
+  fi
+  hdiutil detach -quiet "$mnt" >/dev/null 2>&1
+  rm -rf "$tmp"
+  [ -n "$dest" ] && [ -d "$dest" ] || return 1
+  printf '%s' "$dest"
+}
+
+# The app finds BitBull in the usual folders by itself; told where it is when it's elsewhere.
+# Only written when the app has no settings yet, and only for a path JSON can hold as it is.
+app_settings() {
+  local dir="$HOME/Library/Application Support/$APP_ID" file
+  file="$dir/bitbull-desktop.json"
+  [ -f "$file" ] && return 0
+  case "$DIR" in *\\*|*\"*) return 0 ;; esac
+  mkdir -p "$dir" && printf '{\n  "repo": "%s",\n  "distro": "bitbull",\n  "port": 8787,\n  "auto_token": true,\n  "open_when_ready": true\n}\n' "$DIR" > "$file"
+}
+
 say "BitBull is running: http://localhost:8787"
+app=""
+if [ "$USE_APP" = 1 ]; then
+  note "Getting the BitBull app..."
+  app="$(install_app)" || app=""
+  if [ -z "$app" ]; then
+    # no download just now: use the app if it is already here
+    for a in /Applications/BitBull.app "$HOME/Applications/BitBull.app"; do [ -d "$a" ] && { app="$a"; break; }; done
+  fi
+fi
+if [ -n "$app" ]; then
+  app_settings
+  if open "$app" >/dev/null 2>&1; then
+    note "BitBull is open in its own app ($app), signed in, with an icon in the menu bar."
+    note "Its first screen asks for your SayGM key and Ditto sign-in. It also opens when you log in."
+    note "Prefer a browser? http://localhost:8787 works too."
+    note "If macOS says it can't check the app: right-click BitBull in Applications, choose Open, once."
+  else
+    app=""
+  fi
+fi
+
+# The browser, when there is no app: opened signed in. A private page (readable only by you,
+# gone in a few seconds) hands it the APP_TOKEN, so it is never on a command line and there is
+# nothing to copy. BitBull takes it out of the address bar at once.
 token="$(env_value APP_TOKEN)"
 opened=0
+[ -z "$app" ] || token=""
 case "$token" in
   ''|*[!A-Za-z0-9._~+/=-]*) ;;
   *)
@@ -239,7 +313,10 @@ case "$token" in
     ( trap '' HUP; sleep 8; rm -f "$page" ) >/dev/null 2>&1 &
     ;;
 esac
-if [ "$opened" = 1 ]; then
+if [ -n "$app" ]; then
+  :
+elif [ "$opened" = 1 ]; then
+  [ "$USE_APP" = 0 ] || note "The BitBull app couldn't be downloaded just now, so BitBull is in your browser. Run this again later to get the app."
   note "It's open in your browser, signed in. Its first screen asks for your SayGM key and Ditto sign-in."
 else
   open "http://localhost:8787" >/dev/null 2>&1 || true

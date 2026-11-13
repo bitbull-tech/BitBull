@@ -27,14 +27,20 @@ That is the whole install. It doesn't ask you anything, with one exception: if *
 standard Mac installer for developer tools) isn't on your Mac yet, it asks for your **Mac login
 password** once. Nothing appears as you type it; that is normal. Type it and press Return.
 
-About 10 minutes later BitBull opens in your browser, already signed in. Its first screen,
-**Finish setting up**, asks for the two things only you have:
+About 10 minutes later **the BitBull app** opens: BitBull in its own window, already signed in,
+with an icon in the menu bar. The installer puts the app in your Applications folder for you. If
+it can't get the app (for example, you're offline at that moment), BitBull opens in your browser
+instead, signed in just the same; run the command again later to get the app.
+
+Its first screen, **Finish setting up**, asks for the two things only you have:
 
 1. **SayGM** (the AI models): [get a key at saygm.com](https://saygm.com) and paste it into the box.
 2. **Ditto** (BitBull's memory): press **Connect Ditto** and sign in, or sign up free, in your
    browser. There is no key to copy.
 
-BitBull then starts every time you log in, at **http://localhost:8787**.
+BitBull and its app then start every time you log in. From the menu-bar icon you can open
+BitBull, check it's healthy, stop it or update it. Prefer a browser tab? It's always at
+**http://localhost:8787** too.
 
 What the command did for you: installed Homebrew and Git if they were missing (and set Homebrew
 up for new Terminal windows, a step it otherwise leaves to you), downloaded BitBull into a
@@ -169,13 +175,21 @@ Run these from the `BitBull` folder in Terminal.
 
 Backups go to `~/Documents/BitBull backups`.
 
-## The BitBull desktop app (optional)
+## The BitBull app
 
-The same launcher as on Windows: health checks, buttons for these scripts, BitBull in its own
-window, and it lives in the menu bar. It also handles linking folders and keeps the vault key in
-your login Keychain. There's no published download yet; the `.dmg` is built by the repo's `macos`
-GitHub workflow ([details](https://github.com/bitbull-tech/BitBull/blob/main/desktop/README.md)).
-It isn't signed yet, so the first time, right-click **BitBull → Open**.
+The one command in Option 1 installs it. It gives you BitBull in its own window, health checks,
+buttons for the everyday commands, and a menu-bar icon. It also handles linking folders and keeps
+the vault key in your login Keychain, so those two need the app running.
+
+- **Installed BitBull step by step?** Download the app from
+  [the latest release](https://github.com/bitbull-tech/BitBull/releases/latest) (`BitBull-macos.dmg`),
+  open it and drag BitBull into Applications. Or run the one command from Option 1: it keeps
+  your settings and adds the app.
+- **"Apple cannot check it":** the app isn't notarised by Apple yet. If macOS says this the first
+  time, right-click **BitBull** in Applications and choose **Open**, once.
+- **Rather not use the app?** Add ` -- --browser` to the end of the one command, and use
+  **http://localhost:8787**. Linking folders then needs the app, or the commands in
+  [Files, folders and windows](/guide/files).
 
 ## Good to know
 
