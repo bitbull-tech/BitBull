@@ -47,6 +47,9 @@
   pre#log { background:#0f1115; color:#d7dae0; border-radius:8px; padding:10px 12px; margin:10px 0 0; height: 220px; overflow:auto; font: 12px/1.4 var(--mono); white-space: pre-wrap; }
   pre#log .err { color:#ff8f7a; }
   .hint { color:var(--mut); font-size: 12.5px; margin: 8px 0 0; }
+  .cta { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:10px; }
+  .cta .hint { flex:1 1 280px; margin:0; font-size:13px; }
+  button.big { font-size:15px; padding:10px 18px; }
   .err { color: var(--bad); }
   details summary { cursor:pointer; color:var(--mut); }
   select { font: inherit; padding:6px 8px; border-radius:7px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
@@ -88,7 +91,10 @@
       <tr><td class="k">BitBull</td><td class="v" id="c_health">…</td></tr>
       <tr><td class="k">GitHub version</td><td class="v" id="c_build">…</td></tr>
     </table>
-    <p class="hint" id="next"></p>
+    <div class="cta" id="cta">
+      <p class="hint" id="next"></p>
+      <button class="accent big" id="go" hidden></button>
+    </div>
   </div>
   </div>
 
@@ -123,7 +129,7 @@
         </label>
         <button data-action="setup">Run setup</button>
       </div>
-      <p class="hint">Colima gives BitBull its own Linux VM that can only see BitBull's folder (<code>~/Library/Application Support/BitBull</code>); it is installed with Homebrew if missing (brew.sh). Needs macOS 13 or later and a filled-in <code>.env</code> in the repo (copy <code>.env.example</code>). The first build takes several minutes; output appears below.</p>
+      <p class="hint">Colima gives BitBull its own Linux VM that can only see BitBull's folder (<code>~/Library/Application Support/BitBull</code>); it is installed with Homebrew if missing (brew.sh). Needs macOS 13 or later. No keys are needed first: setup creates <code>.env</code> with a password for BitBull if there isn't one, and BitBull asks for your SayGM key and Ditto sign-in on its first screen. The first build takes about 10 minutes; output appears below.</p>
     </details>
     <pre id="log"></pre>
   </div>
@@ -173,9 +179,8 @@ function nextStep(s) {
   return 'BitBull is running. Open it, or close this window — it stays in the tray.';
 }
 function nextStepMac(s) {
-  if (!s.repo_ok) return 'Choose the BitBull folder (the checkout that has scripts/bitbull-mac).';
-  if (!s.env_ok) return 'Create .env in the repo from .env.example (SayGM key, APP_TOKEN, Ditto key), then come back.';
-  if (!s.wsl.ok || /no .* VM yet/.test(s.distro.detail)) return 'Run the first-time setup below.';
+  if (!s.repo_ok) return 'Choose the BitBull folder (the one you downloaded: it has scripts/bitbull-mac in it).';
+  if (needsSetup(s)) return 'BitBull isn\'t set up on this Mac yet. Set up installs what it needs (Colima, with Homebrew), creates BitBull\'s own VM and builds it: about 10 minutes, no keys needed. BitBull asks for your SayGM key and Ditto sign-in on its first screen.';
   if (!s.distro.ok || !s.docker.ok) return 'Press Start (it starts the VM, or waits for Docker Desktop / OrbStack).';
   if (!s.containers.ok && /no containers/.test(s.containers.detail)) return 'Press Deploy to build and start the containers for the first time.';
   if (!s.containers.ok) return 'Containers are stopped: press Start (it brings them up), or Deploy after a code change.';
@@ -192,6 +197,41 @@ function labelChecks(platform) {
   $('l_distro').textContent = mac ? 'VM' : 'distro';
   $('repo').placeholder = mac ? '~/github/BitBull' : 'D:\\github\\BitBull';
 }
+/** First-time setup hasn't been done (or finished) on this computer. */
+function needsSetup(s) {
+  if (!s.repo_ok) return false;
+  if (s.platform === 'macos') return !s.wsl.ok || /no .* VM yet/.test(s.distro.detail);
+  return s.env_ok && s.wsl.ok && !s.distro.ok;
+}
+/**
+ * The one button that does the next thing, so nobody has to work out which of the actions
+ * below comes first: choose the folder, set up, build, start, open.
+ */
+function nextAction(s) {
+  if (!s.repo_ok) return { label: 'Choose the BitBull folder…', run: () => $('pick').click() };
+  if (needsSetup(s)) return { label: 'Set up BitBull', run: () => runAction('setup') };
+  if (s.platform !== 'macos' && (!s.env_ok || !s.wsl.ok)) return null; // steps outside this app: the hint says what
+  if (s.healthy) return { label: 'Open BitBull', run: () => invoke('open_bitbull').catch((e) => log(String(e), true)) };
+  if (s.docker.ok && !s.containers.ok && /no containers/.test(s.containers.detail)) return { label: 'Build BitBull', run: () => runAction('deploy') };
+  return { label: 'Start BitBull', run: () => runAction('start') };
+}
+let go = null;
+function showNext(s) {
+  go = nextAction(s);
+  const b = $('go');
+  b.hidden = !go;
+  b.disabled = running;
+  b.textContent = running ? 'Working… (progress is in the log below)' : go ? go.label : '';
+  // the actions that need a set-up BitBull wait for it, instead of failing with a script error
+  const wait = needsSetup(s);
+  document.querySelectorAll('button[data-action]').forEach((x) => {
+    if (x.dataset.action === 'setup') return;
+    x.disabled = running || wait;
+    x.title = wait ? 'Set BitBull up first' : x.dataset.title ?? '';
+  });
+  // and the set-up section is open when it is the next thing to do
+  if (wait) document.querySelectorAll('details').forEach((d) => (d.open = true));
+}
 let checking = false;
 async function refresh() {
   if (checking) return;
@@ -204,7 +244,8 @@ async function refresh() {
   const s = status;
   labelChecks(s.platform);
   check($('c_repo'), s.repo_ok, s.repo ? s.repo + (s.repo_ok ? '' : '  (not the BitBull repo)') : 'not chosen');
-  check($('c_env'), s.env_ok, s.env_ok ? '.env present' : 'no .env in the repo');
+  // on a Mac, Set up creates .env when there isn't one, so a missing one isn't a failure
+  check($('c_env'), s.env_ok, s.env_ok ? '.env present' : s.platform === 'macos' ? 'Set up will create it' : 'no .env in the repo', !s.env_ok && s.platform === 'macos');
   for (const k of ['wsl', 'distro', 'docker', 'containers']) check($('c_' + k), s[k].ok, s[k].detail, /only checked on/.test(s[k].detail));
   check($('c_health'), s.healthy, s.healthy ? 'answering at ' + s.url : 'not answering at ' + s.url);
   // Which commit the running containers came from, next to what the checkout is on now. Without
@@ -225,26 +266,35 @@ async function refresh() {
   $('headline').className = 'state ' + (s.healthy ? 'ok' : 'bad');
   $('open').disabled = !s.healthy;
   $('next').textContent = nextStep(s);
+  showNext(s);
+  // a "does not contain…" from an earlier wrong folder is stale once the folder is right
+  if (s.repo_ok && /does not contain/.test($('settingsErr').textContent)) $('settingsErr').textContent = '';
   if (s.healthy && lastHealthy === false && settings.open_when_ready && !running) invoke('open_bitbull').catch((e) => log(String(e), true));
   lastHealthy = s.healthy;
 }
 $('open').onclick = () => invoke('open_bitbull').catch((e) => log(String(e), true));
 
+async function runAction(action) {
+  const mac = status?.platform === 'macos';
+  if (action === 'setup' && !confirm(mac ? 'Set BitBull up now? This can install Colima with Homebrew, create the bitbull VM and build the containers, and takes about 10 minutes.' : 'Create the bitbull distro now? This downloads and verifies a clean Ubuntu image (or uses the distro you named) and can take several minutes.')) return;
+  if (action === 'stop' && !confirm(mac ? 'Stop BitBull (and its VM, if it has its own)?' : 'Stop BitBull and shut the distro down?')) return;
+  try {
+    running = true; setButtons();
+    const source = action !== 'setup' ? null : mac ? $('runtime').value : $('source').value.trim();
+    await invoke('run_action', { action, source });
+  } catch (e) { log(String(e), true); running = false; setButtons(); }
+}
 document.querySelectorAll('button[data-action]').forEach((b) => {
-  b.onclick = async () => {
-    const action = b.dataset.action;
-    const mac = status?.platform === 'macos';
-    if (action === 'setup' && !confirm(mac ? 'Set BitBull up now? This can install Colima with Homebrew, create the bitbull VM and build the containers, and takes several minutes.' : 'Create the bitbull distro now? This downloads and verifies a clean Ubuntu image (or uses the distro you named) and can take several minutes.')) return;
-    if (action === 'stop' && !confirm(mac ? 'Stop BitBull (and its VM, if it has its own)?' : 'Stop BitBull and shut the distro down?')) return;
-    try {
-      running = true; setButtons();
-      const source = action !== 'setup' ? null : mac ? $('runtime').value : $('source').value.trim();
-      await invoke('run_action', { action, source });
-    } catch (e) { log(String(e), true); running = false; setButtons(); }
-  };
+  b.dataset.title = b.title;
+  b.onclick = () => runAction(b.dataset.action);
 });
+$('go').onclick = () => go && !running && go.run();
 $('cancel').onclick = () => invoke('cancel_action');
-function setButtons() { document.querySelectorAll('button[data-action]').forEach((b) => (b.disabled = running)); $('cancel').disabled = !running; }
+function setButtons() {
+  $('cancel').disabled = !running;
+  if (status) showNext(status);
+  else document.querySelectorAll('button[data-action]').forEach((b) => (b.disabled = running));
+}
 
 listen('bitbull-log', (e) => log(e.payload.line, e.payload.line.startsWith('! ')));
 listen('bitbull-done', (e) => { log(`(finished, exit code ${e.payload.code})`, e.payload.code !== 0); running = false; setButtons(); refresh(); });

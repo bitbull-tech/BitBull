@@ -36,8 +36,20 @@ done
 bb_check_macos
 say "BitBull on macOS $(sw_vers -productVersion) ($(uname -m)), runtime: $RUNTIME"
 
+# No .env yet (set up from the BitBull app, or by hand): make one, with a strong APP_TOKEN, the
+# password for BitBull's page. No keys are needed to set up: BitBull's first screen asks for the
+# SayGM key and the Ditto sign-in. An existing .env is never changed.
 if [ ! -f "$BB_REPO/.env" ]; then
-  die "No .env in $BB_REPO. Copy .env.example to .env, fill in APP_TOKEN, SAYGM_API_KEY and DITTO_API_KEY, then run setup again."
+  [ -f "$BB_REPO/.env.example" ] || die "No .env and no .env.example in $BB_REPO: is this the BitBull folder?"
+  token="$(openssl rand -hex 32)" || die "Couldn't make an APP_TOKEN (openssl)."
+  ( umask 077
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in APP_TOKEN=*) printf 'APP_TOKEN=%s\n' "$token" ;; *) printf '%s\n' "$line" ;; esac
+    done < "$BB_REPO/.env.example" > "$BB_REPO/.env"
+  ) || die "Couldn't write $BB_REPO/.env"
+  grep -q '^APP_TOKEN=' "$BB_REPO/.env" || printf 'APP_TOKEN=%s\n' "$token" >> "$BB_REPO/.env"
+  say "Created .env with a new APP_TOKEN (your BitBull password)"
+  note "The BitBull app signs you in with it. For a browser: grep APP_TOKEN \"$BB_REPO/.env\""
 fi
 
 mkdir -p "$BB_HOME" "$BB_DATA" "$BB_LINKS"
