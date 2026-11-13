@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { api, type AppConfig, type DittoConnectState } from './api'
+import { LinkFallback } from './LinkFallback'
 import { ProviderKeys } from './ProviderKeys'
 
 export function DittoConnect({ ditto, onConnected }: { ditto: AppConfig['ditto']; onConnected: () => void }) {
@@ -60,6 +61,7 @@ export function DittoConnect({ ditto, onConnected }: { ditto: AppConfig['ditto']
           </a>
         )}
       </div>
+      {!ditto.router && state.status !== 'waiting' && <LinkFallback url={ditto.signupUrl} what="Create a Ditto account" />}
       {state.status === 'waiting' && (
         <p className="small">
           <a href={state.url} target="_blank" rel="noreferrer">
@@ -68,6 +70,7 @@ export function DittoConnect({ ditto, onConnected }: { ditto: AppConfig['ditto']
           and check the code is <code>{state.userCode}</code>. This page updates when you're done.
         </p>
       )}
+      {state.status === 'waiting' && <LinkFallback url={state.url} what="Approve in Ditto" />}
       {state.status === 'connected' && <p className="small">Connected: your Ditto Router models are in every model picker next to SayGM's, and your Ditto memory and connected apps are the agent's tools. Your default model hasn't changed; pick a Ditto Router model in any chat, or make one the default under Configuration.</p>}
       {state.status === 'error' && <p className="small lv-error-text">{state.message}</p>}
       {ditto.enabled && state.status !== 'waiting' && <ProviderKeys onReconnect={() => void connect()} />}

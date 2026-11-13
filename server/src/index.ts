@@ -1329,7 +1329,7 @@ if (existsSync(config.webDist)) {
 // ---------- boot ----------
 resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
-await syncSkills().catch((e) => console.error("[skills]", e));
+await syncSkills().catch((e) => console.warn("[skills]", e instanceof Error ? e.message : e));
 // Ditto Router: have its models ready for the model list and OpenCode's config
 if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
 scheduleCompat(buildInfo);

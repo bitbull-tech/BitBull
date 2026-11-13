@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api, type AppConfig } from './api'
 import { DittoConnect } from './DittoConnect'
+import { LinkFallback } from './LinkFallback'
 import { IconCheck } from './icons'
 
 /**
@@ -93,6 +94,7 @@ export function FirstRun({ cfg, onSaygmReady }: { cfg: AppConfig; onSaygmReady: 
                 </button>
               </form>
               {msg && <span className="small lv-error-text">{msg}</span>}
+              <LinkFallback url="https://saygm.com" what="the SayGM link" />
             </>
           )}
         </div>

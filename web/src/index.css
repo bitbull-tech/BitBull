@@ -1376,3 +1376,8 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .firstrun-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; font-size: 13.5px; }
 .firstrun-key { display: flex; gap: 6px; max-width: 520px; }
 .firstrun-key input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+
+/* The address behind a link, to copy when the link doesn't open (LinkFallback) */
+.link-fallback { margin: 6px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.link-fallback-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.link-fallback code { user-select: all; overflow-wrap: anywhere; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
