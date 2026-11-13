@@ -23,28 +23,30 @@ Open **Terminal** (press ⌘ Space, type **Terminal**, press Return), paste this
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bitbull-tech/BitBull/main/scripts/bitbull-mac/install.sh)"
 ```
 
-It walks you through everything, and handles the parts of Terminal that usually trip people up:
+That is the whole install. It doesn't ask you anything, with one exception: if **Homebrew** (the
+standard Mac installer for developer tools) isn't on your Mac yet, it asks for your **Mac login
+password** once. Nothing appears as you type it; that is normal. Type it and press Return.
 
-1. **Homebrew** (the standard Mac installer for developer tools): installed if you don't have it,
-   after asking. It will ask for your **Mac login password**; nothing appears as you type it.
-   That is normal: type it and press Return. It is also set up for new Terminal windows, a step
-   Homebrew otherwise leaves you to do by hand.
-2. **Git and BitBull**: downloaded into a `BitBull` folder in your home folder.
-3. **Your keys**: it asks for your SayGM and Ditto keys one at a time. Paste each and press
-   Return; they stay hidden on screen and are saved into BitBull's settings file for you. Your
-   BitBull password (`APP_TOKEN`) is made for you.
-4. **Setup**: about 10 minutes the first time. BitBull then starts every time you log in, and
-   opens in your browser at **http://localhost:8787**.
+About 10 minutes later BitBull opens in your browser, already signed in. Its first screen,
+**Finish setting up**, asks for the two things only you have:
 
-To sign in you need your `APP_TOKEN`. To see it, paste this into Terminal:
+1. **SayGM** (the AI models): [get a key at saygm.com](https://saygm.com) and paste it into the box.
+2. **Ditto** (BitBull's memory): press **Connect Ditto** and sign in, or sign up free, in your
+   browser. There is no key to copy.
+
+BitBull then starts every time you log in, at **http://localhost:8787**.
+
+What the command did for you: installed Homebrew and Git if they were missing (and set Homebrew
+up for new Terminal windows, a step it otherwise leaves to you), downloaded BitBull into a
+`BitBull` folder in your home folder, and made a strong password for it (`APP_TOKEN`). You only
+need that password to sign in from another browser or device:
 
 ```bash
 grep APP_TOKEN ~/BitBull/.env
 ```
 
-Run the same one command again any time to update BitBull: it keeps your keys and only asks for
-ones that are missing. Already using Docker Desktop or OrbStack? Add `--runtime docker` to the
-end of the command (see Option 4).
+Run the same command again any time to update BitBull; it keeps your settings. Already using
+Docker Desktop or OrbStack? See Option 4.
 
 ## Option 2: let your AI agent do it
 

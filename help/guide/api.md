@@ -21,6 +21,10 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
 | `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
+| `GET` / `POST` | `/api/schedules` | Schedules: list / create (`{ name, prompt, projectId, model, spec }`) |
+| `PATCH` / `DELETE` | `/api/schedules/:id` | Change (or pause with `enabled: false`) / delete a schedule; its chat is kept |
+| `POST` | `/api/schedules/:id/run` | Run a schedule now |
+| `GET` | `/api/usage?days=30&offset=60` | Estimated spend per day and per model (`offset`: minutes east of UTC) |
 | `GET` | `/api/compat` | Compatibility notices: SayGM or Ditto changes, lapsed keys, a newer BitBull (`?refresh=1` checks now) |
 | `GET` / `POST` | `/api/ditto/keys` | Provider keys in Ditto: list (metadata only) / save one via the Ditto CLI |
 | `PATCH` / `DELETE` | `/api/ditto/keys/:id` | Turn a provider key on or off / remove it |

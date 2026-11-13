@@ -9,7 +9,7 @@ import { config } from "./config.js";
  * survives restarts. Secrets are redacted before anything is stored.
  */
 export type Level = "debug" | "info" | "warn" | "error";
-export type Source = "server" | "config" | "saygm" | "agent" | "tool" | "subagent" | "upload" | "ditto" | "opencode" | "claude" | "integration" | "skills" | "storage" | "network" | "swarm" | "compat";
+export type Source = "server" | "config" | "saygm" | "agent" | "tool" | "subagent" | "upload" | "ditto" | "opencode" | "claude" | "integration" | "skills" | "storage" | "network" | "swarm" | "compat" | "schedule";
 
 export interface ActivityEvent {
   id: number;

@@ -57,7 +57,7 @@ your keys without printing them, starts everything and tells you when it's ready
 | Key | What it is | Where to get it |
 |---|---|---|
 | `SAYGM_API_KEY` | One key for every AI model | [saygm.com](https://saygm.com) |
-| `DITTO_API_KEY` | BitBull's long-term memory | [heyditto.ai](https://heyditto.ai) |
+| `DITTO_API_KEY` | BitBull's long-term memory | New to Ditto? [Create a free account](https://www.bitbull.tech/ditto), then make a key at [app.heyditto.ai/mcp](https://app.heyditto.ai/mcp) |
 | `APP_TOKEN` | The password for your BitBull | You make it up: each install page shows a one-line command that creates a strong one |
 
 Everything else (GitHub, Taostats, Hippius storage, Atlas, Ditto Router) is

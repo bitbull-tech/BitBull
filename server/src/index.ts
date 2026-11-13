@@ -30,6 +30,8 @@ import { advise, usageByModel } from "./advisor.js";
 import { routerBackground, routerMcpServers, routerModels, routerReview } from "./router.js";
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
 import { compatState, runCompat, scheduleCompat } from "./compat.js";
+import { MAX_SCHEDULES, runSchedule, ScheduleInput, schedules, startScheduler } from "./schedules.js";
+import { usageReport } from "./usage.js";
 import { copySaygmKey, listKeyProviders, listProviderKeys, ProviderKeyError, removeProviderKey, saveProviderKey, setProviderKeyEnabled } from "./providerKeys.js";
 import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
 import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
@@ -126,12 +128,15 @@ app.get("/api/config", async (c) =>
     engines: Object.values(engines).map((e) => ({ id: e.id, label: e.label })),
     defaultEngine: config.agent.defaultEngine,
     defaultModel: config.agent.defaultModel,
+    // what a fresh install still needs: shown as "Finish setting up" on the home screen
+    setup: { saygm: !!config.saygm.apiKey, ditto: dittoEnabled() },
     ditto: {
       enabled: dittoEnabled(),
       archive: config.ditto.archive,
       router: !!config.router.key,
-      // the app owner's referral code, so signups from this link count for them (Ditto's own /r/<code> link)
-      signupUrl: /^[a-z2-7]{4}-[a-z2-7]{4}$/.test(config.ditto.referralCode.toLowerCase()) ? `https://heyditto.ai/r/${config.ditto.referralCode.toLowerCase()}` : "https://app.heyditto.ai/",
+      // the app owner's referral code, so signups from this link count for them (Ditto's own /r/<code> link);
+      // without one, BitBull's own sign-up address, which goes on to Ditto with BitBull's code
+      signupUrl: /^[a-z2-7]{4}-[a-z2-7]{4}$/.test(config.ditto.referralCode.toLowerCase()) ? `https://heyditto.ai/r/${config.ditto.referralCode.toLowerCase()}` : "https://www.bitbull.tech/ditto",
       connectionsUrl: CONNECTIONS_URL,
     },
   }),
@@ -240,6 +245,39 @@ app.get("/api/compat", async (c) => {
   const { at, notices } = compatState();
   return c.json({ checkedAt: at ? new Date(at).toISOString() : null, build: { commit: buildInfo.commit, committed: buildInfo.committed }, notices });
 });
+
+/** Schedules (server/src/schedules.ts): prompts BitBull runs on its own, each in its own chat. */
+app.get("/api/schedules", (c) => c.json({ schedules: schedules.list(), max: MAX_SCHEDULES }));
+app.post("/api/schedules", async (c) => {
+  const body = ScheduleInput.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: body.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ") }, 400);
+  try {
+    return c.json(schedules.create(body.data));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+app.patch("/api/schedules/:id", async (c) => {
+  const body = ScheduleInput.partial().safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: body.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ") }, 400);
+  try {
+    const s = schedules.update(c.req.param("id"), body.data);
+    return s ? c.json(s) : c.json({ error: "No such schedule" }, 404);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+app.delete("/api/schedules/:id", (c) => {
+  schedules.delete(c.req.param("id"));
+  return c.json({ ok: true });
+});
+app.post("/api/schedules/:id/run", (c) => {
+  const r = runSchedule(c.req.param("id"));
+  return r.turnId ? c.json({ ...r, schedule: schedules.get(c.req.param("id")) }) : c.json({ error: r.skipped }, 409);
+});
+
+/** Estimated spending per day and per model (server/src/usage.ts). ?days=30&offset=<minutes east of UTC> */
+app.get("/api/usage", (c) => c.json(usageReport(Number(c.req.query("days") ?? 30) || 30, Number(c.req.query("offset") ?? 0) || 0)));
 
 /** Connect Ditto (server/src/dittoConnect.ts): start the sign-in, then poll until it's connected. */
 app.post("/api/ditto/connect", async (c) => {
@@ -1295,6 +1333,7 @@ await syncSkills().catch((e) => console.error("[skills]", e));
 // Ditto Router: have its models ready for the model list and OpenCode's config
 if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
 scheduleCompat(buildInfo);
+startScheduler();
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });

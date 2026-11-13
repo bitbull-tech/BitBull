@@ -159,7 +159,8 @@ function buildConfig() {
   ownerName: env("OWNER_NAME", "User"),
 
   saygm: {
-    apiKey: env("SAYGM_API_KEY", ""),
+    // .env.example's placeholder (gm_live_xxx) counts as not set
+    apiKey: env("SAYGM_API_KEY", "").replace(/^gm_live_x+$/i, ""),
     /** OpenAI-compatible base (used for /models and OpenCode's openai-compatible provider). */
     openaiBaseUrl: env("SAYGM_OPENAI_BASE_URL", "https://api.saygm.com/v1"),
     /** Anthropic-compatible base WITHOUT /v1 (Anthropic SDKs append /v1/messages). */
@@ -407,7 +408,9 @@ applyGitEnv();
 
 export function assertConfig() {
   const problems: string[] = [];
-  if (!config.saygm.apiKey) problems.push("SAYGM_API_KEY is not set");
+  // No SayGM key is not fatal: a fresh install starts without one and the first screen asks for
+  // it (web/src/FirstRun.tsx), so installing needs no keys typed into a terminal or a file.
+  if (!config.saygm.apiKey) console.warn("[config] No SAYGM_API_KEY yet: add it on BitBull's first screen or in Settings → Integrations → SayGM.");
   if (!config.appToken && !config.allowNoAuth)
     problems.push("APP_TOKEN is not set (or set ALLOW_NO_AUTH=true for local-only use)");
   const loopback = ["127.0.0.1", "localhost", "::1"].includes(config.host); // "::" and 0.0.0.0 are any-address, never loopback

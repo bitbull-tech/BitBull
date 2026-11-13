@@ -227,6 +227,40 @@ export interface Uploaded {
   size: number
 }
 
+/** A schedule (server/src/schedules.ts): a prompt BitBull runs on its own, in its own chat */
+export type ScheduleSpec =
+  | { kind: 'interval'; everyMinutes: number }
+  | { kind: 'daily'; time: string; days: number[]; tz: string }
+export interface Schedule {
+  id: string
+  name: string
+  prompt: string
+  projectId: string | null
+  projectName?: string
+  engine: EngineId
+  model: string
+  spec: ScheduleSpec
+  when: string
+  enabled: boolean
+  sessionId: string | null
+  nextRunAt: number | null
+  lastRunAt: number | null
+  lastStatus: string | null
+  lastNote: string | null
+}
+export type ScheduleInput = { name: string; prompt: string; projectId: string | null; model: string; spec: ScheduleSpec; enabled?: boolean }
+
+/** Estimated spending (server/src/usage.ts) */
+export interface UsageReport {
+  days: number
+  from: string
+  to: string
+  total: { cost: number; replies: number; inputTokens: number; outputTokens: number }
+  byDay: Array<{ date: string; cost: number; replies: number; byModel: Record<string, number> }>
+  byModel: Array<{ model: string; cost: number; replies: number; inputTokens: number; outputTokens: number }>
+  unpriced: number
+}
+
 /** A compatibility notice (server/src/compat.ts) */
 export interface CompatNotice {
   id: string
@@ -269,6 +303,8 @@ export interface AppConfig {
   defaultEngine: EngineId
   defaultModel: string
   ditto: { enabled: boolean; archive: string; router: boolean; signupUrl: string; connectionsUrl: string }
+  /** what a fresh install still needs (absent on older servers) */
+  setup?: { saygm: boolean; ditto: boolean }
 }
 
 export type TurnStatus = 'running' | 'done' | 'error' | 'aborted' | 'interrupted'
@@ -513,6 +549,13 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  schedules: () => req<{ schedules: Schedule[]; max: number }>('/api/schedules'),
+  createSchedule: (s: ScheduleInput) => req<Schedule>('/api/schedules', { method: 'POST', body: JSON.stringify(s) }),
+  updateSchedule: (id: string, s: Partial<ScheduleInput>) => req<Schedule>(`/api/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+  deleteSchedule: (id: string) => req<{ ok: boolean }>(`/api/schedules/${id}`, { method: 'DELETE' }),
+  runSchedule: (id: string) => req<{ turnId: string; schedule: Schedule }>(`/api/schedules/${id}/run`, { method: 'POST' }),
+  /** offset: minutes east of UTC, so days end at the owner's midnight */
+  usage: (days: number) => req<UsageReport>(`/api/usage?days=${days}&offset=${-new Date().getTimezoneOffset()}`),
   /** Help's own chat: one question, the whole answer back (the scripts API, POST /api/v1/chat) */
   helpChat: (message: string, sessionId?: string) =>
     req<{ sessionId: string; text: string; errors: string[] }>('/api/v1/chat', { method: 'POST', body: JSON.stringify({ message, ...(sessionId ? { sessionId } : {}) }) }),

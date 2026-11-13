@@ -7,6 +7,27 @@ suggestion and the page, your question and the conversation are there when you o
 **Open as a chat** carries the conversation on in the main window, and you can also just ask in
 any chat: "how do I link a folder?" works the same way.
 
+## Schedules
+**Schedules** (top bar) runs a prompt on its own at set times: every weekday at 08:00, every two
+hours, Mondays and Thursdays at 18:30. Each schedule is a dedicated agent with its own chat
+(⏰ and its name), where every run lands, so each run can build on the last and you can read or
+reply to any of them. Put it in a project and it works with that project's files, instructions
+and `TEAM.md`, so a team can run on a timetable.
+
+Nobody is watching a scheduled run, and it is told so: anything that publishes, sends, deletes,
+spends or can't be undone is prepared and listed under **Waiting for your approval** in its chat,
+for you to approve there. A run never starts while the previous one is still going, the shortest
+interval is 15 minutes, and times follow your timezone across daylight-saving changes. Runs
+happen while BitBull is running; a run missed while it was off happens once when it starts again.
+**Run now** starts one straight away. A cheap, fast model is usually enough.
+
+## Usage
+The bar-chart button at the bottom of the sidebar opens **Usage**: estimated spend per day (hover
+a day to see which models it went on) and per model, with replies and tokens, over 7, 30 or 90
+days. The figures are BitBull's own estimates from SayGM's live prices at the time of each
+reply; your SayGM usage page is the bill. Your SayGM balance will show here once Sign in with
+SayGM is available.
+
 ## Activity and errors
 The **Activity** bar under the chat (collapsed by default) shows the latest event and a red
 badge when something has failed. Expand it for recent activity (all, errors and warnings,

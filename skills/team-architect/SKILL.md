@@ -118,6 +118,10 @@ Owner approval needed before: <publishing, sending, deleting, spending, …>
 Day 1: …
 ```
 
+If the team's work is a routine (a morning brief, a weekly report), suggest a schedule for it:
+**Schedules** in the top bar, in this project, with the request as its prompt. Scheduled runs
+can't get approvals while they run, so they leave anything that needs one in their chat.
+
 ## Running a team (when TEAM.md exists)
 
 For a request in this project: read TEAM.md, follow its workflow step by step, and delegate each

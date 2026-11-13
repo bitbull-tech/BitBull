@@ -236,9 +236,12 @@ run more than one.
 macOS 13 (Ventura) or later, Apple Silicon or Intel. The same three containers as on Windows run
 in a Linux VM; `scripts/bitbull-mac/` does what `scripts/bitbull-wsl/` does there.
 
-**One command** (paste into Terminal): installs Homebrew and git if needed, downloads BitBull to
-`~/BitBull`, asks for your keys with the typing hidden and writes `.env`, then sets up and starts
-BitBull and opens it. Run it again to update; it keeps your keys.
+**One command** (paste into Terminal) is the whole install: it installs Homebrew and git if
+needed, downloads BitBull to `~/BitBull`, creates `.env` with a strong `APP_TOKEN`, sets up and
+starts BitBull, and opens it in your browser already signed in. It asks nothing, except your Mac
+password once if Homebrew has to be installed. BitBull's first screen then asks for the two things
+only you have: your SayGM key (pasted there) and Ditto (a sign-in, nothing to copy). Run it again
+to update; it keeps your settings.
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bitbull-tech/BitBull/main/scripts/bitbull-mac/install.sh)"
@@ -341,6 +344,29 @@ answer appears there, taken from the guide (the `bitbull-guide` skill reads the 
 suggestion and the page, your question and the conversation are there when you open it again.
 **Open as a chat** carries the conversation on in the main window, and you can also just ask in
 any chat: "how do I link a folder?" works the same way.
+
+## Schedules
+
+**Schedules** (top bar) runs a prompt on its own at set times: every weekday at 08:00, every two
+hours, Mondays and Thursdays at 18:30. Each schedule is a dedicated agent with its own chat
+(⏰ and its name), where every run lands, so each run can build on the last and you can read or
+reply to any of them. Put it in a project and it works with that project's files, instructions
+and `TEAM.md`, so a team can run on a timetable.
+
+Nobody is watching a scheduled run, and it is told so: anything that publishes, sends, deletes,
+spends or can't be undone is prepared and listed under **Waiting for your approval** in its chat,
+for you to approve there. A run never starts while the previous one is still going, the shortest
+interval is 15 minutes, and times follow your timezone across daylight-saving changes. Runs
+happen while BitBull is running; a run missed while it was off happens once when it starts again.
+**Run now** starts one straight away. A cheap, fast model is usually enough.
+
+## Usage
+
+The bar-chart button at the bottom of the sidebar opens **Usage**: estimated spend per day (hover
+a day to see which models it went on) and per model, with replies and tokens, over 7, 30 or 90
+days. The figures are BitBull's own estimates from SayGM's live prices at the time of each
+reply; your SayGM usage page is the bill. Your SayGM balance will show here once Sign in with
+SayGM is available.
 
 ## Activity and errors
 
@@ -791,6 +817,10 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
 | `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
+| `GET` / `POST` | `/api/schedules` | Schedules: list / create (`{ name, prompt, projectId, model, spec }`) |
+| `PATCH` / `DELETE` | `/api/schedules/:id` | Change (or pause with `enabled: false`) / delete a schedule; its chat is kept |
+| `POST` | `/api/schedules/:id/run` | Run a schedule now |
+| `GET` | `/api/usage?days=30&offset=60` | Estimated spend per day and per model (`offset`: minutes east of UTC) |
 | `GET` | `/api/compat` | Compatibility notices: SayGM or Ditto changes, lapsed keys, a newer BitBull (`?refresh=1` checks now) |
 | `GET` / `POST` | `/api/ditto/keys` | Provider keys in Ditto: list (metadata only) / save one via the Ditto CLI |
 | `PATCH` / `DELETE` | `/api/ditto/keys/:id` | Turn a provider key on or off / remove it |

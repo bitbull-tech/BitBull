@@ -145,7 +145,7 @@ export function describeSettings() {
       title: "Ditto",
       rows: [
         row("DITTO_API_KEY", "API key", config.ditto.apiKey, { secret: true, hint: "Your account key (Connect Ditto sets it). Archive, uploads, skill backups and model prices use it." }),
-        row("DITTO_REFERRAL_CODE", "Your referral code", config.ditto.referralCode, { hint: "The app owner's own Ditto referral code (like abcd-2345), for the signup link shown here." }),
+        row("DITTO_REFERRAL_CODE", "Your referral code", config.ditto.referralCode, { hint: "Your own Ditto referral code (like abcd-2345), for the signup link shown here. Empty: the link goes through bitbull.tech/ditto." }),
         row("DITTO_MCP_URL", "MCP server", config.ditto.mcpUrl),
         row("DITTO_ARCHIVE", "Archive every turn", config.ditto.archive, { hint: "turn = save each exchange; off = only facts the agent saves" }),
         row("DITTO_SOURCE", "Source label", config.ditto.source),

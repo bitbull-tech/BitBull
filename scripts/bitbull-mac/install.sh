@@ -4,22 +4,23 @@
 #
 #   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/bitbull-tech/BitBull/main/scripts/bitbull-mac/install.sh)"
 #
-# It takes care of the Terminal snags that trip people up on a Mac:
-#   - Homebrew: installs it if missing (asking first) and puts it on your PATH, for this window and
-#     for new ones (~/.zprofile), which Homebrew's installer leaves you to do by hand on Apple Silicon.
+# That one paste is the whole install. It asks nothing, except your Mac password once if
+# Homebrew has to be installed:
+#   - Homebrew: installed if missing and put on your PATH, for this window and for new ones
+#     (~/.zprofile), which Homebrew's installer leaves you to do by hand on Apple Silicon.
 #   - git: Apple's Command Line Tools come with Homebrew; nothing else to install.
-#   - Your keys: asked for here, with the typing hidden, and written into .env for you. No TextEdit,
-#     so no "smart quotes" or rich text creeping into the file, and no hunting for a hidden file.
-#     APP_TOKEN (your BitBull password) is made for you.
-#   - Then the usual setup.sh and start.sh --install-at-login, and BitBull opens in your browser.
+#   - .env: created for you, with a strong APP_TOKEN (your BitBull password). No file to edit.
+#   - Then setup.sh and start.sh --install-at-login, and BitBull opens in your browser already
+#     signed in. Its first screen asks for the two things only you have: your SayGM key (paste it
+#     there) and Ditto (a sign-in, nothing to copy).
 #
-# Run it again any time: it updates the code (git pull), keeps the keys already in .env, and only
-# asks for ones that are missing.
+# Run it again any time: it updates the code (git pull) and keeps everything already in .env.
 #
 #   ... --dir ~/code/BitBull     where to put BitBull (default ~/BitBull)
 #   ... --runtime docker         use the Docker Desktop / OrbStack you already run (default: Colima)
-#   ... --no-keys                don't ask for keys (an AI agent filling .env itself uses this)
-#   ... --no-start               stop after the keys; run setup.sh yourself later
+#   ... --ask-keys               ask for the SayGM and Ditto keys here in Terminal (typing hidden)
+#                                instead of on BitBull's first screen
+#   ... --no-start               stop once .env is ready; run setup.sh yourself later
 #
 # Written for the bash that ships with macOS (3.2). Prompts read from the terminal (/dev/tty), so
 # `curl … | bash` works too. Keys are never printed, logged or passed on a command line.
@@ -28,7 +29,7 @@ set -u
 
 DIR="$HOME/BitBull"
 RUNTIME=colima
-ASK_KEYS=1
+ASK_KEYS=0
 START=1
 REPO_URL="https://github.com/bitbull-tech/BitBull.git"
 BREW_INSTALL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
@@ -41,7 +42,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dir) DIR="${2:-}"; shift 2 ;;
     --runtime) RUNTIME="${2:-}"; shift 2 ;;
-    --no-keys) ASK_KEYS=0; shift ;;
+    --ask-keys) ASK_KEYS=1; shift ;;
+    --no-keys) ASK_KEYS=0; shift ;; # the default now; kept so older instructions still work
     --no-start) START=0; shift ;;
     -h|--help) sed -n '2,27p' "$0" 2>/dev/null || echo "See https://www.bitbull.tech/guide/mac"; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
@@ -71,23 +73,32 @@ say "Installing BitBull on macOS $(sw_vers -productVersion) ($(uname -m))"
 note "BitBull goes in: $DIR"
 
 # ---- 2. Homebrew, on the PATH now and in new Terminal windows ----
-brew_bin=""
-for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && { brew_bin="$b"; break; }; done
+find_brew() {
+  brew_bin=""
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && { brew_bin="$b"; break; }; done
+}
+find_brew
+NEW_BREW=0
 if [ -z "$brew_bin" ]; then
   say "Homebrew (the Mac's standard installer for developer tools) isn't installed"
-  note "BitBull uses it for git and Colima. Its installer will ask for your Mac login password;"
-  note "nothing shows while you type it. That is normal: type it and press Return."
-  ask_yes "Install Homebrew now?" || die "Homebrew is needed. Install it from https://brew.sh, then run this again."
-  /bin/bash -c "$(curl -fsSL "$BREW_INSTALL")" < "${TTY:-/dev/null}" || die "Homebrew's installer didn't finish. Run this again once it does."
-  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && { brew_bin="$b"; break; }; done
+  note "Installing it now: BitBull uses it for git and Colima. It needs your Mac login password"
+  note "once. Nothing shows while you type it; that is normal. Type it and press Return."
+  # The password once, here; Homebrew's installer then runs without its own "Press RETURN" stop.
+  if [ -n "$TTY" ]; then
+    sudo -v < "$TTY" || die "Homebrew needs an administrator account on this Mac (System Settings → Users & Groups)."
+  fi
+  NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$BREW_INSTALL")" < "${TTY:-/dev/null}" \
+    || die "Homebrew's installer didn't finish. Run this again once it does."
+  find_brew
   [ -n "$brew_bin" ] || die "Homebrew installed, but its brew command wasn't found."
+  NEW_BREW=1
 fi
 eval "$("$brew_bin" shellenv)"
-# New Terminal windows need it too (zsh reads ~/.zprofile; Apple Silicon's /opt/homebrew is not on
-# the default PATH). Added once, and only the line Homebrew itself recommends.
-line="eval \"\$($brew_bin shellenv)\""
-if ! grep -qsF "$line" "$HOME/.zprofile"; then
-  printf '\n%s\n' "$line" >> "$HOME/.zprofile"
+# New Terminal windows need it too on Apple Silicon (/opt/homebrew is not on the default PATH;
+# Intel's /usr/local/bin already is). Any existing shellenv line counts, whichever form Homebrew
+# printed, so following Homebrew's own instructions too never gives two.
+if [ "$brew_bin" = /opt/homebrew/bin/brew ] && ! grep -qs 'brew shellenv' "$HOME/.zprofile"; then
+  printf '\n%s\n' 'eval "$(/opt/homebrew/bin/brew shellenv zsh)"' >> "$HOME/.zprofile"
   note "Added Homebrew to ~/.zprofile, so new Terminal windows find it."
 fi
 
@@ -142,20 +153,29 @@ env_set() {
   mv -f "$tmp" .env || die "Couldn't write .env"
 }
 
-# ask_key KEY "what it is" "where to get it" → asks (hidden) until a plausible value is pasted
+# ask_key KEY "what it is" "where to get it" ["sign-up page"] → asks (hidden) until a plausible
+# value is pasted; typing o opens the sign-up page (or the key page) in the browser
 ask_key() {
   local key="$1" v
   [ -n "$(env_value "$key")" ] && { note "$key: already set, kept."; return; }
   if [ "$ASK_KEYS" = 0 ] || [ -z "$TTY" ]; then
-    note "$key: not set yet. Put it in $DIR/.env before starting BitBull."
-    MISSING=1
+    note "$key: BitBull's first screen will ask for it."
     return
   fi
+  local signup="${4:-$3}"
   printf '\n  \033[1m%s\033[0m: %s\n  Get it at %s\n' "$key" "$2" "$3" > "$TTY"
+  [ "$signup" = "$3" ] || printf '  No account yet? Sign up free first: %s\n' "$signup" > "$TTY"
+  printf '  Type o and press Return to open that in your browser.\n' > "$TTY"
   while :; do
     printf '  Paste it and press Return (it stays hidden): ' > "$TTY"
     IFS= read -rs v < "$TTY" || v=""
     printf '\n' > "$TTY"
+    case "$v" in
+      o|O)
+        open "$signup" >/dev/null 2>&1 || printf '  Open %s in your browser.\n' "$signup" > "$TTY"
+        [ "$signup" = "$3" ] || printf '  Once you are signed in, your key is at %s\n' "$3" > "$TTY"
+        continue ;;
+    esac
     # trim spaces a copy can bring along
     v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
     if [ -z "$v" ]; then
@@ -172,24 +192,27 @@ ask_key() {
   done
 }
 
-say "Your keys"
-note "They go into $DIR/.env on this Mac only, and are never shown on screen."
+say "Settings"
+note "Kept in $DIR/.env on this Mac only, and never shown on screen."
 MISSING=0
-if [ -z "$(env_value APP_TOKEN)" ]; then
+APP_TOKEN_NOW="$(env_value APP_TOKEN)"
+if [ -z "$APP_TOKEN_NOW" ]; then
   env_set APP_TOKEN "$(openssl rand -hex 32)" || die "Couldn't make an APP_TOKEN"
   note "APP_TOKEN: made a strong one for you (it's your BitBull password; see below)."
 else
   note "APP_TOKEN: already set, kept."
+  # Kept even if weak: changing it would sign out every browser and script that uses it
+  [ "${#APP_TOKEN_NOW}" -ge 32 ] || note "  It's short for a password (${#APP_TOKEN_NOW} characters). For a strong one: openssl rand -hex 32"
 fi
 ask_key SAYGM_API_KEY "one key for every AI model" "https://saygm.com"
-ask_key DITTO_API_KEY "BitBull's long-term memory" "https://heyditto.ai"
+ask_key DITTO_API_KEY "BitBull's long-term memory" "https://app.heyditto.ai/mcp" "https://www.bitbull.tech/ditto"
 
 if [ "$START" = 0 ]; then
-  say "Keys done. To set up BitBull later:"
+  say "Ready. To set up BitBull later:"
   note "cd \"$DIR\" && bash scripts/bitbull-mac/setup.sh"
   exit 0
 fi
-[ "$MISSING" = 0 ] || die "Some keys are still missing. When you have them, run this installer again: it only asks for the missing ones."
+[ "$MISSING" = 0 ] || note "A key was skipped: BitBull's first screen will ask for it."
 
 # ---- 6. Set up, start at login, open ----
 say "Setting up BitBull (the first time takes about 10 minutes)"
@@ -200,8 +223,31 @@ else
 fi
 bash scripts/bitbull-mac/start.sh --install-at-login || exit $?
 
+# start.sh has waited for BitBull to answer. Open it signed in: a private page (readable only by
+# you, gone in a few seconds) hands the browser the APP_TOKEN, so it is never on a command line
+# and there is nothing to copy. BitBull takes it out of the address bar at once.
 say "BitBull is running: http://localhost:8787"
-note "Sign in with your APP_TOKEN. To see it:   grep APP_TOKEN \"$DIR/.env\""
+token="$(env_value APP_TOKEN)"
+opened=0
+case "$token" in
+  ''|*[!A-Za-z0-9._~+/=-]*) ;;
+  *)
+    page="$(mktemp "${TMPDIR:-/tmp}/bitbull-open.XXXXXX")" && mv "$page" "$page.html" && page="$page.html" && chmod 600 "$page" &&
+      printf '<!doctype html><meta charset="utf-8"><title>Opening BitBull</title><script>location.replace("http://localhost:8787/#token=%s")</script>\n' "$token" > "$page" &&
+      open "$page" >/dev/null 2>&1 && opened=1
+    # removed even if this Terminal window is closed straight away
+    ( trap '' HUP; sleep 8; rm -f "$page" ) >/dev/null 2>&1 &
+    ;;
+esac
+if [ "$opened" = 1 ]; then
+  note "It's open in your browser, signed in. Its first screen asks for your SayGM key and Ditto sign-in."
+else
+  open "http://localhost:8787" >/dev/null 2>&1 || true
+  note "Sign in with your APP_TOKEN. To see it:   grep APP_TOKEN \"$DIR/.env\""
+fi
+note "On another browser or device, sign in with your APP_TOKEN:   grep APP_TOKEN \"$DIR/.env\""
 note "Open a new Terminal window for later commands, or run:  cd \"$DIR\""
+if [ "$NEW_BREW" = 1 ] && [ "$brew_bin" = /opt/homebrew/bin/brew ]; then
+  note "To use brew in this same window now, paste:  eval \"\$(/opt/homebrew/bin/brew shellenv zsh)\""
+fi
 note "Guide: https://www.bitbull.tech/guide/mac"
-open "http://localhost:8787" >/dev/null 2>&1 || true

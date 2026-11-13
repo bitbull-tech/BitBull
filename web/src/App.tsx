@@ -6,11 +6,14 @@ import { Chat } from './Chat'
 import { SwarmDialog, SwarmPill } from './SwarmDialog'
 import { SwarmTheatre } from './SwarmTheatre'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
-import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck, IconHelp } from './icons'
+import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck, IconHelp, IconClock, IconBars } from './icons'
 import { ProjectDialog } from './ProjectDialog'
 import { FilesDialog } from './FilesDialog'
 import { HelpDialog } from './HelpDialog'
+import { SchedulesDialog } from './SchedulesDialog'
+import { UsageDialog } from './UsageDialog'
 import { CompatBanner } from './CompatBanner'
+import { FirstRun } from './FirstRun'
 import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
@@ -44,6 +47,15 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
 
   const boot = useCallback(async () => {
+    // An installer opens BitBull at /#token=<APP_TOKEN> so a new install is signed in without
+    // typing it. The fragment never reaches a server; it is removed from the address at once,
+    // and only kept if this BitBull accepts it (a stray link can't sign anyone out).
+    const fromLink = /^#token=([A-Za-z0-9._~+/=-]{16,200})$/.exec(window.location.hash)?.[1]
+    if (fromLink) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      const ok = await fetch('/api/config', { headers: { authorization: `Bearer ${fromLink}` } }).then((r) => r.ok, () => false)
+      if (ok) setToken(fromLink)
+    }
     try {
       setCfg(await api.config())
       setAuthed(true)
@@ -211,6 +223,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [navOpen, setNavOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [schedulesOpen, setSchedulesOpen] = useState(false)
+  const [usageOpen, setUsageOpen] = useState(false)
   const [projectDialog, setProjectDialog] = useState<Project | 'new' | null>(null)
   // Files dialog: a project, or 'general' for the workspace of unfiled chats
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
@@ -735,6 +749,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           >
             {resolved === 'dark' ? <IconSun /> : <IconMoon />}
           </button>
+          <button className="icon-btn" title="Usage: estimated spend per day and per model" onClick={() => setUsageOpen(true)}>
+            <IconBars />
+          </button>
           <button className="icon-btn" title="Help: how BitBull works" onClick={() => setHelpOpen(true)}>
             <IconHelp />
           </button>
@@ -748,6 +765,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
 
       <main className="main">
         <CompatBanner onOpenSettings={() => setSettingsOpen(true)} />
+        <FirstRun cfg={cfg} onSaygmReady={() => void loadModels()} />
         <header className="topbar">
           <button className="icon-btn menu" onClick={() => setNavOpen(true)} aria-label="Open chats">
             <IconMenu />
@@ -786,6 +804,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             onClick={() => setBrowsingModels(true)}
           >
             <IconChip size={14} /> Models
+          </button>
+          <button className="btn files-btn" title="Schedules: prompts BitBull runs on its own at set times, each in its own chat" onClick={() => setSchedulesOpen(true)}>
+            <IconClock size={14} /> Schedules
           </button>
           {swarm && swarm.sessionId === active?.id ? (
             <SwarmPill
@@ -833,6 +854,23 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
       <SelectionAsk />
 
+      {schedulesOpen && (
+        <SchedulesDialog
+          projects={projects}
+          models={models}
+          defaultModel={model}
+          projectId={currentProject?.id ?? null}
+          onClose={() => setSchedulesOpen(false)}
+          onOpenChat={(id) => {
+            setSchedulesOpen(false)
+            void refreshSessions()
+            setActiveId(id)
+            setViewKey(id)
+            setNavOpen(false)
+          }}
+        />
+      )}
+      {usageOpen && <UsageDialog models={models} onClose={() => setUsageOpen(false)} />}
       {helpOpen && (
         <HelpDialog
           onClose={() => setHelpOpen(false)}

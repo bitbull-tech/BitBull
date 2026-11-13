@@ -156,7 +156,10 @@ Router model when background work runs on the Router, otherwise as SayGM's small
 Before Connect, Settings → Integrations → Ditto shows **Create a Ditto account**. Set
 `DITTO_REFERRAL_CODE` (`.env` or Settings) to the BitBull app developer's own Ditto referral code
 (like `abcd-2345`) and the link becomes Ditto's `https://heyditto.ai/r/<code>`, so signups count
-for them. The server builds it at runtime; empty or malformed gives a plain signup link.
+for them. The server builds it at runtime. Empty or malformed, the link is
+`https://www.bitbull.tech/ditto`, which the website redirects to Ditto's sign-up with BitBull's own
+code (set in the website's `lib/site.ts`). The Mac installer, the guides and the agent playbook
+send people without a Ditto account to the same address.
 
 ## Ditto Review on a branch
 
