@@ -7,7 +7,7 @@
  * your working files aren't touched), or apply the files to the folder. Declining changes nothing.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { api, type FolderChange, type FolderChangeDetail } from './api'
+import { api, type FolderChange, type FolderChangeDetail, type FolderChangeFile } from './api'
 import { onLiveActivity, reportLocal } from './activity'
 import { IconFile, IconFolder } from './icons'
 import { applyChange, helperStatus, onThisPc, HELPER_HINT, type HelperLink } from './linkHelper'
@@ -49,6 +49,9 @@ function useFolderChanges() {
     () => state,
   )
 }
+
+/** The list for the card has no diffs; the detail fetched for an open card has. */
+const diffOf = (f: FolderChangeFile & { diff?: string }) => f.diff
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
@@ -125,8 +128,8 @@ function Card({ c, onOpenSession }: { c: FolderChange; onOpenSession?: (id: stri
             </button>
             {open === f.path && (
               <pre className="fc-diff">
-                {'diff' in f && f.diff
-                  ? f.diff.split('\n').map((l, i) => (
+                {diffOf(f)
+                  ? diffOf(f)!.split('\n').map((l, i) => (
                       <span key={i} className={l.startsWith('+') ? 'fc-add' : l.startsWith('-') ? 'fc-del' : ''}>
                         {l}
                         {'\n'}
