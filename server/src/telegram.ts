@@ -27,6 +27,7 @@ import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { record } from "./activity.js";
 import { config } from "./config.js";
 import { db, sessions } from "./db.js";
+import { chatModels, type ModelInfo } from "./models.js";
 import { abortTurn, activeTurnId, collectTurn, startTurn } from "./turns.js";
 
 // ---------- small pieces ----------
@@ -257,18 +258,72 @@ const HELP = [
   "",
   "/new  start a fresh chat",
   "/stop  stop what it is doing",
+  "/model  which model this chat uses; /model <name> changes it",
+  "/models <word>  list models matching a word",
   "/help  this message",
   "",
   "Text only for now. Anything that publishes, sends, deletes or spends waits for your approval in BitBull.",
 ].join("\n");
 
 function chatSession(fresh = false) {
-  const id = fresh ? undefined : meta.get(SESSION_KEY);
+  const id = meta.get(SESSION_KEY);
   const existing = id ? sessions.get(id) : undefined;
-  if (existing && !existing.archived_at) return existing;
-  const s = sessions.create({ title: "Telegram", engine: config.agent.defaultEngine, model: config.agent.defaultModel, projectId: null });
+  if (!fresh && existing && !existing.archived_at) return existing;
+  // a fresh chat keeps the model you chose for the last one
+  const s = sessions.create({ title: "Telegram", engine: existing?.engine ?? config.agent.defaultEngine, model: existing?.model ?? config.agent.defaultModel, projectId: null });
   meta.set(SESSION_KEY, s.id);
   return s;
+}
+
+// ---------- choosing the model from the phone ----------
+
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/**
+ * Models a few typed words could mean: the exact id or name if there is one, else every model
+ * whose id or name contains all the words ("deepseek flash" finds deepseek-v4.1-flash).
+ */
+export function matchModels(all: ModelInfo[], query: string): ModelInfo[] {
+  const q = query.trim();
+  if (!q) return [];
+  const exact = all.filter((m) => m.id.toLowerCase() === q.toLowerCase() || m.name.toLowerCase() === q.toLowerCase());
+  if (exact.length) return exact;
+  const whole = all.filter((m) => squash(m.id) === squash(q) || squash(m.name) === squash(q));
+  if (whole.length) return whole;
+  const words = q.toLowerCase().split(/\s+/).map(squash).filter(Boolean);
+  return all.filter((m) => {
+    const hay = `${squash(m.id)} ${squash(m.name)}`;
+    return words.every((w) => hay.includes(w));
+  });
+}
+
+const modelLine = (m: ModelInfo) => (m.name && m.name !== m.id ? `${m.id}  (${m.name})` : m.id);
+const MAX_LISTED = 25;
+
+async function modelCommand(tok: string, chatId: number, cmd: "model" | "models", arg: string) {
+  const session = chatSession();
+  const all = await chatModels().catch(() => [] as ModelInfo[]);
+  if (!all.length) return send(tok, chatId, `This chat uses ${session.model}. I couldn't load the model list just now, so it can't be changed from here; try again in a minute.`);
+  // the Claude engine only runs models served the Anthropic way
+  const usable = session.engine === "claude" ? all.filter((m) => m.api === "anthropic" || m.gateway === "ditto-router") : all;
+
+  if (cmd === "model" && !arg) {
+    return send(tok, chatId, `This chat uses ${session.model}.\n\nTo change it: /model <name>, for example /model deepseek flash. /models <word> lists what matches.`);
+  }
+  const found = arg ? matchModels(usable, arg) : usable;
+  if (cmd === "models" || found.length !== 1) {
+    if (!found.length) return send(tok, chatId, `No model matches “${arg.slice(0, 60)}”. Try one word, like /models deepseek.`);
+    if (cmd === "models" && !arg && found.length > MAX_LISTED) return send(tok, chatId, `${found.length} models are available: too many to list. Narrow it with a word, like /models claude or /models flash.\n\nThis chat uses ${session.model}.`);
+    const lines = found.slice(0, MAX_LISTED).map(modelLine);
+    const more = found.length > MAX_LISTED ? `\n…and ${found.length - MAX_LISTED} more. Add a word to narrow it.` : "";
+    return send(tok, chatId, `${cmd === "model" ? `${found.length} models match. Send /model with one of these:\n\n` : ""}${lines.join("\n")}${more}`);
+  }
+  const m = found[0];
+  if (m.id === session.model) return send(tok, chatId, `This chat already uses ${m.id}.`);
+  if (activeTurnId(session.id)) return send(tok, chatId, "It's still working on your last message. Send /stop first, or wait, then change the model.");
+  sessions.update(session.id, { model: m.id });
+  record({ level: "info", source: "telegram", message: `Telegram chat's model changed to ${m.id}`, sessionId: session.id, sessionTitle: session.title });
+  return send(tok, chatId, `Done. This chat now uses ${modelLine(m)}, here and in BitBull.`);
 }
 
 /** Messages older than this when they arrive (BitBull was off) are not run. */
@@ -310,6 +365,7 @@ async function ownerMessage(tok: string, m: TgMessage) {
     const cur = meta.get(SESSION_KEY);
     return send(tok, chatId, cur && abortTurn(cur) ? "Stopped." : "Nothing was running.");
   }
+  if (cmd === "model" || cmd === "models") return modelCommand(tok, chatId, cmd, text.replace(/^\/\S+\s*/, ""));
   if (cmd) return send(tok, chatId, `I don't know /${cmd}.\n\n${HELP}`);
 
   const session = chatSession();

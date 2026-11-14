@@ -27,11 +27,16 @@ address.
 | any text | BitBull runs it as a turn in the **Telegram** chat and replies when it has finished |
 | `/new` | starts a fresh chat (the old one stays in BitBull) |
 | `/stop` | stops what it is doing |
+| `/model` | says which model this chat uses |
+| `/model deepseek flash` | changes it: a few words of the name are enough; if several models match, it lists them and changes nothing |
+| `/models claude` | lists the models matching a word |
 | `/help` | the list above |
 
 The Telegram chat is an ordinary chat in BitBull's sidebar: what you say from the phone and what
 it answers are both there, with the tool calls and costs, and you can carry on from either side.
-It uses your default engine and model; change the chat's model in BitBull like any other chat.
+A Telegram chat starts on your default engine and model (Settings → Configuration), not on
+whichever model you last picked in a chat on screen. Change it from the phone with `/model`, or
+in BitBull like any other chat; `/new` keeps the model you chose.
 
 **Schedules:** tick **Send each result to my Telegram** on a schedule and the summary of every
 run arrives on your phone. The run itself still lands in the schedule's own chat.

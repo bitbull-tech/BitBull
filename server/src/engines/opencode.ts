@@ -86,6 +86,8 @@ const reviewReady = () => !!config.router.reviewKey && !!cachedRouterReview()?.s
 let server: Running | null = null;
 let starting: Promise<Running> | null = null;
 const listeners = new Map<string, Set<Listener>>();
+/** The directory each followed session runs in: its events are taken from that directory's stream only. */
+const sessionDir = new Map<string, string>();
 let activeRuns = 0;
 
 function providerFor(m: Pick<ModelInfo, "api" | "gateway">, review = false): Provider {
@@ -297,6 +299,48 @@ async function start(force = false): Promise<Running> {
   }
 }
 
+/**
+ * A reply's text reaches us two ways, depending on the OpenCode version and the model's API:
+ * "delta" events (just the words added) and "updated" events (the part's whole text so far,
+ * sometimes with the delta as well). Some streams send both for the same chunk. Adding them up
+ * says every few words twice ("Yes.Yes. This conversation This conversation"), so this keeps
+ * count per part and returns only what hasn't been sent:
+ *
+ *  - the whole text in an "updated" event is the truth: send whatever of it is new;
+ *  - once a part's whole text is arriving that way, its "delta" events are ignored;
+ *  - a part that only ever gets deltas streams from those, as before.
+ *
+ * Either order of the two events for one chunk gives the chunk once.
+ */
+export function textStream() {
+  const sentLen = new Map<string, number>();
+  const whole = new Set<string>();
+  let warned = false;
+  const add = (id: string, text: string) => {
+    if (text) sentLen.set(id, (sentLen.get(id) ?? 0) + text.length);
+    return text;
+  };
+  return {
+    sent: (id: string) => sentLen.get(id) ?? 0,
+    delta(id: string, delta: string): string {
+      return whole.has(id) ? "" : add(id, delta);
+    },
+    updated(id: string, text: unknown, delta?: unknown): string {
+      const seen = sentLen.get(id) ?? 0;
+      if (typeof text === "string" && text.length > 0) {
+        whole.add(id);
+        if (text.length > seen) return add(id, text.slice(seen));
+        if (text.length < seen && !warned) {
+          warned = true;
+          console.warn(`[opencode] more text was streamed for a part than it holds (${seen} sent, ${text.length} in it): a chunk may have arrived twice`);
+        }
+        return "";
+      }
+      return typeof delta === "string" ? add(id, delta) : "";
+    },
+  };
+}
+
 /** OpenCode scopes events to a directory (= project workspace): one stream per directory in use. */
 const pumped = new Set<string>();
 function ensurePump(client: OpencodeClient, directory: string) {
@@ -313,6 +357,9 @@ async function pumpEvents(client: OpencodeClient, directory: string) {
         const sid: string | undefined =
           ev.properties?.sessionID ?? ev.properties?.info?.sessionID ?? ev.properties?.part?.sessionID;
         if (!sid) continue;
+        // one event must reach a turn once: if two streams ever carry it, only the session's own counts
+        const own = sessionDir.get(sid);
+        if (own !== undefined && own !== directory) continue;
         listeners.get(sid)?.forEach((fn) => fn(ev));
       }
     } catch (err) {
@@ -418,7 +465,7 @@ export const opencodeEngine: AgentEngine = {
     const out = channel<AgentEvent>();
     const userMsgs = new Set<string>();
     const partKind = new Map<string, string>();
-    const emitted = new Map<string, number>();
+    const stream = textStream();
     const toolsStarted = new Set<string>();
     let usage: Usage = {};
 
@@ -430,7 +477,6 @@ export const opencodeEngine: AgentEngine = {
         if (lastTextPart && lastTextPart !== partID) out.push({ type: "text", delta: "\n\n" });
         lastTextPart = partID;
       }
-      emitted.set(partID, (emitted.get(partID) ?? 0) + delta.length);
       out.push(kind === "reasoning" ? { type: "thinking", delta } : { type: "text", delta });
     };
 
@@ -483,7 +529,7 @@ export const opencodeEngine: AgentEngine = {
         }
         case "message.part.delta": {
           if (userMsgs.has(p.messageID) || (p.field && p.field !== "text")) break;
-          emitText(p.partID, partKind.get(p.partID) ?? "text", p.delta ?? "");
+          emitText(p.partID, partKind.get(p.partID) ?? "text", stream.delta(p.partID, p.delta ?? ""));
           break;
         }
         case "message.part.updated": {
@@ -492,10 +538,8 @@ export const opencodeEngine: AgentEngine = {
           partKind.set(part.id, part.type);
           if (part.type === "text" || part.type === "reasoning") {
             if (part.synthetic) break;
-            const seen = emitted.get(part.id) ?? 0;
-            if (seen === 0 && part.text === input.prompt) break; // echo of our own prompt
-            if (typeof p.delta === "string" && p.delta) emitText(part.id, part.type, p.delta);
-            else if (part.text.length > seen) emitText(part.id, part.type, part.text.slice(seen));
+            if (stream.sent(part.id) === 0 && part.text === input.prompt) break; // echo of our own prompt
+            emitText(part.id, part.type, stream.updated(part.id, part.text, p.delta));
           } else if (part.type === "tool") {
             const st = part.state;
             if (!toolsStarted.has(part.callID) && st.status !== "pending") {
@@ -570,10 +614,12 @@ export const opencodeEngine: AgentEngine = {
         if (grandchild && !children.has(grandchild)) followChild(grandchild, parentCall);
       };
       children.set(childSid, fn);
+      sessionDir.set(childSid, input.cwd);
       if (!listeners.has(childSid)) listeners.set(childSid, new Set());
       listeners.get(childSid)!.add(fn);
     };
 
+    sessionDir.set(sid, input.cwd);
     if (!listeners.has(sid)) listeners.set(sid, new Set());
     listeners.get(sid)!.add(onEvent);
     // never fire-and-forget: an unresponsive engine rejecting here is an unhandled rejection,
@@ -625,7 +671,12 @@ export const opencodeEngine: AgentEngine = {
       listeners.get(sid)?.delete(onEvent);
       for (const [c, fn] of children) listeners.get(c)?.delete(fn);
       // drop empty sets so the map doesn't grow by one key per session for the life of the process
-      for (const k of [sid, ...children.keys()]) if (listeners.get(k)?.size === 0) listeners.delete(k);
+      for (const k of [sid, ...children.keys()]) {
+        if (listeners.get(k)?.size === 0) {
+          listeners.delete(k);
+          sessionDir.delete(k);
+        }
+      }
     }
   },
 };

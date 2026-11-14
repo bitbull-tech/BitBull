@@ -380,7 +380,9 @@ Nothing has to reach your computer from the internet: BitBull calls out to Teleg
 no port to open and no tunnel.
 
 Send the bot any text and BitBull runs it and replies. `/new` starts a fresh chat, `/stop` stops
-what it is doing, `/help` lists these. The conversation is the **Telegram** chat in BitBull's
+what it is doing, `/model` shows which model the chat uses and `/model deepseek flash` changes
+it (`/models claude` lists what matches a word), `/help` lists these. A new Telegram chat starts
+on your default model (Settings → Configuration), not on whichever model a chat on screen uses. The conversation is the **Telegram** chat in BitBull's
 sidebar, so you can read it or carry on from either side. On a schedule, tick **Send each
 result to my Telegram** to get every run's summary on your phone.
 

@@ -27,10 +27,16 @@ let nextUpdate = 100;
 let conflict = false;
 const seenTokens = new Set<string>();
 
+const MODELS = ["test-model", "kimi-k3", "deepseek-v4.1-flash", "deepseek-v4.1-pro", "claude-sonnet-4-5"];
 const api = createServer((req, res) => {
   let raw = "";
   req.on("data", (d) => (raw += d));
   req.on("end", () => {
+    // the model list, as SayGM serves it (for /model)
+    if (req.url === "/v1/models") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ data: MODELS.map((id) => ({ id, api_shapes: ["chat.completions"] })) }));
+    }
     const m = /^\/bot([^/]+)\/(\w+)$/.exec(req.url ?? "");
     const reply = (code: number, body: unknown) => {
       res.writeHead(code, { "content-type": "application/json" });
@@ -63,6 +69,9 @@ process.env.DITTO_API_KEY = "";
 process.env.SQLITE_JOURNAL = "DELETE";
 process.env.TELEGRAM_API_URL = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
 process.env.TELEGRAM_BOT_TOKEN = TOKEN;
+process.env.SAYGM_API_KEY = "gm_test_key_for_the_stand_in";
+process.env.SAYGM_OPENAI_BASE_URL = `http://127.0.0.1:${(api.address() as AddressInfo).port}/v1`;
+process.env.DEFAULT_MODEL = "kimi-k3";
 process.env.NO_PROXY = "127.0.0.1,localhost";
 process.env.no_proxy = "127.0.0.1,localhost";
 
@@ -235,6 +244,53 @@ test("commands: /new starts a fresh chat, /stop stops a running turn, a second m
 
   push(msg(OWNER, "/help"), msg(OWNER, "/frobnicate"), msg(OWNER, undefined));
   await until(() => texts().some((t) => t.startsWith("I don't know /frobnicate")) && texts().some((t) => t.startsWith("Text only")), "help and text-only");
+});
+
+test("/model shows the chat's model, changes it by a few words, and a fresh chat keeps it", async () => {
+  sent.length = 0;
+  const current = () => sessions.get((db.prepare("SELECT value FROM meta WHERE key = 'telegram_session'").get() as { value: string }).value)!;
+  assert.equal(current().model, "kimi-k3", "a Telegram chat starts on the default model");
+
+  push(msg(OWNER, "/model"));
+  await until(() => texts().some((t) => t.startsWith("This chat uses kimi-k3.")), "/model answered");
+
+  push(msg(OWNER, "/model deepseek"));
+  await until(() => texts().some((t) => t.startsWith("2 models match")), "ambiguous name lists the matches");
+  assert.equal(current().model, "kimi-k3", "nothing changes until one model is named");
+  assert.ok(texts().at(-1)!.includes("deepseek-v4.1-flash") && texts().at(-1)!.includes("deepseek-v4.1-pro"));
+
+  push(msg(OWNER, "/model deepseek v41 flash"));
+  await until(() => texts().some((t) => t.startsWith("Done. This chat now uses deepseek-v4.1-flash")), "model changed");
+  assert.equal(current().model, "deepseek-v4.1-flash");
+
+  // the next message runs on it
+  let usedModel = "";
+  engines.opencode = {
+    id: "opencode",
+    label: "Fake",
+    async *run(input: { prompt: string; model: string }) {
+      prompts.push(input.prompt);
+      usedModel = input.model;
+      yield { type: "text", delta: "ok" } as AgentEvent;
+      yield { type: "done", engineSessionId: "e" } as AgentEvent;
+    },
+  } as unknown as (typeof engines)["opencode"];
+  push(msg(OWNER, "hello"));
+  await until(() => texts().includes("ok"), "reply on the new model");
+  assert.equal(usedModel, "deepseek-v4.1-flash");
+
+  push(msg(OWNER, "/model nonsense-9000"));
+  await until(() => texts().some((t) => t.startsWith("No model matches")), "unknown model");
+  push(msg(OWNER, "/models claude"));
+  await until(() => texts().some((t) => t.startsWith("claude-sonnet-4-5")), "/models lists matches");
+  push(msg(OWNER, "/new"));
+  await until(() => texts().some((t) => t.startsWith("Fresh chat")), "/new");
+  assert.equal(current().model, "deepseek-v4.1-flash", "a fresh chat keeps the chosen model");
+  // strangers can't change it
+  push(msg(STRANGER, "/model kimi-k3"));
+  await drained();
+  assert.equal(current().model, "deepseek-v4.1-flash");
+  assert.equal(texts(STRANGER).length, 0);
 });
 
 test("a message that arrives long after it was sent is not run", async () => {
