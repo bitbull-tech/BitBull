@@ -31,7 +31,7 @@ Every command that changes something needs `--task <tag>` and `--op <name>`.
 2. `account` shows the key's scopes, cap and what is left. `catalog` shows sizes, rates and network modes.
 3. `quote --size sealed-1x2 --lifetime 300` prints the hold (`hold_usd`) at today's rate.
 4. Tell the user and wait for a yes. Then `create --task T --op create --size sealed-1x2 --lifetime 300 --max-spend <hold_usd>`. The helper refuses a spend above the user's limit or above what the key has left. It refuses a key with no cap unless the user turned that on.
-5. Work: `exec <id> --task T --op exec1 --cmd '<shell string>'` (up to 45 s), or `exec-bg <id> --task T --op bg1 --timeout 600 --cmd '...'` then `exec-wait <id> --exec <exec_id>` for longer jobs (at most 1800 s). `put <id> --task T --op putfile --src local --path /root/x` and `get <id> --path /root/x --out local` move files (200 MiB at most).
+5. Work: `exec <id> --task T --op exec1 --cmd '<shell string>'` (up to 45 s), or `exec-bg <id> --task T --op bg1 --timeout 600 --cmd '...'` then `exec-wait <id> --exec <exec_id>` for longer jobs (at most 1800 s). `put <id> --task T --op putfile --src local --path /work/x` and `get <id> --path /work/x --out local` move files (200 MiB at most). Files move under `/work` only; commands can read and write anywhere, so copy results into `/work` before `get`.
 6. `delete <id> --task T --op del` when done. It waits until the sandbox is deleted and prints the final receipt head.
 7. `receipts <id>` and `verify <id>` show the receipt chain.
 
