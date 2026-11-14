@@ -18,6 +18,15 @@ import { BrandMark } from './BrandMark'
 import { getBrand } from './brand'
 import mascot from './assets/bitbull-arms-folded.webp'
 
+/** Long text pasted into the composer is sent as this attachment (server/src/pasted.ts). */
+const PASTED_NAME = 'pasted-text.txt'
+const isPastedFile = (f: File) => f.name === PASTED_NAME && f.type === 'text/plain'
+/** how many characters each pasted attachment holds (a File only knows its bytes) */
+const pastedChars = new WeakMap<File, number>()
+const isPastedPath = (p: string) => /^uploads\/[^/]+\/pasted-text(-\d+)?\.txt$/.test(p)
+/** Long enough to bury the conversation: about a screenful of text. */
+const isLongPaste = (text: string) => text.length > 2500 || text.split('\n').length > 50
+
 const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘⇧Space' : 'Ctrl+Shift+Space'
 const VOICE_HINT: Record<string, string> = {
   listening: 'Listening… just talk',
@@ -286,6 +295,22 @@ export function Chat({
     }
   }
 
+  // a pasted attachment being read: one waiting to be sent (its File) or one already sent (its path)
+  const [pastedView, setPastedView] = useState<{ name: string; text: string | null; pendingIndex?: number } | null>(null)
+  const openPending = (f: File, i: number) => {
+    setPastedView({ name: f.name, text: null, pendingIndex: i })
+    void f.text().then((text) => setPastedView((v) => (v && v.pendingIndex === i ? { ...v, text } : v)))
+  }
+  const openSent = (path: string) => {
+    if (!session) return
+    const name = path.split('/').pop() ?? path
+    setPastedView({ name, text: null })
+    void api.pastedText(session.id, path).then(
+      (r) => setPastedView((v) => (v && v.name === name ? { ...v, text: r.text } : v)),
+      () => setPastedView((v) => (v && v.name === name ? { ...v, text: 'This pasted text is no longer available.' } : v)),
+    )
+  }
+
   const addFiles = (list: FileList | File[] | null) => {
     if (!list) return
     const arr = Array.from(list)
@@ -377,6 +402,7 @@ export function Chat({
     if (!outputs?.files.length) return m
     const replies = msgs.filter((x) => x.role === 'assistant' && !x.streaming)
     for (const f of outputs.files) {
+      if (isPastedPath(f.path)) continue // what you pasted is your attachment, not a file the reply made
       const r = replies.find((x) => x.at !== undefined && x.at >= f.turn.start) ?? replies[replies.length - 1]
       if (r) m.set(r.id, [...(m.get(r.id) ?? []), f])
     }
@@ -461,6 +487,7 @@ export function Chat({
                 prompt={m.role === 'assistant' ? prevUserMsg(msgs, i) : undefined}
                 files={filesByMsg.get(m.id)}
                 filesAt={outputs}
+                onOpenPasted={openSent}
               />
             ))}
           </div>
@@ -502,8 +529,16 @@ export function Chat({
                 </span>
               ))}
               {pending.map((f, i) => (
-                <span className="chip" key={`${f.name}-${i}`}>
-                  <IconFile size={13} /> {f.name}
+                <span className={`chip ${isPastedFile(f) ? 'pasted' : ''}`} key={`${f.name}-${i}`}>
+                  {isPastedFile(f) ? (
+                    <button type="button" className="chip-open" title="Read what you pasted, or put it back into the message" onClick={() => openPending(f, i)}>
+                      <IconFile size={13} /> Pasted text · {(pastedChars.get(f) ?? f.size).toLocaleString()} characters
+                    </button>
+                  ) : (
+                    <>
+                      <IconFile size={13} /> {f.name}
+                    </>
+                  )}
                   <button type="button" onClick={() => setPending((p) => p.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>
                     <IconX size={12} />
                   </button>
@@ -519,6 +554,16 @@ export function Chat({
               if (e.clipboardData.files.length) {
                 e.preventDefault()
                 addFiles(e.clipboardData.files)
+                return
+              }
+              // a long paste becomes an attachment, so the conversation stays readable; the model still gets every word
+              const text = e.clipboardData.getData('text/plain')
+              if (isLongPaste(text)) {
+                e.preventDefault()
+                const file = new File([text], PASTED_NAME, { type: 'text/plain', lastModified: Date.now() })
+                pastedChars.set(file, text.length)
+                addFiles([file])
+                setNotice('That was long, so it is attached as pasted text. Click it to read it or to put it in the message instead.')
               }
             }}
             onKeyDown={(e) => {
@@ -629,6 +674,45 @@ export function Chat({
         </form>
         {dragging && <div className="dropzone">Drop files or folders to attach</div>}
       </div>
+      {pastedView && (
+        <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && setPastedView(null)}>
+          <div className="modal pasted-modal" role="dialog" aria-label="Pasted text">
+            <header className="modal-head">
+              <h2>
+                Pasted text{pastedView.text !== null ? ` · ${pastedView.text.length.toLocaleString()} characters` : ''}
+              </h2>
+              <button className="icon-btn" onClick={() => setPastedView(null)} aria-label="Close">
+                <IconX />
+              </button>
+            </header>
+            <div className="modal-body">
+              <pre>{pastedView.text ?? 'Loading…'}</pre>
+              <div className="row-actions">
+                {pastedView.text !== null && (
+                  <button className="btn" onClick={() => void navigator.clipboard.writeText(pastedView.text ?? '').catch(() => {})}>
+                    Copy
+                  </button>
+                )}
+                {pastedView.pendingIndex !== undefined && pastedView.text !== null && (
+                  <button
+                    className="btn"
+                    title="Type it into the message box instead of attaching it"
+                    onClick={() => {
+                      const i = pastedView.pendingIndex!
+                      setInput((cur) => (cur ? `${cur}\n${pastedView.text}` : (pastedView.text ?? '')))
+                      setPending((p) => p.filter((_, j) => j !== i))
+                      setPastedView(null)
+                      setNotice(null)
+                    }}
+                  >
+                    Put it in the message instead
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -705,8 +789,11 @@ function MessageView({
   prompt,
   files,
   filesAt,
+  onOpenPasted,
 }: {
   m: ViewMessage
+  /** open a pasted-text attachment of a sent message */
+  onOpenPasted?: (path: string) => void
   sessionId?: string
   prompt?: ViewMessage
   files?: OutputFile[]
@@ -735,12 +822,18 @@ function MessageView({
           {m.content}
           {m.attachments && m.attachments.length > 0 && (
             <div className="chips in-bubble">
-              {m.attachments.map((a) => (
-                <span className={`chip ${a.startsWith('links/') ? 'linked' : ''}`} key={a}>
-                  {a.startsWith('links/') ? <IconLock size={13} /> : <IconFile size={13} />} {a.split('/').pop()}
-                  {a.startsWith('links/') ? ' (read-only)' : ''}
-                </span>
-              ))}
+              {m.attachments.map((a) =>
+                isPastedPath(a) && onOpenPasted ? (
+                  <button type="button" className="chip pasted" key={a} title="Read what was pasted" onClick={() => onOpenPasted(a)}>
+                    <IconFile size={13} /> Pasted text
+                  </button>
+                ) : (
+                  <span className={`chip ${a.startsWith('links/') ? 'linked' : ''}`} key={a}>
+                    {a.startsWith('links/') ? <IconLock size={13} /> : <IconFile size={13} />} {a.split('/').pop()}
+                    {a.startsWith('links/') ? ' (read-only)' : ''}
+                  </span>
+                ),
+              )}
             </div>
           )}
         </div>

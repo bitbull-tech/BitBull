@@ -119,6 +119,6 @@ this; `settings.local.json` and `vault.json` stay owner-only.
   click, and sends only to BitBull on this computer. See
   [browser-extension/README.md](https://github.com/bitbull-tech/BitBull/blob/main/browser-extension/README.md).
 
-The model picker filters by maker (tick any number) and sorts by name, price or speed. The ⚡
+The model picker filters by maker (tick any number) and sorts by name, price or speed. With Ditto connected, **All / SayGM / Ditto Router** above the list (and in the Models view) shows the models from one or the other. The ⚡
 figure is the typical time to the first word of a reply, measured from your own recent replies
 on that model.

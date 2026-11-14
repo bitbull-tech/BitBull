@@ -415,13 +415,26 @@ yes; and in scheduled runs or over Telegram it only reads and drafts. Your Leadp
 stays on the server and is never given to the agent. More in
 [docs/LEADPOET.md](docs/LEADPOET.md).
 
+## Long pastes become attachments
+
+Paste more than about a screenful of text into the message box (2,500 characters or 50 lines) and
+it is attached as **Pasted text** instead of filling the conversation. The model still gets every
+word, in the same message. Click the attachment to read it again, before or after sending, or to
+put it back into the message as typed text. **Search chats** in the sidebar looks through what
+was said and what was pasted, not only titles, and shows the matching words under the chat.
+
 ## Usage
 
 The bar-chart button at the bottom of the sidebar opens **Usage**: estimated spend per day (hover
 a day to see which models it went on) and per model, with replies and tokens, over 7, 30 or 90
 days. The figures are BitBull's own estimates from SayGM's live prices at the time of each
-reply; your SayGM usage page is the bill. Your SayGM balance will show here once Sign in with
-SayGM is available.
+reply; your SayGM usage page is the bill.
+
+At the top are your balances, read with the keys BitBull already holds (nothing to sign in to):
+your **SayGM balance**, and for **Ditto Router** what BitBull's endpoint spent in the last 30
+days and what is left under its spend cap if it has one. Ditto has no call for an account's
+credit balance, so that isn't shown. **Refresh balances** asks again; otherwise they are kept
+for a minute.
 
 ## Activity and errors
 
@@ -727,7 +740,7 @@ server and agent share a uid, so `/proc` is not a hard wall (see docs/THREAT-MOD
   click, and sends only to BitBull on this computer. See
   [browser-extension/README.md](browser-extension/README.md).
 
-The model picker filters by maker (tick any number) and sorts by name, price or speed. The ⚡
+The model picker filters by maker (tick any number) and sorts by name, price or speed. With Ditto connected, **All / SayGM / Ditto Router** above the list (and in the Models view) shows the models from one or the other. The ⚡
 figure is the typical time to the first word of a reply, measured from your own recent replies
 on that model.
 

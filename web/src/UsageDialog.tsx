@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type Model, type UsageReport } from './api'
+import { api, type Balances, type Model, type UsageReport } from './api'
 import { IconX } from './icons'
 
 /**
  * Usage: estimated spending per day and per model, from the cost BitBull records with every
- * reply (server/src/usage.ts). The SayGM balance needs SayGM's account access (Sign in with
- * SayGM), so it is shown as coming. SayGM's own usage page is the bill.
+ * reply (server/src/usage.ts), and what is left to spend, read with the keys BitBull already
+ * holds (server/src/balances.ts). SayGM's own usage page is the bill.
  */
 const RANGES = [7, 30, 90] as const
 const usd = (n: number) => (n === 0 ? '$0' : n < 0.01 ? '<$0.01' : n < 100 ? `$${n.toFixed(2)}` : `$${Math.round(n).toLocaleString()}`)
@@ -101,6 +101,10 @@ export function UsageDialog({ models, onClose }: { models: Model[]; onClose: () 
   const [days, setDays] = useState<(typeof RANGES)[number]>(30)
   const [report, setReport] = useState<UsageReport | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [bal, setBal] = useState<Balances | null>(null)
+  useEffect(() => {
+    void api.balances().then(setBal, () => {})
+  }, [])
   const names = useMemo(() => new Map(models.map((m) => [m.id, m.name])), [models])
 
   useEffect(() => {
@@ -132,8 +136,33 @@ export function UsageDialog({ models, onClose }: { models: Model[]; onClose: () 
                 </button>
               ))}
             </div>
-            <span className="muted small">SayGM balance: shown here once Sign in with SayGM is available</span>
+            <button className="link small" onClick={() => void api.balances(true).then(setBal, () => {})} title="Check the balances again now">
+              Refresh balances
+            </button>
           </div>
+          {bal && (bal.saygm.configured || bal.ditto.configured) && (
+            <div className="usage-balances">
+              {bal.saygm.configured && (
+                <div title={bal.saygm.ok ? 'Read from SayGM with your API key just now' : bal.saygm.note}>
+                  <span className="muted small">SayGM balance</span>
+                  {bal.saygm.ok && bal.saygm.amount !== undefined ? <strong>{usd(bal.saygm.amount)}</strong> : <span className="muted small">{bal.saygm.note ?? 'Not available'}</span>}
+                </div>
+              )}
+              {bal.ditto.configured && (
+                <div title={bal.ditto.ok ? "Read from Ditto for BitBull's Router endpoint just now" : bal.ditto.note}>
+                  <span className="muted small">Ditto Router{bal.ditto.capRemaining !== undefined ? ', left under its cap' : ', spent in 30 days'}</span>
+                  {bal.ditto.ok ? (
+                    <>
+                      <strong>{usd(bal.ditto.capRemaining ?? bal.ditto.spent30d ?? 0)}</strong>
+                      {bal.ditto.capRemaining !== undefined && bal.ditto.spent30d !== undefined && <span className="muted small">{usd(bal.ditto.spent30d)} spent in 30 days</span>}
+                    </>
+                  ) : (
+                    <span className="muted small">{bal.ditto.note ?? 'Not available'}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {err && <p className="lv-error-text">{err}</p>}
           {report && (
             <>

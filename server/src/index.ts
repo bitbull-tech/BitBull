@@ -29,6 +29,8 @@ import { brand, brandAsset, saveScheme } from "./brand.js";
 import { advise, usageByModel } from "./advisor.js";
 import { routerBackground, routerMcpServers, routerModels, routerReview } from "./router.js";
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
+import { balances } from "./balances.js";
+import { isPastedName, pastedContent, rememberPasted, searchChats } from "./pasted.js";
 import { compatState, runCompat, scheduleCompat } from "./compat.js";
 import { MAX_SCHEDULES, runSchedule, ScheduleInput, schedules, startScheduler } from "./schedules.js";
 import { cancelPairing, notifyOwner, startPairing, startTelegram, syncTelegram, telegramState, unpair } from "./telegram.js";
@@ -334,6 +336,9 @@ app.post("/api/leadpoet/disconnect", async (c) => {
   void reloadOpencode().catch(() => {});
   return c.json(s);
 });
+
+/** What is left to spend on SayGM and Ditto Router, read with the keys BitBull already holds (balances.ts). */
+app.get("/api/balances", async (c) => c.json(await balances(!!c.req.query("refresh"))));
 
 /** Estimated spending per day and per model (server/src/usage.ts). ?days=30&offset=<minutes east of UTC> */
 app.get("/api/usage", (c) => c.json(usageReport(Number(c.req.query("days") ?? 30) || 30, Number(c.req.query("offset") ?? 0) || 0)));
@@ -1197,6 +1202,14 @@ app.get("/api/projects/:id/download", (c) => {
 });
 
 /** Upload files into the agent's workspace so any engine/model can read them with its tools. */
+/** The text of a pasted attachment, to open it again from the message. */
+app.get("/api/sessions/:id/pasted", (c) => {
+  const text = pastedContent(c.req.param("id"), c.req.query("path") ?? "");
+  return text === undefined ? c.json({ error: "not found" }, 404) : c.json({ text });
+});
+/** Chats whose messages or pasted text contain ?q= (the sidebar's search, beyond titles). */
+app.get("/api/search", (c) => c.json({ hits: searchChats(c.req.query("q") ?? "") }));
+
 app.post("/api/sessions/:id/files", chatLimit, async (c) => {
   const s = sessions.get(c.req.param("id"));
   if (!s) return c.json({ error: "not found" }, 404);
@@ -1217,8 +1230,12 @@ app.post("/api/sessions/:id/files", chatLimit, async (c) => {
     } catch {
       return c.json({ error: "invalid upload folder" }, 400);
     }
-    writeFileSync(dest, Buffer.from(await f.arrayBuffer()));
-    saved.push({ name: f.name, path: path.posix.join("uploads", s.id.slice(0, 8), name), size: f.size });
+    const bytes = Buffer.from(await f.arrayBuffer());
+    writeFileSync(dest, bytes);
+    const rp = path.posix.join("uploads", s.id.slice(0, 8), name);
+    // long pasted text (the composer sends it as pasted-text.txt): kept for the prompt, preview and search
+    if (isPastedName(name) && f.size <= 2 * 1024 * 1024) rememberPasted(s.id, rp, bytes.toString("utf8"));
+    saved.push({ name: f.name, path: rp, size: f.size });
   }
   console.log(`[upload] ${saved.length} file(s) -> ${rel}`);
   const project = projects.get(s.project_id);

@@ -55,6 +55,48 @@ export function modelUsageMap(refresh = false) {
 }
 const speedLabel = (u?: ModelUsage) => (u?.firstTokenSeconds !== undefined ? `${u.firstTokenSeconds < 10 ? u.firstTokenSeconds.toFixed(1) : Math.round(u.firstTokenSeconds)} s` : null)
 
+/** Where a model is served from: SayGM, or your Ditto Router endpoint. */
+export type Via = 'all' | 'saygm' | 'ditto'
+export const viaOf = (m: Model): Exclude<Via, 'all'> => (m.gateway === 'ditto-router' ? 'ditto' : 'saygm')
+const VIA_KEY = 'bitbull-mp-via'
+export const savedVia = (): Via => {
+  try {
+    const v = localStorage.getItem(VIA_KEY)
+    return v === 'saygm' || v === 'ditto' ? v : 'all'
+  } catch {
+    return 'all'
+  }
+}
+export const saveVia = (v: Via) => {
+  try {
+    if (v === 'all') localStorage.removeItem(VIA_KEY)
+    else localStorage.setItem(VIA_KEY, v)
+  } catch {
+    /* private window */
+  }
+}
+
+/** All / SayGM / Ditto Router, with counts. Shown only when both serve models. */
+export function ViaFilter({ models, value, onChange }: { models: Model[]; value: Via; onChange: (v: Via) => void }) {
+  const ditto = models.filter((m) => viaOf(m) === 'ditto').length
+  const saygm = models.length - ditto
+  if (!ditto || !saygm) return null
+  const opts: [Via, string, number][] = [
+    ['all', 'All', models.length],
+    ['saygm', 'SayGM', saygm],
+    ['ditto', 'Ditto Router', ditto],
+  ]
+  return (
+    <div className="seg mini via-filter" role="group" aria-label="Filter by where the model is served from">
+      {opts.map(([k, label, n]) => (
+        <button key={k} type="button" className={value === k ? 'on' : ''} aria-pressed={value === k} onClick={() => onChange(k)}>
+          {label} <span className="mp-count">{n}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const MAKERS_KEY = 'bitbull-mp-makers'
 const savedMakers = (): string[] => {
   try {
@@ -87,6 +129,9 @@ export function ModelPicker({
   // makers ticked (none = all), remembered per browser
   const [makers, setMakers] = useState<string[]>(savedMakers)
   const [sortBy, setSortBy] = useState<SortBy>('name')
+  const [viaPick, setViaPick] = useState<Via>(savedVia)
+  // a saved "Ditto Router" choice must not hide everything once Ditto is disconnected
+  const via: Via = viaPick !== 'all' && !models.some((m) => viaOf(m) === viaPick) ? 'all' : viaPick
   const [usage, setUsage] = useState<Map<string, ModelUsage>>(new Map())
   useEffect(() => {
     if (open) void modelUsageMap(true).then(setUsage)
@@ -122,9 +167,10 @@ export function ModelPicker({
     const price = (m: Model) => (m.price ? m.price.input + m.price.output : Infinity)
     const speed = (m: Model) => usage.get(m.id)?.firstTokenSeconds ?? Infinity
     return models
+      .filter((m) => via === 'all' || viaOf(m) === via)
       .filter((m) => !activeMakers.length || activeMakers.includes(makerOf(m)))
       .filter((m) => {
-        const hay = `${m.id} ${m.name} ${m.provider ?? ''} ${makerOf(m)} ${FAMILY_LABEL[m.family]}`.toLowerCase()
+        const hay = `${m.id} ${m.name} ${m.provider ?? ''} ${makerOf(m)} ${FAMILY_LABEL[m.family]} ${viaOf(m) === 'ditto' ? 'ditto router' : 'saygm'}`.toLowerCase()
         return terms.every((t) => hay.includes(t))
       })
       .sort((a, b) =>
@@ -135,7 +181,7 @@ export function ModelPicker({
             : makerOf(a).localeCompare(makerOf(b)) || a.name.localeCompare(b.name),
       )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models, q, makers, makerCounts, sortBy, usage])
+  }, [models, q, makers, makerCounts, sortBy, usage, via])
 
   useEffect(() => {
     if (!open) return
@@ -227,6 +273,15 @@ export function ModelPicker({
             )}
           </div>
           <div className="mp-sort">
+            <ViaFilter
+              models={models}
+              value={via}
+              onChange={(v) => {
+                setViaPick(v)
+                saveVia(v)
+                setCursor(0)
+              }}
+            />
             <span className="muted">Sort</span>
             <div className="seg mini">
               {(
@@ -271,7 +326,7 @@ export function ModelPicker({
                         <code>{m.id}</code>
                         <span className="tag">{API_LABEL[m.api]}</span>
                         {m.gateway === 'ditto-router' && (
-                          <span className="tag" title="Runs through your Ditto Router endpoint">
+                          <span className="tag via-ditto" title="Runs through your Ditto Router endpoint">
                             Ditto Router
                           </span>
                         )}
@@ -326,7 +381,10 @@ export function ModelPicker({
             {!filtered.length && <div className="mp-empty">No models match “{q}”.</div>}
           </div>
           <div className="mp-foot">
-            <span>Prices are SayGM's live in / out rates · −% is the saving against list price · ⚡ is from your own replies</span>
+            <span>
+              Prices are live in / out rates from SayGM{models.some((m) => viaOf(m) === 'ditto') ? ' and Ditto Router' : ''} · −% is the saving against list price · ⚡ is from your own replies
+              {!models.some((m) => viaOf(m) === 'ditto') && ' · Connect Ditto in Settings to add Ditto Router models'}
+            </span>
             <button
               className="link"
               onClick={() => {

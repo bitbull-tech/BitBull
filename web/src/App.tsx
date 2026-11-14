@@ -435,7 +435,24 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   }
 
   const f = filter.toLowerCase()
-  const matches = (s: Session) => !f || s.title.toLowerCase().includes(f)
+  // beyond titles: chats whose messages or pasted text contain the words (asked of the server, a moment after typing stops)
+  const [hits, setHits] = useState<Map<string, string>>(new Map())
+  useEffect(() => {
+    const q = filter.trim()
+    if (q.length < 3) return setHits(new Map())
+    let gone = false
+    const t = window.setTimeout(() => {
+      void api
+        .searchChats(q)
+        .then((r) => !gone && setHits(new Map(r.hits.map((h) => [h.sessionId, `${h.where === 'pasted' ? 'In pasted text: ' : ''}${h.snippet}`]))))
+        .catch(() => {})
+    }, 250)
+    return () => {
+      gone = true
+      window.clearTimeout(t)
+    }
+  }, [filter])
+  const matches = (s: Session) => !f || s.title.toLowerCase().includes(f) || hits.has(s.id)
   const byProject = useMemo(() => {
     const m = new Map<string, Session[]>()
     for (const s of sessions) if (s.project_id) m.set(s.project_id, [...(m.get(s.project_id) ?? []), s])
@@ -447,7 +464,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       groupLabel,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, projects, filter])
+  }, [sessions, projects, filter, hits])
 
   const liveProjects = projects.filter((p) => !p.archived_at)
   const archivedProjects = projects.filter((p) => p.archived_at)
@@ -567,6 +584,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     <SessionRow
       key={s.id}
       s={s}
+      hit={f && !s.title.toLowerCase().includes(f) ? hits.get(s.id) : undefined}
       active={s.id === activeId}
       editing={editingId === s.id}
       projects={liveProjects}
@@ -602,7 +620,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         </button>
         <label className="side-search">
           <IconSearch size={14} />
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search chats" />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search chats and what was said" />
         </label>
         {selecting && (
           <div className="bulk-bar" role="toolbar" aria-label="Selected chats">
@@ -1043,6 +1061,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
 
 function SessionRow({
   s,
+  hit,
   active,
   editing,
   projects,
@@ -1059,6 +1078,8 @@ function SessionRow({
   onSelect,
 }: {
   s: Session
+  /** why a search found this chat when its title doesn't say (words from a message or pasted text) */
+  hit?: string
   active: boolean
   editing: boolean
   projects: Project[]
@@ -1109,7 +1130,10 @@ function SessionRow({
               aria-label={`Select ${s.title}`}
             />
           )}
-          <span className="title" onDoubleClick={onEdit}>{s.title}</span>
+          <span className="title" onDoubleClick={onEdit} title={hit}>
+            {s.title}
+            {hit && <span className="side-hit">{hit}</span>}
+          </span>
           <span className="session-actions">
             <button
               className="icon-btn sm"

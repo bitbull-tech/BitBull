@@ -274,6 +274,19 @@ export interface TelegramState {
   ignored: number
 }
 
+/** What is left to spend (server/src/balances.ts), read with the keys BitBull holds */
+export interface Balance {
+  configured: boolean
+  ok: boolean
+  amount?: number
+  note?: string
+}
+export interface Balances {
+  saygm: Balance
+  ditto: Balance & { spent30d?: number; capRemaining?: number }
+  checkedAt: number
+}
+
 /** Estimated spending (server/src/usage.ts) */
 export interface UsageReport {
   days: number
@@ -590,6 +603,10 @@ export const api = {
   deleteSchedule: (id: string) => req<{ ok: boolean }>(`/api/schedules/${id}`, { method: 'DELETE' }),
   runSchedule: (id: string) => req<{ turnId: string; schedule: Schedule }>(`/api/schedules/${id}/run`, { method: 'POST' }),
   /** offset: minutes east of UTC, so days end at the owner's midnight */
+  balances: (refresh = false) => req<Balances>(`/api/balances${refresh ? '?refresh=1' : ''}`),
+  /** chats whose messages or pasted text contain q */
+  searchChats: (q: string) => req<{ hits: { sessionId: string; where: 'message' | 'pasted'; snippet: string }[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+  pastedText: (sessionId: string, path: string) => req<{ text: string }>(`/api/sessions/${sessionId}/pasted?path=${encodeURIComponent(path)}`),
   usage: (days: number) => req<UsageReport>(`/api/usage?days=${days}&offset=${-new Date().getTimezoneOffset()}`),
   /** Help's own chat: one question, the whole answer back (the scripts API, POST /api/v1/chat) */
   helpChat: (message: string, sessionId?: string) =>

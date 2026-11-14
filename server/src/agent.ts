@@ -6,6 +6,7 @@ import { routerModelId, routerRecords } from "./router.js";
 import { claudeEngine } from "./engines/claude.js";
 import { opencodeEngine } from "./engines/opencode.js";
 import type { AgentEngine, AgentEvent, Usage } from "./engines/types.js";
+import { pastedNote } from "./pasted.js";
 import { mcpServersFor, type IntegrationId } from "./integrations.js";
 import { estimateCost } from "./models.js";
 import { subagentGuide } from "./subagents.js";
@@ -112,6 +113,8 @@ export async function* runTurn(
   // Linked folders: the user's real files, read-only (only ones that really are read-only)
   const linked = [...new Map(attachments.map((a) => resolveLink(a)).filter((l): l is LinkedFolder => !!l).map((l) => [l.name, l])).values()];
   const attachNote =
+    // long text the user pasted travels as an attachment; the model still gets the words here
+    pastedNote(session.id, files) +
     (files.length ? `\n\nAttached files (in your workspace, read them with your tools):\n${files.map((f) => `- ${f}`).join("\n")}` : "") +
     (linked.length
       ? `\n\nLinked folders (the user's own files, read-only; analyse them in place, don't copy them wholesale, write any output to your workspace):\n${linked

@@ -1370,6 +1370,19 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 
 /* Usage */
 .usage-modal { width: min(900px, 96vw); }
+.usage-balances { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 12px 0 0; }
+.usage-balances > div { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.usage-balances strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.via-filter { flex: none; }
+.via-filter .mp-count { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-left: 2px; }
+.tag.via-ditto { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
+.chip.pasted { cursor: pointer; }
+.chip.pasted:hover { border-color: var(--text-2); }
+.chip .chip-open { border: none; background: none; padding: 0; color: inherit; font: inherit; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.pasted-modal { width: min(820px, 94vw); max-height: 86vh; display: flex; flex-direction: column; }
+.pasted-modal pre { flex: 1; min-height: 120px; overflow: auto; margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.pasted-modal .row-actions { margin-top: 10px; }
+.side-hit { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .usage-bar-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .usage-tabs { display: flex; gap: 4px; }
 .usage-tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 12.5px; cursor: pointer; }

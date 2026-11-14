@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, type Model, type ModelDetail, type ModelUsage } from './api'
 import { IconSearch, IconX } from './icons'
 import { ModelDog } from './dogs'
-import { makerOf } from './ModelPicker'
+import { makerOf, savedVia, saveVia, ViaFilter, viaOf, type Via } from './ModelPicker'
 
 /**
  * Everything SayGM publishes about a model, without going to SayGM: one sortable table of
@@ -52,6 +52,9 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: 'name', dir: 1 })
   const [only, setOnly] = useState<{ tools: boolean; vision: boolean; tee: boolean }>({ tools: false, vision: false, tee: false })
+  const [viaPick, setViaPick] = useState<Via>(savedVia)
+  const via: Via = viaPick !== 'all' && !models.some((m) => viaOf(m) === viaPick) ? 'all' : viaPick
+  const dittoCount = models.filter((m) => viaOf(m) === 'ditto').length
   const [sel, setSel] = useState<string | null>(current ?? null)
   const [detail, setDetail] = useState<ModelDetail | null>(null)
   const [detailErr, setDetailErr] = useState<string | null>(null)
@@ -113,6 +116,7 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
       if (only.tools && !m.tools) return false
       if (only.vision && !m.vision) return false
       if (only.tee && !m.confidential) return false
+      if (via !== 'all' && viaOf(m) !== via) return false
       if (activeMakers.length && !activeMakers.includes(makerOf(m))) return false
       if (!needle) return true
       return `${m.id} ${m.name} ${m.provider ?? ''} ${makerOf(m)} ${m.family} ${m.tier ?? ''}`.toLowerCase().includes(needle)
@@ -124,7 +128,7 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
       return c * sort.dir
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models, q, only, sort, usage, makers, makerCounts])
+  }, [models, q, only, sort, usage, makers, makerCounts, via])
 
   const picked = detail ?? models.find((m) => m.id === sel) ?? null
 
@@ -132,7 +136,9 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal models-modal" role="dialog" aria-label="Models">
         <header className="modal-head">
-          <h2>Models · {models.length} on SayGM</h2>
+          <h2>
+            Models · {models.length - dittoCount} on SayGM{dittoCount ? ` · ${dittoCount} on Ditto Router` : ''}
+          </h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <IconX />
           </button>
@@ -143,6 +149,14 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, id, maker, tier…" />
           </label>
           <div className="models-filters">
+            <ViaFilter
+              models={models}
+              value={via}
+              onChange={(v) => {
+                setViaPick(v)
+                saveVia(v)
+              }}
+            />
             <label className="check">
               <input type="checkbox" checked={only.tools} onChange={(e) => setOnly((o) => ({ ...o, tools: e.target.checked }))} /> Tools
             </label>
