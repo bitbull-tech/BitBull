@@ -768,6 +768,16 @@ test("receipts: pages after until next_after is null, prints the count and the h
   assert.equal(x.reqs[0].q.get("limit"), "500");
 });
 
+test("receipts: the head hash equals Cathedral's own (Python json.dumps, sort_keys, compact, ensure_ascii)", async () => {
+  // Reference computed with Python: hashlib.sha256(json.dumps(d, sort_keys=True,
+  // separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("ascii")).
+  // Everything outside space to tilde is escaped, DEL (0x7f) included.
+  const d = { n: 1, lane: "sandbox", note: "caf\u00e9 \u007f \u{1F600}", prev_sha256: null, z: [1, 2] };
+  const x = await go(["receipts", ID], [receiptsRoute(() => j(200, { receipts: [d], next_after: null }))]);
+  assert.equal(x.r.code, 0, x.r.stdout);
+  assert.equal(x.r.out.head_sha256, "2ce7678f350b8e963c4c17d0048e9d0ea0316443a69209875b4c9be280045bfa");
+});
+
 const verifyRoute = (h: Handler): Route => ["GET", new RegExp(`^/v1/sandboxes/${ID}/receipts/verify$`), h];
 const okRoom = (n: number) => ({ event: "exec", sequence: n, status: 200, signature_verified: true, checks: { signature: "ok", amd_report: "not_checked", approved_build: "not_checked" } });
 
