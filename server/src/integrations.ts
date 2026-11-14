@@ -3,6 +3,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { config, githubTokenKind } from "./config.js";
+import { internalMcpHeaders, LEADPOET_MCP_PATH } from "./mcp.js";
 
 /**
  * Registry of external services the agent can be wired to. Each integration is a
@@ -11,7 +12,7 @@ import { config, githubTokenKind } from "./config.js";
  *
  * Adding a service = one entry here. Engines read `mcpServersFor(project)`.
  */
-export type IntegrationId = "atlas" | "four04" | "github";
+export type IntegrationId = "atlas" | "four04" | "github" | "leadpoet";
 
 export interface IntegrationDef {
   id: IntegrationId;
@@ -21,7 +22,7 @@ export interface IntegrationDef {
   /** env var → description */
   env: Array<{ key: string; label: string; secret?: boolean; value: string }>;
   /** MCP endpoint, when this integration has one and is configured */
-  mcp?: { url: string; headers: Record<string, string> };
+  mcp?: { url: string; headers: Record<string, string>; timeout?: number };
   configured: boolean;
   notes?: string;
   /** Applies to every chat (not switched per project) */
@@ -32,6 +33,7 @@ export function integrations(): IntegrationDef[] {
   const a = config.integrations.atlas;
   const f = config.integrations.four04;
   const g = config.integrations.github;
+  const lp = config.integrations.leadpoet;
   return [
     {
       id: "github",
@@ -64,6 +66,19 @@ export function integrations(): IntegrationDef[] {
         "MCP (alpha, enable per workspace with Atlas) lets the agent create/inspect projects, run the Atlas platform agent and manage exported APIs. Running a workflow is done through exported workflow APIs: drop each exported JSON spec into the workflows folder and the agent runs it with tools/atlas-run.mjs.",
     },
     {
+      id: "leadpoet",
+      name: "Leadpoet",
+      blurb: "Bittensor subnet 71: find B2B leads that fit your ideal customer, with the evidence for each, then write and run email and LinkedIn outreach.",
+      docs: "https://leadpoet.com/ai-assistants",
+      env: [],
+      // The engines talk to BitBull, which adds the sign-in and forwards to Leadpoet
+      // (server/src/leadpoet.ts): the tokens never reach the agent.
+      mcp: lp.oauth ? { url: `http://127.0.0.1:${config.port}${LEADPOET_MCP_PATH}`, headers: internalMcpHeaders(), timeout: 60000 } : undefined,
+      configured: !!lp.oauth,
+      notes:
+        "New lead requests cost Leadpoet credits (10 a company), so the agent shows the plan and the cost and waits for your yes. In scheduled runs and over Telegram it only reads and drafts.",
+    },
+    {
       id: "four04",
       name: "404 (3D as code)",
       blurb: "Bittensor subnet 17: every 3D object is a Three.js module, made with the public 404 game recipe and checked by its own verifier and jam gate.",
@@ -82,8 +97,8 @@ export function integrations(): IntegrationDef[] {
 }
 
 /** MCP servers to attach for a project's enabled integrations (only configured ones). */
-export function mcpServersFor(enabled: IntegrationId[]): Record<string, { url: string; headers: Record<string, string> }> {
-  const out: Record<string, { url: string; headers: Record<string, string> }> = {};
+export function mcpServersFor(enabled: IntegrationId[]): Record<string, { url: string; headers: Record<string, string>; timeout?: number }> {
+  const out: Record<string, { url: string; headers: Record<string, string>; timeout?: number }> = {};
   for (const i of integrations()) {
     if (enabled.includes(i.id) && i.mcp) out[i.id] = i.mcp;
   }

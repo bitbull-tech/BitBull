@@ -19,7 +19,7 @@ function cleanEnv(): Record<string, string> {
     if (v === undefined) continue;
     if (/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$|CLAUDECODE$|CLAUDE_AGENT_)/.test(k)) continue;
     // BitBull's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
-    if (/^(SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|APP_TOKEN|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
+    if (/^(SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|APP_TOKEN|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|LEADPOET_OAUTH|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
     out[k] = v;
   }
   return out;

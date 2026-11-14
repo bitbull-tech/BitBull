@@ -190,7 +190,8 @@ export function SwarmDialog({
               </span>
             )}
           </label>
-          <div className="row2">
+          {/* one under the other: side by side, a long model name pushed the second out of view */}
+          <div className="reviewers">
             <label className="field">
               <span>Reviewer 1</span>
               <select value={a} onChange={(e) => setA(e.target.value)}>

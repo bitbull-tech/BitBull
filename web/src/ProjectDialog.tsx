@@ -111,7 +111,7 @@ export function ProjectDialog({
                   <input type="checkbox" checked={form.integrations?.includes(i.id) ?? false} onChange={() => toggle(i.id)} />
                   <div>
                     <b>{i.name}</b>
-                    <small>{i.configured ? (i.hasMcp ? 'Configured · MCP tools available' : 'Configured') : 'Not configured yet: add keys in .env (see Settings → Integrations)'}</small>
+                    <small>{i.configured ? (i.hasMcp ? 'Configured · MCP tools available' : 'Configured') : 'Not set up yet: see Settings → Integrations'}</small>
                   </div>
                 </label>
               ))}

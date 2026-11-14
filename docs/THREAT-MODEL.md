@@ -163,6 +163,15 @@ someone else's bot). Messages and replies are readable by Telegram, and anyone h
 owner's Telegram account can instruct the agent, within the same limits as an unattended run
 (nothing irreversible; approvals stay in BitBull). No token, none of this applies.
 
+### R11 — Leadpoet (only while connected)
+`docs/LEADPOET.md`. The agent can spend the owner's Leadpoet credits (lead requests) and, if
+the owner allowed sending at connect time, send email and LinkedIn messages from the owner's
+accounts. Scopes are enforced by Leadpoet; "ask first" is an instruction to the model, not a
+control, so the real controls are the scope chosen (sending is off by default) and Leadpoet's
+own limits. Lead data and prospect replies are untrusted input that reaches the model. The
+tokens stay server-side behind a local relay (the agent gets no token), subject to R1. While
+connected, `leadpoet.com` is open in the proxy for the whole container.
+
 ## If you fork or change `.env` / `allowlist.txt`
 
 - `ALLOW_NO_AUTH=true` removes **all** authentication — combine it with a tunnel or a

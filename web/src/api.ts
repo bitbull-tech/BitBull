@@ -15,7 +15,7 @@ export interface Session {
   updated_at: number
 }
 
-export type IntegrationId = 'atlas' | 'four04' | 'github'
+export type IntegrationId = 'atlas' | 'four04' | 'github' | 'leadpoet'
 
 export interface Project {
   id: string
@@ -251,6 +251,17 @@ export interface Schedule {
   lastNote: string | null
 }
 export type ScheduleInput = { name: string; prompt: string; projectId: string | null; model: string; spec: ScheduleSpec; enabled?: boolean; telegram?: boolean }
+
+/** Leadpoet (server/src/leadpoet.ts): the sign-in's state; never a token */
+export interface LeadpoetState {
+  connected: boolean
+  access: 'read' | 'edit' | null
+  send: boolean
+  connectedAt: number | null
+  pending: { url: string; redirect: string; expiresAt: number } | null
+  error: string
+  manageUrl: string
+}
 
 /** Telegram (server/src/telegram.ts): your bot, the one account it answers, and a pairing code while one is live */
 export interface TelegramState {
@@ -564,6 +575,10 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  leadpoet: () => req<LeadpoetState>('/api/leadpoet'),
+  leadpoetConnect: (o: { origin: string; access: 'read' | 'edit'; send: boolean }) => req<LeadpoetState>('/api/leadpoet/connect', { method: 'POST', body: JSON.stringify(o) }),
+  leadpoetFinish: (url: string) => req<LeadpoetState>('/api/leadpoet/finish', { method: 'POST', body: JSON.stringify({ url }) }),
+  leadpoetDisconnect: () => req<LeadpoetState>('/api/leadpoet/disconnect', { method: 'POST' }),
   telegram: () => req<TelegramState>('/api/telegram'),
   telegramPair: () => req<TelegramState>('/api/telegram/pair', { method: 'POST' }),
   telegramCancelPair: () => req<TelegramState>('/api/telegram/pair', { method: 'DELETE' }),

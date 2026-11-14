@@ -40,7 +40,7 @@ export { EDITABLE };
  * Save values from the UI and apply them live. null or "" removes the UI value so .env
  * (or the default) applies again. Returns the keys changed.
  */
-export async function updateSettings(values: Record<string, string | null>) {
+export async function updateSettings(values: Record<string, string | null>, opts: { internal?: boolean } = {}) {
   const bad = Object.keys(values).filter((k) => !(k in EDITABLE));
   if (bad.length) throw new Error(`Not editable from the UI: ${bad.join(", ")}`);
   for (const [k, v] of Object.entries(values)) {
@@ -72,10 +72,12 @@ export async function updateSettings(values: Record<string, string | null>) {
   }
   if (toFile) writeOverrides(cur);
   reloadConfig();
+  const changed = Object.keys(values);
+  // a sign-in BitBull renews by itself: nothing else depends on it, and it isn't the owner's change to log
+  if (opts.internal) return changed;
   resetDitto();
   resetStorage();
   await listModels(true).catch(() => []);
-  const changed = Object.keys(values);
   record({ level: "info", source: "config", message: `Settings changed in the UI: ${changed.join(", ")} (values not logged)` });
   return changed;
 }

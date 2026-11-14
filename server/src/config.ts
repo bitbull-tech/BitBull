@@ -67,6 +67,9 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   // Telegram bot (docs/TELEGRAM.md). Only the token is a setting: who may talk to the bot is set
   // by pairing, and where the token is sent (TELEGRAM_API_URL) stays .env-only.
   TELEGRAM_BOT_TOKEN: {},
+  // Leadpoet sign-in (server/src/leadpoet.ts): written by Connect Leadpoet, never typed. Tokens
+  // only; where they are sent (LEADPOET_URL) stays .env-only.
+  LEADPOET_OAUTH: {},
   HIPPIUS_ACCESS_KEY: {},
   HIPPIUS_SECRET_KEY: {},
   HIPPIUS_BUCKET: {},
@@ -234,6 +237,12 @@ function buildConfig() {
     },
     /** Taostats API key (Bittensor data). Sent raw in Authorization (no Bearer); v1 API only. */
     taostats: { apiKey: env("TAOSTATS_API_KEY", "") },
+    leadpoet: {
+      /** Leadpoet's site: its MCP server is <url>/mcp and its sign-in lives on the same origin */
+      url: env("LEADPOET_URL", "https://leadpoet.com").replace(/\/+$/, ""),
+      /** the sign-in BitBull holds (JSON: tokens, expiry, scopes); set by Connect Leadpoet */
+      oauth: env("LEADPOET_OAUTH", ""),
+    },
     telegram: {
       /** From @BotFather. Never given to the agent: it is the bot, and whoever holds it can read your chat with it. */
       botToken: env("TELEGRAM_BOT_TOKEN", ""),

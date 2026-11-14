@@ -24,6 +24,8 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` / `POST` | `/api/schedules` | Schedules: list / create (`{ name, prompt, projectId, model, spec, telegram }`) |
 | `PATCH` / `DELETE` | `/api/schedules/:id` | Change (or pause with `enabled: false`) / delete a schedule; its chat is kept |
 | `POST` | `/api/schedules/:id/run` | Run a schedule now |
+| `GET` | `/api/leadpoet` | Leadpoet: connected or not, access, whether sending is allowed (never a token) |
+| `POST` | `/api/leadpoet/connect`, `/finish`, `/disconnect` | Start a Leadpoet sign-in (`{ origin, access, send }`) / finish it from a pasted callback address / forget it |
 | `GET` | `/api/telegram` | Telegram: the connected bot, who is paired, a live pairing code (never the token) |
 | `POST` / `DELETE` | `/api/telegram/pair` | Make a one-time pairing code / cancel it |
 | `POST` | `/api/telegram/unpair`, `/api/telegram/test` | Forget the paired account / send it a test message |

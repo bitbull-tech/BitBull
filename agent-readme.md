@@ -128,6 +128,10 @@ buckets and scoped sub-tokens (it runs on the owner's PC, not here).
 
 ## 8. Other services
 
+- **Leadpoet** (Bittensor subnet 71, lead generation): `leadpoet` skill and the `leadpoet_*`
+  tools, present only when the owner connected Leadpoet and switched it on for this project.
+  Lead requests spend the owner's credits and sends reach real people: show the plan, the cost
+  and the exact message and wait for a yes; in scheduled or Telegram runs only read and draft.
 - **Taostats** (Bittensor data): `taostats-api` skill; v1 API only (`/v1/...`, raw key in
   `Authorization`, no `Bearer`, max `limit` 200). `TAOSTATS_API_KEY` is available to you,
   masked in output.

@@ -394,6 +394,25 @@ through: don't send secrets that way. And whoever can use your Telegram account 
 BitBull, so turn on Telegram's two-step verification. How pairing is protected, the network
 opening it needs, and how to switch it off are in [docs/TELEGRAM.md](docs/TELEGRAM.md).
 
+## Leadpoet: lead generation
+
+[Leadpoet](https://leadpoet.com) is Bittensor subnet 71: it finds companies and contacts that
+fit your ideal customer, with the evidence for each, and writes and sends email and LinkedIn
+outreach. Connected, BitBull can plan and run a campaign with it: write the customer profile,
+request leads, review them, draft the sequences, build the campaign and report on replies.
+
+1. **Settings → Integrations → Leadpoet → Connect Leadpoet.** Sign in with your Leadpoet account
+   and approve; there is no key to paste.
+2. In the project you run campaigns from, open project settings and tick **Leadpoet**.
+3. Ask: "Plan a campaign to get us ten meetings with heads of logistics at UK retailers."
+
+You choose what BitBull may do when you connect: look only, plan and prepare (the default), or
+also send. With sending off, BitBull drafts everything and you press send in Leadpoet. Lead
+requests spend Leadpoet credits, so the agent shows the plan and the cost and waits for your
+yes; and in scheduled runs or over Telegram it only reads and drafts. Your Leadpoet sign-in
+stays on the server and is never given to the agent. More in
+[docs/LEADPOET.md](docs/LEADPOET.md).
+
 ## Usage
 
 The bar-chart button at the bottom of the sidebar opens **Usage**: estimated spend per day (hover
@@ -863,6 +882,8 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` / `POST` | `/api/schedules` | Schedules: list / create (`{ name, prompt, projectId, model, spec, telegram }`) |
 | `PATCH` / `DELETE` | `/api/schedules/:id` | Change (or pause with `enabled: false`) / delete a schedule; its chat is kept |
 | `POST` | `/api/schedules/:id/run` | Run a schedule now |
+| `GET` | `/api/leadpoet` | Leadpoet: connected or not, access, whether sending is allowed (never a token) |
+| `POST` | `/api/leadpoet/connect`, `/finish`, `/disconnect` | Start a Leadpoet sign-in (`{ origin, access, send }`) / finish it from a pasted callback address / forget it |
 | `GET` | `/api/telegram` | Telegram: the connected bot, who is paired, a live pairing code (never the token) |
 | `POST` / `DELETE` | `/api/telegram/pair` | Make a one-time pairing code / cancel it |
 | `POST` | `/api/telegram/unpair`, `/api/telegram/test` | Forget the paired account / send it a test message |

@@ -165,7 +165,7 @@ export function buildConfig(models: ModelInfo[], routerMcp: RouterMcpServer[] = 
         : {}),
       // Integration MCPs are registered once here and switched on/off per prompt by project
       ...Object.fromEntries(
-        Object.entries(allIntegrationMcps()).map(([k, v]) => [k, { type: "remote" as const, url: v.url, headers: v.headers, oauth: false as const, timeout: 20000 }]),
+        Object.entries(allIntegrationMcps()).map(([k, v]) => [k, { type: "remote" as const, url: v.url, headers: v.headers, oauth: false as const, timeout: v.timeout ?? 20000 }]),
       ),
     },
     agent: {
@@ -244,7 +244,7 @@ function freePort(preferred: number): Promise<number> {
  * keys applyOverrides() put into process.env — stays out. GITHUB_TOKEN/TAOSTATS_API_KEY stay
  * by design (the agent gets them on purpose). Brief window: env is restored right after spawn.
  */
-const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|HIPPIUS_.*)$/;
+const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|LEADPOET_OAUTH|HIPPIUS_.*)$/;
 
 async function withScrubbedEnv<T>(fn: () => Promise<T>): Promise<T> {
   const saved: Record<string, string | undefined> = {};

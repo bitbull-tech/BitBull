@@ -29,6 +29,17 @@ const dir = path.join(config.dataDir, "logs");
 mkdirSync(dir, { recursive: true });
 const file = path.join(dir, "activity.jsonl");
 
+/** The tokens inside a saved sign-in (JSON), so they are redacted like any other key. */
+function oauthTokens(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const j = JSON.parse(raw) as { access?: unknown; refresh?: unknown };
+    return [j.access, j.refresh].filter((t): t is string => typeof t === "string");
+  } catch {
+    return [];
+  }
+}
+
 const secrets = () =>
   [
     config.saygm.apiKey,
@@ -41,6 +52,7 @@ const secrets = () =>
     config.integrations.github.token,
     config.integrations.taostats.apiKey,
     config.integrations.telegram.botToken,
+    ...oauthTokens(config.integrations.leadpoet.oauth),
     config.storage.accessKey,
     config.storage.secretKey,
     config.storage.encryptionKey,

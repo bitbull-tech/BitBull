@@ -44,6 +44,10 @@ export function bitbullMcpServer(sessionId?: string): { url: string; headers: Re
   };
 }
 
+/** For BitBull's other local MCP routes (the Leadpoet relay): same startup token, proxy or not. */
+export const internalMcpHeaders = (): Record<string, string> => ({ [BITBULL_MCP_HEADER]: TOKEN });
+export const LEADPOET_MCP_PATH = "/mcp/leadpoet";
+
 export function mcpTokenOk(given: string | undefined) {
   if (!given) return false;
   const a = Buffer.from(given);

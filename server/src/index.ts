@@ -44,7 +44,8 @@ import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused } from "./egress.js";
-import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, mcpTokenOk } from "./mcp.js";
+import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, LEADPOET_MCP_PATH, mcpTokenOk } from "./mcp.js";
+import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, finishFromUrl as leadpoetFinishFromUrl, leadpoetState, proxyMcp as leadpoetMcp, startConnect as leadpoetConnect } from "./leadpoet.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { inspectRepo, listRepos, repoDiffStat, syncRepo } from "./repos.js";
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
@@ -301,6 +302,39 @@ app.post("/api/telegram/test", async (c) => {
   return ok ? c.json({ ok: true }) : c.json({ error: "Telegram didn't take the message. The Activity log has the reason." }, 502);
 });
 
+/**
+ * Leadpoet (server/src/leadpoet.ts): sign in with the owner's Leadpoet account. `connect` returns
+ * the Leadpoet address to open; the browser comes back to /oauth/leadpoet/callback. `finish`
+ * takes that address pasted by hand, for when the browser couldn't reach BitBull. No token is
+ * ever returned.
+ */
+app.get("/api/leadpoet", (c) => c.json(leadpoetState()));
+app.post("/api/leadpoet/connect", async (c) => {
+  const body = z.object({ origin: z.string().max(300), access: z.enum(["read", "edit"]).optional(), send: z.boolean().optional() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "origin required" }, 400);
+  try {
+    return c.json(await leadpoetConnect(body.data));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+app.post("/api/leadpoet/finish", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { url?: unknown };
+  if (typeof body.url !== "string") return c.json({ error: "url required" }, 400);
+  try {
+    const s = await leadpoetFinishFromUrl(body.url);
+    void reloadOpencode().catch(() => {});
+    return c.json(s);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+app.post("/api/leadpoet/disconnect", async (c) => {
+  const s = await leadpoetDisconnect();
+  void reloadOpencode().catch(() => {});
+  return c.json(s);
+});
+
 /** Estimated spending per day and per model (server/src/usage.ts). ?days=30&offset=<minutes east of UTC> */
 app.get("/api/usage", (c) => c.json(usageReport(Number(c.req.query("days") ?? 30) || 30, Number(c.req.query("offset") ?? 0) || 0)));
 
@@ -386,6 +420,39 @@ app.get("/internal/egress/check", async (c) => {
 app.all(MCP_PATH, async (c) => {
   if (!mcpTokenOk(c.req.header(BITBULL_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
   return handleMcp(c.req.raw);
+});
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+
+// Leadpoet's MCP server, for the engines: BitBull adds the sign-in and forwards (leadpoet.ts)
+app.all(LEADPOET_MCP_PATH, async (c) => {
+  if (!mcpTokenOk(c.req.header(BITBULL_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
+  return leadpoetMcp(c.req.raw);
+});
+
+/**
+ * Where Leadpoet sends the owner's browser back after they approve. Not under /api: a browser
+ * arriving from another site carries no app token. What makes it safe is the one-time `state`
+ * BitBull made when the sign-in started; without it nothing happens. The page shows the
+ * outcome and nothing else.
+ */
+app.get("/oauth/leadpoet/callback", async (c) => {
+  const q = (k: string) => c.req.query(k) ?? null;
+  const page = (title: string, text: string, ok: boolean) =>
+    c.html(
+      `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BitBull · Leadpoet</title>` +
+        `<body style="font:16px/1.5 system-ui,sans-serif;background:#0d0d0b;color:#f4f1e8;display:grid;place-items:center;min-height:100vh;margin:0">` +
+        `<main style="max-width:440px;padding:24px;text-align:center"><h1 style="font-size:22px;margin:0 0 8px;color:${ok ? "#f3c249" : "#ff8a7a"}">${escapeHtml(title)}</h1><p style="margin:0;opacity:.85">${escapeHtml(text)}</p></main>`,
+      ok ? 200 : 400,
+      { "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'", "cache-control": "no-store", "referrer-policy": "no-referrer" },
+    );
+  try {
+    await leadpoetFinish({ code: q("code"), state: q("state"), error: q("error"), errorDescription: q("error_description") });
+    void reloadOpencode().catch(() => {});
+    return page("Leadpoet is connected", "You can close this tab and go back to BitBull.", true);
+  } catch (e) {
+    return page("Leadpoet wasn't connected", e instanceof Error ? e.message : String(e), false);
+  }
 });
 
 app.get("/api/network", (c) => c.json(networkState()));
@@ -548,7 +615,7 @@ const ProjectSchema = z.object({
   description: z.string().max(2000).optional(),
   instructions: z.string().max(20000).optional(),
   color: z.string().max(20).optional(),
-  integrations: z.array(z.enum(["atlas", "four04"])).optional(),
+  integrations: z.array(z.enum(["atlas", "four04", "leadpoet"])).optional(),
   dittoSync: z.boolean().optional(),
 });
 const projectOut = (p: ReturnType<typeof projects.get>) =>

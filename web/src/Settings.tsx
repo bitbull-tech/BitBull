@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type SettingRow, type Status, type TelegramState } from './api'
+import { api, type AppConfig, type IntegrationInfo, type IntegrationStatus, type SettingGroup, type SettingRow, type LeadpoetState, type Status, type TelegramState } from './api'
 import { IconCheck, IconLogout, IconMonitor, IconMoon, IconRefresh, IconSun, IconX } from './icons'
 import type { ThemePref } from './theme'
 import { applyBrand, getBrand, PRESETS, type Scheme, type SchemePart } from './brand'
@@ -12,6 +12,7 @@ import { VoicePanel } from './voice/VoicePanel'
 import { RouterPanel } from './RouterPanel'
 import { DittoConnect } from './DittoConnect'
 import { TelegramConnect } from './TelegramConnect'
+import { LeadpoetConnect } from './LeadpoetConnect'
 
 type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'voice' | 'appearance'
 
@@ -41,6 +42,7 @@ export function Settings({
   const [live, setLive] = useState<IntegrationStatus[] | null>(null)
   const [focus, setFocus] = useState<string | null>(null)
   const [tg, setTg] = useState<TelegramState | null>(null)
+  const [lp, setLp] = useState<LeadpoetState | null>(null)
 
   const onRowSaved = (next: SettingGroup[], text: string) => {
     setGroups(next)
@@ -57,6 +59,7 @@ export function Settings({
 
   const check = async () => {
     void api.telegram().then(setTg).catch(() => {})
+    void api.leadpoet().then(setLp).catch(() => {})
     setChecking(true)
     try {
       const [st, li] = await Promise.all([api.status(), api.integrationStatus().catch(() => ({ integrations: [] as IntegrationStatus[] }))])
@@ -115,7 +118,7 @@ export function Settings({
               <p className="muted small">At a glance. Click a service to set it up under Integrations.</p>
               <div className="status-grid">
                 {SERVICES.map((svc) => {
-                  const st = serviceState(svc.id, status, live, groups, tg)
+                  const st = serviceState(svc.id, status, live, groups, tg, lp)
                   return (
                     <button key={svc.id} className={`status-card as-link ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`} onClick={() => openIntegration(svc.id)}>
                       <div className="status-title">
@@ -157,7 +160,7 @@ export function Settings({
               {groups &&
                 SERVICES.map((svc) => {
                   const g = groups.find((x) => x.id === svc.id)
-                  const st = serviceState(svc.id, status, live, groups, tg)
+                  const st = serviceState(svc.id, status, live, groups, tg, lp)
                   const meta = info?.integrations.find((i) => i.id === svc.id)
                   return (
                     <section key={svc.id} id={`int-${svc.id}`} className={`int-card ${focus === svc.id ? 'focus' : ''}`}>
@@ -183,6 +186,7 @@ export function Settings({
                         />
                       )}
                       {svc.id === 'telegram' && <TelegramConnect onState={setTg} />}
+                      {svc.id === 'leadpoet' && <LeadpoetConnect onState={setLp} onChanged={() => void api.integrations().then(setInfo).catch(() => {})} />}
                       <div className="int-status small">{st.loading ? 'Checking…' : st.detail}</div>
                       {g && (
                         <div className="cfg-table">
@@ -572,6 +576,7 @@ const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
   { id: 'ditto', name: 'Ditto', blurb: 'Memory shared by every chat and model, your connected apps as tools, and Ditto Router models.', docs: 'https://heyditto.ai' },
   { id: 'github', name: 'GitHub', blurb: 'Clone, pull, push and open PRs from the agent’s shell.', docs: 'https://github.com/settings/personal-access-tokens' },
   { id: 'telegram', name: 'Telegram', blurb: 'Message BitBull from your phone through your own private bot, and get scheduled results there. One account only: yours.', docs: 'https://core.telegram.org/bots/features#botfather' },
+  { id: 'leadpoet', name: 'Leadpoet', blurb: 'Subnet 71: find B2B leads that fit your ideal customer, then plan and run email and LinkedIn campaigns.', docs: 'https://leadpoet.com/ai-assistants' },
   { id: 'taostats', name: 'Taostats', blurb: 'Bittensor network data (subnets, validators, prices) for the taostats-api skill.', docs: 'https://docs.taostats.io' },
   { id: 'atlas', name: 'Atlas AI Studio', blurb: 'Images, video, 3D and animation workflows.', docs: 'https://docs.atlas.design' },
   { id: 'four04', name: '404 (3D as code)', blurb: 'Subnet 17: 3D objects as Three.js code with the public 404 game recipe. No key needed.', docs: 'https://github.com/404-Repo/404-game-recipe' },
@@ -585,8 +590,14 @@ function serviceState(
   live: IntegrationStatus[] | null,
   groups: SettingGroup[] | null,
   tg: TelegramState | null,
+  lp: LeadpoetState | null,
 ): { loading: boolean; ok: boolean; configured: boolean; detail: string } {
   switch (id) {
+    case 'leadpoet':
+      if (!lp) return { loading: true, ok: false, configured: false, detail: '' }
+      if (lp.pending) return { loading: false, ok: false, configured: false, detail: 'Waiting for you to approve in Leadpoet' }
+      if (!lp.connected) return { loading: false, ok: false, configured: !!lp.error, detail: lp.error ? 'Not connected' : 'Not connected' }
+      return { loading: false, ok: true, configured: true, detail: `Connected · ${lp.access === 'edit' ? 'plan and prepare' : 'look only'} · ${lp.send ? 'sending allowed' : 'no sending'}` }
     case 'telegram':
       if (!tg) return { loading: true, ok: false, configured: false, detail: '' }
       if (!tg.configured) return { loading: false, ok: false, configured: false, detail: 'Not set up: add a bot token below' }

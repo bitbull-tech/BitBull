@@ -197,17 +197,28 @@ export function isApproved(host: string) {
 /**
  * Hosts BitBull itself needs only while a feature is on, so they stay off the static list (and
  * closed to a prompt-injected agent) for everyone who doesn't use it. Today: Telegram's API,
- * while a bot token is set (telegram.ts). The proxy can't tell the server's calls from the
+ * while a bot token is set (telegram.ts), and Leadpoet while it is connected (leadpoet.ts). The proxy can't tell the server's calls from the
  * agent's shell, so while it is open the agent can reach that host too (docs/THREAT-MODEL.md).
  */
 export function builtIn(host: string) {
-  const t = config.integrations.telegram;
-  if (!t.botToken) return false;
-  try {
-    return host === new URL(t.apiUrl).hostname.toLowerCase();
-  } catch {
-    return false;
-  }
+  return builtIns().some((b) => b.host === host);
+}
+type BuiltIn = { host: string; why: string };
+const builtInSources: Array<() => BuiltIn[]> = [
+  () => (config.integrations.telegram.botToken ? [{ host: safeHost(config.integrations.telegram.apiUrl), why: "Telegram bot" }] : []),
+];
+/** A feature says which host it needs open, and when (asked on every check, so it closes by itself). */
+export function addBuiltIn(source: () => BuiltIn[]) {
+  builtInSources.push(source);
+}
+function builtIns(): BuiltIn[] {
+  return builtInSources.flatMap((s) => {
+    try {
+      return s().filter((b) => b.host);
+    } catch {
+      return [];
+    }
+  });
 }
 
 // ---------- the proxy's question ----------
@@ -398,13 +409,13 @@ function sweep() {
   }
 }
 
-const safeHost = (url: string) => {
+function safeHost(url: string) {
   try {
     return new URL(url).hostname.toLowerCase();
   } catch {
     return "";
   }
-};
+}
 
 export function networkState() {
   sweep();
@@ -412,7 +423,7 @@ export function networkState() {
     proxied: proxied(),
     allowlist: staticAllowlist(),
     /** open because a feature that needs them is switched on (builtIn) */
-    builtIn: config.integrations.telegram.botToken ? [{ host: safeHost(config.integrations.telegram.apiUrl), why: "Telegram bot" }].filter((b) => b.host) : [],
+    builtIn: builtIns(),
     approved,
     requests: listRequests(),
     blocked: [...blocked.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt)).slice(0, 50),
