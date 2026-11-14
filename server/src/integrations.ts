@@ -3,6 +3,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { config, effectiveCathedralCap, githubTokenKind } from "./config.js";
+import { redact } from "./activity.js";
 
 /**
  * Registry of external services the agent can be wired to. Each integration is a
@@ -179,7 +180,19 @@ type CathedralProbe = { id: "cathedral"; ok: boolean; configured: boolean; detai
  */
 const CATHEDRAL_SOLD_OUT = new Set(["sealed_capacity_unavailable", "sealed_pool_throttled", "sealed_pool_unavailable", "sealed_pool_unreachable"]);
 
+/** A plain non-negative amount ("5", "0.25", 1.5): the only thing a budget or balance may be. */
+const plainAmount = (v: unknown): number | null => {
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
+  return typeof v === "string" && /^\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : null;
+};
+
+/** Everything the probe returns goes to the Settings page, so every string passes through redact(). */
 export async function probeCathedral(): Promise<CathedralProbe> {
+  const r = await probeCathedralRaw();
+  return { ...r, detail: redact(r.detail) };
+}
+
+async function probeCathedralRaw(): Promise<CathedralProbe> {
   const c = config.integrations.cathedral;
   const out = (ok: boolean, detail: string, level: "red" | "amber" | "green" = ok ? "green" : "red"): CathedralProbe => ({ id: "cathedral", ok, configured: true, detail, level });
   if (!c.apiKey) return { id: "cathedral", ok: false, configured: false, detail: "Not configured: add an API key below" };
@@ -195,6 +208,10 @@ export async function probeCathedral(): Promise<CathedralProbe> {
     if (Array.isArray(a.scopes) && !a.scopes.includes("sandboxes:control")) return out(false, "This key cannot create sandboxes: it lacks the sandboxes:control scope");
     const k = a.api_key;
     const capped = !!k && k.budget_usd !== null && k.budget_usd !== undefined;
+    // a budget that is not a plain amount is a malformed answer, not a cap (and not "uncapped" either)
+    if (capped && (plainAmount(k!.budget_usd) === null || plainAmount(k!.remaining_usd) === null || (k!.committed_usd !== undefined && plainAmount(k!.committed_usd) === null))) {
+      return out(false, "Cathedral's account answer is malformed (the key's budget or remaining amount is not a plain amount), so the cap cannot be trusted", "red");
+    }
     if (!capped && !c.allowUncapped) return out(false, "This key has no spending cap; the integration will not create sandboxes. Use a capped key.", "red");
 
     const cat = await get("/v1/sandboxes/catalog");
