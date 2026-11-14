@@ -131,6 +131,9 @@ buckets and scoped sub-tokens (it runs on the owner's PC, not here).
 - **Taostats** (Bittensor data): `taostats-api` skill; v1 API only (`/v1/...`, raw key in
   `Authorization`, no `Bearer`, max `limit` 200). `TAOSTATS_API_KEY` is available to you,
   masked in output.
+- **Cathedral** (remote sealed sandboxes): `cathedral-sandbox` skill; run everything through
+  `node "$BITBULL_TOOLS/cathedral.mjs"`, never the API directly. Ask the user before `create`
+  (size, rate, lifetime, spend limit, internet). `CATHEDRAL_API_KEY` is available to you, masked in output.
 - **Web**: `webfetch`/web search work only for allowlisted domains; see §2 for the rest.
 
 ## 9. Working style the owner expects

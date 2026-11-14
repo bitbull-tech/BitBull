@@ -163,6 +163,26 @@ someone else's bot). Messages and replies are readable by Telegram, and anyone h
 owner's Telegram account can instruct the agent, within the same limits as an unattended run
 (nothing irreversible; approvals stay in BitBull). No token, none of this applies.
 
+### R11: Remote execution (Cathedral, only while a key is set)
+`skills/cathedral-sandbox`, `tools/cathedral.mjs`. This adds a new upload destination: with the key
+set, the agent can send files and commands to `cathedral.computer` (allowlisted in
+`egress/allowlist.txt`), where they run on a sealed AMD SEV-SNP machine, and can read results back.
+It also adds a key that can spend money.
+- **Guards, in code** (the helper, tested): the spend limit (`CATHEDRAL_MAX_SPEND_USD`, up to 25.00, default
+  0.50, also bounded by what the key has left); a key with no cap of its own is refused unless
+  `CATHEDRAL_ALLOW_UNCAPPED_KEY=on`; the sandbox network is `deny_all` unless the user asked for
+  internet in the task; the key is never printed, written to disk or put in an error; delete takes one
+  id, never "delete all"; every mutating call carries an idempotency key derived from the agent's task
+  and op names, so a retry never runs a command twice.
+- **Honest limit:** the agent holds the key (like `GITHUB_TOKEN`), so a misbehaving agent could call the
+  API itself and skip the helper. The backstop is the key's own spending cap, which Cathedral enforces
+  on every create. That is why the helper will not work with an uncapped key by default: use a key with
+  its own cap, and a small one.
+- The helper cannot stop the agent from sending the user's files into a sandbox; the skill tells it not to
+  without being asked, and the egress allowlist only controls where, not what.
+- Receipts prove what Cathedral recorded and what the sealed host signed. They do not check the AMD
+  report or the approved build; `verify` says so.
+
 ## If you fork or change `.env` / `allowlist.txt`
 
 - `ALLOW_NO_AUTH=true` removes **all** authentication — combine it with a tunnel or a
