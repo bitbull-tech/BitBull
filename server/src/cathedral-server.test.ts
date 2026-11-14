@@ -376,9 +376,26 @@ test("probe: the key is redacted from every result string, even when Cathedral e
   await updateSettings({ CATHEDRAL_API_KEY: null });
 });
 
+test("probe: a key replaced while the probe runs is still redacted", async () => {
+  await withKey();
+  let rotated: Promise<unknown> | null = null;
+  let started = false;
+  serve(() => json(200, account()), () => {
+    // the user saves a new key mid-probe (once); the answer echoes the old one.
+    // The flag is set first: saving can start another probe synchronously.
+    if (!started) { started = true; rotated = updateSettings({ CATHEDRAL_API_KEY: "cat_sk_test_dummy_rotated_987654" }); }
+    return json(200, { sealed: { available: false, reason: `bad ${KEY}` } });
+  });
+  const pending = probeCathedral();
+  const r = await pending;
+  await rotated;
+  assert.ok(!JSON.stringify(r).includes(KEY), r.detail);
+  await withKey();
+});
+
 test("probe: a malformed budget or remaining amount is red, never a cap", async () => {
   await withKey();
-  for (const budget of ["garbage", "", "-1", "NaN", {}]) {
+  for (const budget of ["garbage", "", "-1", "NaN", {}, "9".repeat(400)]) {
     serve(() => json(200, account({ api_key: { id: "k", expires_at: null, budget_usd: budget, committed_usd: "0", remaining_usd: "4" } })), () => json(200, catalogReady));
     const r = await probeCathedral();
     assert.equal(r.ok, false, JSON.stringify(budget));
@@ -386,7 +403,7 @@ test("probe: a malformed budget or remaining amount is red, never a cap", async 
     assert.match(r.detail, /malformed/i);
     assert.doesNotMatch(r.detail, /NaN/);
   }
-  for (const remaining of ["garbage", "", "-2"]) {
+  for (const remaining of ["garbage", "", "-2", "9".repeat(400)]) {
     serve(() => json(200, account({ api_key: { id: "k", expires_at: null, budget_usd: "5", committed_usd: "1", remaining_usd: remaining } })), () => json(200, catalogReady));
     const r = await probeCathedral();
     assert.equal(r.ok, false, remaining);
