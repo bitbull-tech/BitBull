@@ -16,7 +16,8 @@ import { z } from "zod";
 import { config, type EngineId } from "./config.js";
 import { db, projects, sessions, turns } from "./db.js";
 import { record } from "./activity.js";
-import { activeTurnId, startTurn } from "./turns.js";
+import { notifyOwner, replyText } from "./telegram.js";
+import { activeTurnId, collectTurn, startTurn } from "./turns.js";
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS schedules (
@@ -38,6 +39,10 @@ CREATE TABLE IF NOT EXISTS schedules (
 );
 `);
 
+if (!(db.prepare("PRAGMA table_info(schedules)").all() as Array<{ name: string }>).some((c) => c.name === "notify")) {
+  db.exec("ALTER TABLE schedules ADD COLUMN notify TEXT NOT NULL DEFAULT ''");
+}
+
 /** When it runs: every N minutes, or at a time of day on chosen weekdays (0 = Sunday). */
 export const SpecSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("interval"), everyMinutes: z.number().int().min(15).max(7 * 24 * 60) }),
@@ -58,6 +63,8 @@ export const ScheduleInput = z.object({
   model: z.string().min(1).max(200).optional(),
   spec: SpecSchema,
   enabled: z.boolean().optional(),
+  /** send each run's result to the owner's paired Telegram account */
+  telegram: z.boolean().optional(),
 });
 export type ScheduleInput = z.infer<typeof ScheduleInput>;
 
@@ -75,6 +82,7 @@ interface Row {
   last_run_at: number | null;
   last_turn_id: string | null;
   last_note: string | null;
+  notify: string;
   created_at: number;
   updated_at: number;
 }
@@ -144,6 +152,8 @@ export interface Schedule {
   spec: Spec;
   when: string;
   enabled: boolean;
+  /** each run's result also goes to the owner's Telegram */
+  telegram: boolean;
   sessionId: string | null;
   nextRunAt: number | null;
   lastRunAt: number | null;
@@ -166,6 +176,7 @@ function toSchedule(r: Row): Schedule {
     spec,
     when: describe(spec),
     enabled: !!r.enabled,
+    telegram: r.notify === "telegram",
     sessionId: r.session_id && sessions.get(r.session_id) ? r.session_id : null,
     nextRunAt: r.enabled ? r.next_run_at : null,
     lastRunAt: r.last_run_at,
@@ -189,17 +200,17 @@ export const schedules = {
     const clean = check(input);
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO schedules (id,name,prompt,project_id,engine,model,spec_json,enabled,next_run_at,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    ).run(id, clean.name, clean.prompt, clean.projectId, clean.engine, clean.model, JSON.stringify(clean.spec), clean.enabled ? 1 : 0, nextRun(clean.spec, now), now, now);
+      `INSERT INTO schedules (id,name,prompt,project_id,engine,model,spec_json,enabled,notify,next_run_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(id, clean.name, clean.prompt, clean.projectId, clean.engine, clean.model, JSON.stringify(clean.spec), clean.enabled ? 1 : 0, clean.telegram ? "telegram" : "", nextRun(clean.spec, now), now, now);
     return schedules.get(id)!;
   },
   update(id: string, input: Partial<ScheduleInput>, now = Date.now()): Schedule | undefined {
     const cur = schedules.get(id);
     if (!cur) return undefined;
-    const clean = check({ name: cur.name, prompt: cur.prompt, projectId: cur.projectId, engine: cur.engine, model: cur.model, spec: cur.spec, enabled: cur.enabled, ...input });
+    const clean = check({ name: cur.name, prompt: cur.prompt, projectId: cur.projectId, engine: cur.engine, model: cur.model, spec: cur.spec, enabled: cur.enabled, telegram: cur.telegram, ...input });
     const specChanged = JSON.stringify(clean.spec) !== JSON.stringify(cur.spec) || (clean.enabled && !cur.enabled);
-    db.prepare("UPDATE schedules SET name=?, prompt=?, project_id=?, engine=?, model=?, spec_json=?, enabled=?, next_run_at=?, updated_at=? WHERE id=?").run(
+    db.prepare("UPDATE schedules SET name=?, prompt=?, project_id=?, engine=?, model=?, spec_json=?, enabled=?, notify=?, next_run_at=?, updated_at=? WHERE id=?").run(
       clean.name,
       clean.prompt,
       clean.projectId,
@@ -207,6 +218,7 @@ export const schedules = {
       clean.model,
       JSON.stringify(clean.spec),
       clean.enabled ? 1 : 0,
+      clean.telegram ? "telegram" : "",
       specChanged ? nextRun(clean.spec, now) : getRow(id)!.next_run_at,
       now,
       id,
@@ -234,6 +246,7 @@ function check(input: ScheduleInput) {
     model: v.model ?? config.agent.defaultModel,
     spec: v.spec,
     enabled: v.enabled ?? true,
+    telegram: v.telegram ?? false,
   };
 }
 
@@ -266,6 +279,12 @@ export function runSchedule(id: string, now = Date.now()): { turnId?: string; sk
   const { turnId } = startTurn(session, { prompt: RUN_RULES(s.name, new Date(now)) + s.prompt, model: s.model });
   db.prepare("UPDATE schedules SET last_run_at = ?, last_turn_id = ?, last_note = NULL WHERE id = ?").run(now, turnId, id);
   record({ level: "info", source: "schedule", message: `Scheduled run started: ${s.name}`, sessionId: session.id, sessionTitle: session.title });
+  // the result goes to the owner's phone when they asked for that; a run nobody is paired for just stays in its chat
+  if (s.telegram) {
+    void collectTurn(turnId)
+      .then(({ events, status }) => notifyOwner(`⏰ ${s.name}\n\n${replyText(events, status)}`))
+      .catch(() => {});
+  }
   return { turnId };
 }
 

@@ -48,6 +48,7 @@ export async function updateSettings(values: Record<string, string | null>) {
     if (v && opts && !opts.includes(v)) throw new Error(`${k} must be one of: ${opts.join(", ")}`);
     if (v && /[\r\n]/.test(v)) throw new Error(`${k} can't contain line breaks`);
     if (k === "UPLOAD_MAX_MB" && v && !(Number(v) > 0)) throw new Error("UPLOAD_MAX_MB must be a positive number");
+    if (k === "TELEGRAM_BOT_TOKEN" && v && !/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(v.trim())) throw new Error("That doesn't look like a Telegram bot token (it should look like 123456789:AA…). Copy it again from @BotFather.");
     // Reject a bad encryption key here rather than at the first upload, when it is too late
     if (k === "HIPPIUS_ENCRYPTION_KEY" && v) {
       const buf = /^[0-9a-f]{64}$/i.test(v.trim()) ? Buffer.from(v.trim(), "hex") : Buffer.from(v.trim(), "base64");
@@ -182,6 +183,16 @@ export function describeSettings() {
         row("TAOSTATS_API_KEY", "API key", config.integrations.taostats.apiKey, {
           secret: true,
           hint: "Bittensor data via https://api.taostats.io/v1 (old /api/ routes stop on 9 Nov 2026). The agent reads it from its environment; see the taostats-api skill.",
+        }),
+      ],
+    },
+    {
+      id: "telegram",
+      title: "Telegram",
+      rows: [
+        row("TELEGRAM_BOT_TOKEN", "Bot token", config.integrations.telegram.botToken, {
+          secret: true,
+          hint: "From @BotFather (/newbot). The bot answers one account only: yours, once you pair it here. The agent never sees this token.",
         }),
       ],
     },

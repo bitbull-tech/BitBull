@@ -64,6 +64,9 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   FOUR04_MODEL_URL: {},
   FOUR04_MODEL_KEY: {},
   TAOSTATS_API_KEY: {},
+  // Telegram bot (docs/TELEGRAM.md). Only the token is a setting: who may talk to the bot is set
+  // by pairing, and where the token is sent (TELEGRAM_API_URL) stays .env-only.
+  TELEGRAM_BOT_TOKEN: {},
   HIPPIUS_ACCESS_KEY: {},
   HIPPIUS_SECRET_KEY: {},
   HIPPIUS_BUCKET: {},
@@ -231,6 +234,11 @@ function buildConfig() {
     },
     /** Taostats API key (Bittensor data). Sent raw in Authorization (no Bearer); v1 API only. */
     taostats: { apiKey: env("TAOSTATS_API_KEY", "") },
+    telegram: {
+      /** From @BotFather. Never given to the agent: it is the bot, and whoever holds it can read your chat with it. */
+      botToken: env("TELEGRAM_BOT_TOKEN", ""),
+      apiUrl: env("TELEGRAM_API_URL", "https://api.telegram.org").replace(/\/+$/, ""),
+    },
     four04: {
       /**
        * 404 (Bittensor subnet 17): 3D objects as Three.js code, through the public 404 game recipe.

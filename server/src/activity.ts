@@ -9,7 +9,7 @@ import { config } from "./config.js";
  * survives restarts. Secrets are redacted before anything is stored.
  */
 export type Level = "debug" | "info" | "warn" | "error";
-export type Source = "server" | "config" | "saygm" | "agent" | "tool" | "subagent" | "upload" | "ditto" | "opencode" | "claude" | "integration" | "skills" | "storage" | "network" | "swarm" | "compat" | "schedule";
+export type Source = "server" | "config" | "saygm" | "agent" | "tool" | "subagent" | "upload" | "ditto" | "opencode" | "claude" | "integration" | "skills" | "storage" | "network" | "swarm" | "compat" | "schedule" | "telegram";
 
 export interface ActivityEvent {
   id: number;
@@ -40,6 +40,7 @@ const secrets = () =>
     config.integrations.four04.modelKey,
     config.integrations.github.token,
     config.integrations.taostats.apiKey,
+    config.integrations.telegram.botToken,
     config.storage.accessKey,
     config.storage.secretKey,
     config.storage.encryptionKey,

@@ -22,6 +22,7 @@ type Draft = {
   days: number[]
   every: number
   unit: 'minutes' | 'hours'
+  telegram: boolean
 }
 
 const blank = (model: string, projectId: string | null): Draft => ({
@@ -34,11 +35,12 @@ const blank = (model: string, projectId: string | null): Draft => ({
   days: [1, 2, 3, 4, 5],
   every: 2,
   unit: 'hours',
+  telegram: false,
 })
 
 function fromSchedule(s: Schedule): Draft {
   const d = blank(s.model, s.projectId)
-  const base = { ...d, id: s.id, name: s.name, prompt: s.prompt }
+  const base = { ...d, id: s.id, name: s.name, prompt: s.prompt, telegram: s.telegram }
   if (s.spec.kind === 'daily') return { ...base, mode: 'daily', time: s.spec.time, days: s.spec.days }
   const m = s.spec.everyMinutes
   return { ...base, mode: 'interval', every: m % 60 === 0 ? m / 60 : m, unit: m % 60 === 0 ? 'hours' : 'minutes' }
@@ -47,7 +49,7 @@ function fromSchedule(s: Schedule): Draft {
 function toInput(d: Draft): ScheduleInput {
   const spec: ScheduleSpec =
     d.mode === 'daily' ? { kind: 'daily', time: d.time, days: [...d.days].sort(), tz: TZ } : { kind: 'interval', everyMinutes: Math.round(d.every * (d.unit === 'hours' ? 60 : 1)) }
-  return { name: d.name.trim(), prompt: d.prompt.trim(), projectId: d.projectId, model: d.model, spec }
+  return { name: d.name.trim(), prompt: d.prompt.trim(), projectId: d.projectId, model: d.model, spec, telegram: d.telegram }
 }
 
 const when = (ms: number | null) =>
@@ -74,6 +76,8 @@ export function SchedulesDialog({
   const [draft, setDraft] = useState<Draft | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** is a Telegram account paired (so results can be sent there) */
+  const [paired, setPaired] = useState(false)
 
   const load = () =>
     void api
@@ -82,6 +86,7 @@ export function SchedulesDialog({
       .catch((e) => setMsg(e instanceof Error ? e.message : String(e)))
   useEffect(() => {
     load()
+    void api.telegram().then((t) => setPaired(!!t.paired)).catch(() => {})
     const t = window.setInterval(load, 15_000)
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -144,6 +149,7 @@ export function SchedulesDialog({
                       <span className="muted small">
                         {s.when}
                         {s.projectName ? ` · ${s.projectName}` : ''} · {s.model}
+                        {s.telegram ? ' · results to Telegram' : ''}
                       </span>
                       <span className="small">
                         {s.enabled ? <>Next: {when(s.nextRunAt)}</> : 'Paused'}
@@ -271,6 +277,13 @@ export function SchedulesDialog({
                   </select>
                 </label>
               </div>
+              <label className={`sched-check ${paired ? '' : 'off'}`}>
+                <input type="checkbox" checked={draft.telegram && paired} disabled={!paired} onChange={(e) => setDraft({ ...draft, telegram: e.target.checked })} />
+                <span>
+                  Send each result to my Telegram
+                  {!paired && <span className="muted small"> (pair your Telegram under Settings → Integrations first)</span>}
+                </span>
+              </label>
               <p className="muted small">
                 A cheap, fast model is usually enough for routine runs; each run's cost shows in its chat and under Usage. In a project with a TEAM.md,
                 the run is done by that team.

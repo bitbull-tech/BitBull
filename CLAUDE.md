@@ -41,6 +41,7 @@ server/src/          Node 22 + TypeScript, Hono, node:sqlite (no native deps)
   integrations.ts    Atlas, 404, GitHub (+ probes); ditto.ts; models.ts; skills.ts; db.ts
   router.ts          Ditto Router: models, endpoint MCP catalog, prices; dittoConnect.ts: Connect Ditto (docs/ROUTER.md)
   providerKeys.ts    provider keys kept in Ditto, through the Ditto CLI (`heyditto keys`); BitBull stores none
+  telegram.ts        the owner's private Telegram bot: long polling, one paired account (signed record), text turns, schedule results (docs/TELEGRAM.md)
   schedules.ts       prompts run on a timetable, each in its own chat (+ RUN_RULES: nothing irreversible unattended); usage.ts: spend per day/model
   compat.ts          checks that SayGM and Ditto still answer the way BitBull reads them; notices + update prompt (docs/COMPAT.md)
 web/src/             React + Vite UI (App, Chat, Settings, FilesDialog, ReposDialog, ExportMenu, activity.tsx)

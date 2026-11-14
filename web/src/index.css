@@ -770,6 +770,17 @@ code, pre, kbd { font-family: var(--mono); }
 .int-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .int-head { display: flex; align-items: center; gap: 12px; }
 .int-head .btn { padding: 5px 10px; font-size: 12.5px; text-decoration: none; color: var(--text); }
+.tg-connect { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+.tg-connect p { margin: 0; }
+.tg-connect .row-actions { margin-top: 0; flex-wrap: wrap; }
+.tg-connect a.btn { text-decoration: none; color: var(--text); }
+.tg-connect a.btn.primary { color: var(--accent-text); }
+.tg-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.tg-pairing { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.tg-code { align-self: flex-start; font-size: 22px; letter-spacing: 0.18em; padding: 8px 14px; border-radius: 8px; user-select: all; }
+.sched-check { display: flex; flex-direction: row !important; align-items: center; gap: 8px; }
+.sched-check input { width: auto; flex: none; }
+.sched-check.off { opacity: 0.75; }
 .ditto-connect .row-actions { margin-top: 0; }
 .ditto-connect a.btn { text-decoration: none; color: var(--text); }
 .provider-keys { margin-top: 10px; display: grid; gap: 6px; }

@@ -194,6 +194,22 @@ export function isApproved(host: string) {
   return approved.some((a) => (a.scope === "domain" ? host === a.host || host.endsWith(`.${a.host}`) : host === a.host));
 }
 
+/**
+ * Hosts BitBull itself needs only while a feature is on, so they stay off the static list (and
+ * closed to a prompt-injected agent) for everyone who doesn't use it. Today: Telegram's API,
+ * while a bot token is set (telegram.ts). The proxy can't tell the server's calls from the
+ * agent's shell, so while it is open the agent can reach that host too (docs/THREAT-MODEL.md).
+ */
+export function builtIn(host: string) {
+  const t = config.integrations.telegram;
+  if (!t.botToken) return false;
+  try {
+    return host === new URL(t.apiUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 // ---------- the proxy's question ----------
 
 let egressIps: { at: number; ips: string[] } = { at: 0, ips: [] };
@@ -220,7 +236,7 @@ export async function fromEgress(remote: string | undefined) {
 export function proxyCheck(rawHost: string): boolean {
   const host = normalizeHost(rawHost);
   if (!host) return false;
-  if (isApproved(host)) return true;
+  if (isApproved(host) || builtIn(host)) return true;
   const now = new Date().toISOString();
   const b = blocked.get(host);
   if (b) {
@@ -382,11 +398,21 @@ function sweep() {
   }
 }
 
+const safeHost = (url: string) => {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
 export function networkState() {
   sweep();
   return {
     proxied: proxied(),
     allowlist: staticAllowlist(),
+    /** open because a feature that needs them is switched on (builtIn) */
+    builtIn: config.integrations.telegram.botToken ? [{ host: safeHost(config.integrations.telegram.apiUrl), why: "Telegram bot" }].filter((b) => b.host) : [],
     approved,
     requests: listRequests(),
     blocked: [...blocked.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt)).slice(0, 50),

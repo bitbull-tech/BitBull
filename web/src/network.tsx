@@ -221,6 +221,11 @@ export function NetworkPanel() {
       <details className="net-static">
         <summary>Always allowed ({net.allowlist.length}, from egress/allowlist.txt)</summary>
         <p className="mono small">{net.allowlist.join('  ')}</p>
+        {!!net.builtIn?.length && (
+          <p className="small muted">
+            Also open while the feature is on: {net.builtIn.map((b) => `${b.host} (${b.why})`).join(', ')}. Remove the bot token in Integrations to close it.
+          </p>
+        )}
       </details>
     </div>
   )

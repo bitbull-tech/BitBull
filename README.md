@@ -364,6 +364,36 @@ interval is 15 minutes, and times follow your timezone across daylight-saving ch
 happen while BitBull is running; a run missed while it was off happens once when it starts again.
 **Run now** starts one straight away. A cheap, fast model is usually enough.
 
+## Telegram
+
+Message BitBull from your phone, and get scheduled results there, through a Telegram bot that is
+yours alone. It is private and personal: the bot answers one Telegram account, yours, in its
+one-to-one chat. Everyone else, and every group, is ignored without a reply.
+
+1. In Telegram, open [@BotFather](https://t.me/BotFather), send `/newbot` and follow it. It
+   gives you a token that looks like `123456789:AA…`.
+2. In BitBull: **Settings → Integrations → Telegram**. Paste the token in **Bot token** and save.
+3. Press **Pair my Telegram**, then open your bot from the button shown and press **Start** (or
+   send the bot the one-time code). The bot now answers you and nobody else.
+
+Nothing has to reach your computer from the internet: BitBull calls out to Telegram, so there is
+no port to open and no tunnel.
+
+Send the bot any text and BitBull runs it and replies. `/new` starts a fresh chat, `/stop` stops
+what it is doing, `/help` lists these. The conversation is the **Telegram** chat in BitBull's
+sidebar, so you can read it or carry on from either side. On a schedule, tick **Send each
+result to my Telegram** to get every run's summary on your phone.
+
+Nobody is at the BitBull screen when a message comes in by phone, so anything that publishes,
+sends, deletes or spends is prepared and left for your approval in BitBull, and requests that
+need a click there (network access, for one) wait for you. Text only for now: no photos, voice
+notes or files.
+
+Two things to know. Bot chats are not end-to-end encrypted, so Telegram can read what passes
+through: don't send secrets that way. And whoever can use your Telegram account can talk to your
+BitBull, so turn on Telegram's two-step verification. How pairing is protected, the network
+opening it needs, and how to switch it off are in [docs/TELEGRAM.md](docs/TELEGRAM.md).
+
 ## Usage
 
 The bar-chart button at the bottom of the sidebar opens **Usage**: estimated spend per day (hover
@@ -830,9 +860,12 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `POST` | `/api/models/advise` | "Which model for this?": `{task, strong?}` → three picks from the live catalogue with estimated cost |
 | `GET` | `/api/router/models` | Ditto Router's models, and whether background work runs on it |
 | `POST` / `GET` | `/api/ditto/connect` | Connect Ditto: start the sign-in / its state |
-| `GET` / `POST` | `/api/schedules` | Schedules: list / create (`{ name, prompt, projectId, model, spec }`) |
+| `GET` / `POST` | `/api/schedules` | Schedules: list / create (`{ name, prompt, projectId, model, spec, telegram }`) |
 | `PATCH` / `DELETE` | `/api/schedules/:id` | Change (or pause with `enabled: false`) / delete a schedule; its chat is kept |
 | `POST` | `/api/schedules/:id/run` | Run a schedule now |
+| `GET` | `/api/telegram` | Telegram: the connected bot, who is paired, a live pairing code (never the token) |
+| `POST` / `DELETE` | `/api/telegram/pair` | Make a one-time pairing code / cancel it |
+| `POST` | `/api/telegram/unpair`, `/api/telegram/test` | Forget the paired account / send it a test message |
 | `GET` | `/api/usage?days=30&offset=60` | Estimated spend per day and per model (`offset`: minutes east of UTC) |
 | `GET` | `/api/compat` | Compatibility notices: SayGM or Ditto changes, lapsed keys, a newer BitBull (`?refresh=1` checks now) |
 | `GET` / `POST` | `/api/ditto/keys` | Provider keys in Ditto: list (metadata only) / save one via the Ditto CLI |

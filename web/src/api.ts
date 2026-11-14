@@ -242,13 +242,26 @@ export interface Schedule {
   spec: ScheduleSpec
   when: string
   enabled: boolean
+  /** each run's result also goes to your paired Telegram */
+  telegram: boolean
   sessionId: string | null
   nextRunAt: number | null
   lastRunAt: number | null
   lastStatus: string | null
   lastNote: string | null
 }
-export type ScheduleInput = { name: string; prompt: string; projectId: string | null; model: string; spec: ScheduleSpec; enabled?: boolean }
+export type ScheduleInput = { name: string; prompt: string; projectId: string | null; model: string; spec: ScheduleSpec; enabled?: boolean; telegram?: boolean }
+
+/** Telegram (server/src/telegram.ts): your bot, the one account it answers, and a pairing code while one is live */
+export interface TelegramState {
+  configured: boolean
+  status: 'off' | 'connecting' | 'on' | 'error'
+  error: string
+  bot: { username: string; name: string; link: string } | null
+  paired: { name: string; pairedAt: number } | null
+  pairing: { code: string; expiresAt: number; link: string; command: string } | null
+  ignored: number
+}
 
 /** Estimated spending (server/src/usage.ts) */
 export interface UsageReport {
@@ -441,6 +454,8 @@ export interface RepoInfo {
 export interface NetworkState {
   proxied: boolean
   allowlist: string[]
+  /** open because a feature that needs them is on (Telegram's API while a bot token is set) */
+  builtIn?: { host: string; why: string }[]
   approved: { host: string; scope: 'host' | 'domain'; approvedAt: string; reason?: string }[]
   requests: NetworkRequest[]
   blocked: { host: string; count: number; firstAt: string; lastAt: string }[]
@@ -549,6 +564,11 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  telegram: () => req<TelegramState>('/api/telegram'),
+  telegramPair: () => req<TelegramState>('/api/telegram/pair', { method: 'POST' }),
+  telegramCancelPair: () => req<TelegramState>('/api/telegram/pair', { method: 'DELETE' }),
+  telegramUnpair: () => req<TelegramState>('/api/telegram/unpair', { method: 'POST' }),
+  telegramTest: () => req<{ ok: boolean }>('/api/telegram/test', { method: 'POST' }),
   schedules: () => req<{ schedules: Schedule[]; max: number }>('/api/schedules'),
   createSchedule: (s: ScheduleInput) => req<Schedule>('/api/schedules', { method: 'POST', body: JSON.stringify(s) }),
   updateSchedule: (id: string, s: Partial<ScheduleInput>) => req<Schedule>(`/api/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),

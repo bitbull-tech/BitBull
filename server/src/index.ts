@@ -31,6 +31,7 @@ import { routerBackground, routerMcpServers, routerModels, routerReview } from "
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
 import { compatState, runCompat, scheduleCompat } from "./compat.js";
 import { MAX_SCHEDULES, runSchedule, ScheduleInput, schedules, startScheduler } from "./schedules.js";
+import { cancelPairing, notifyOwner, startPairing, startTelegram, syncTelegram, telegramState, unpair } from "./telegram.js";
 import { usageReport } from "./usage.js";
 import { copySaygmKey, listKeyProviders, listProviderKeys, ProviderKeyError, removeProviderKey, saveProviderKey, setProviderKeyEnabled } from "./providerKeys.js";
 import { addCapture, CaptureSchema, takeCapture } from "./captures.js";
@@ -274,6 +275,30 @@ app.delete("/api/schedules/:id", (c) => {
 app.post("/api/schedules/:id/run", (c) => {
   const r = runSchedule(c.req.param("id"));
   return r.turnId ? c.json({ ...r, schedule: schedules.get(c.req.param("id")) }) : c.json({ error: r.skipped }, 409);
+});
+
+/**
+ * Telegram (server/src/telegram.ts): your own bot, paired with one account. The token is a
+ * setting (PUT /api/settings); these routes pair, unpair and test. Nothing here returns the token.
+ */
+app.get("/api/telegram", (c) => c.json(telegramState()));
+app.post("/api/telegram/pair", (c) => {
+  try {
+    syncTelegram();
+    return c.json(startPairing());
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 409);
+  }
+});
+app.delete("/api/telegram/pair", (c) => c.json(cancelPairing()));
+app.post("/api/telegram/unpair", (c) => {
+  unpair();
+  return c.json(telegramState());
+});
+app.post("/api/telegram/test", async (c) => {
+  if (!telegramState().paired) return c.json({ error: "Pair your Telegram account first." }, 409);
+  const ok = await notifyOwner("Test from BitBull: this is where replies and scheduled results will arrive.");
+  return ok ? c.json({ ok: true }) : c.json({ error: "Telegram didn't take the message. The Activity log has the reason." }, 502);
 });
 
 /** Estimated spending per day and per model (server/src/usage.ts). ?days=30&offset=<minutes east of UTC> */
@@ -1334,6 +1359,7 @@ await syncSkills().catch((e) => console.warn("[skills]", e instanceof Error ? e.
 if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));
 scheduleCompat(buildInfo);
 startScheduler();
+startTelegram();
 const srv = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`[server] BitBull listening on http://${info.address}:${info.port}`);
 });

@@ -153,6 +153,16 @@ protection only; at runtime the agent can use them. Use a fine-grained, repo-sco
 On the host there is no container, no proxy, and the shell is off only by configuration.
 Every residual above applies directly to the owner's user account. Development only.
 
+### R10 — Telegram (only while a bot token is set)
+`docs/TELEGRAM.md`. The bot acts on one paired account's private chat; the pairing record in
+`/data` is signed with the bot token, so the agent can't plant an owner without the token (and
+R1 is how a determined agent could get the token: then it could pair an account of its choosing
+and be driven from outside). While a token is set, `api.telegram.org` is open in the proxy for
+the whole container, so it is one more place a prompt-injected agent could send data (through
+someone else's bot). Messages and replies are readable by Telegram, and anyone holding the
+owner's Telegram account can instruct the agent, within the same limits as an unattended run
+(nothing irreversible; approvals stay in BitBull). No token, none of this applies.
+
 ## If you fork or change `.env` / `allowlist.txt`
 
 - `ALLOW_NO_AUTH=true` removes **all** authentication — combine it with a tunnel or a
