@@ -14,7 +14,8 @@ A Cathedral sandbox is an isolated room on an AMD SEV-SNP machine, away from the
 - Before `create`, tell the user the size, the hourly rate, the lifetime, the spend limit and whether it has internet. Wait for a yes.
 - Use `--internet` only if the user asked for internet in this task. The default is a closed network (`deny_all`).
 - Never move the user's secrets or private files into a sandbox unless the user names them.
-- Delete only sandboxes this task created, by id. Never delete another one without the user's yes.
+- Delete only sandboxes this task created, by id. The helper checks the sandbox's task label first and refuses (`not_this_task`) to delete one this task did not create; never look for a way around that, and never delete another one without the user's yes.
+- Never put the Cathedral key into a command or a file for a sandbox. The helper refuses (`secret_in_request`) and sends nothing.
 - Never print, repeat or store the Cathedral key. The helper reads it from its environment.
 
 ## Names for every step
@@ -38,7 +39,7 @@ Every command that changes something needs `--task <tag>` and `--op <name>`.
 ## When something goes wrong
 
 - A command that gave up after retries can be run again with the same names: same key, same body, so it still runs at most once. After a restart, `list --task T` finds the task's sandboxes, and `create ... --resume` with the same arguments resumes a create.
-- `put` is never retried automatically. If its answer is lost it says "upload outcome unknown". Run it again with `--check` to read the path back. If the path holds different bytes or is missing, the upload may still have landed and been changed since: ask the user before uploading again over it. Re-sending is a new `put` under a new `--op`.
+- `put` is never retried automatically. If its answer is lost it says "upload outcome unknown". Run `put --check` with the same arguments: it only reads the path back and compares it with your local file, and never uploads. If the path holds different bytes or is missing, the upload may still have landed and been changed since: ask the user before uploading again over it. Re-sending is a new `put` under a new `--op`.
 - `lost` from `exec-wait` means the outcome is unknown: the command may or may not have run.
 - If a create says the key has no cap, or a spend is above the limit, tell the user. Do not look for a way around it.
 - The room limit (`sealed_room_limit_reached`) means the account already has its live rooms. Tell the user; do not delete other sandboxes to make room.

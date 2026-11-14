@@ -109,6 +109,7 @@ async function go(argv: string[], routes: Route[] = [], envOver: Record<string, 
 const posts = (reqs: Rec[], re: RegExp) => reqs.filter((q) => q.method === "POST" && re.test(q.path));
 const CREATE = (size = "sealed-1x2", extra: string[] = []) => ["create", "--task", TASK, "--op", "create", "--size", size, "--lifetime", "300", "--max-spend", "0.01", ...extra];
 const createRoute = (f: () => Response = () => j(200, sandbox("running", { receipt_id: "r1" }))): Route => ["POST", /^\/v1\/sandboxes$/, once(f)];
+const MINE = () => j(200, sandbox("running", { labels: { bitbull: "1", bitbull_task: TASK } }));
 const dropped = () => Object.assign(new TypeError("fetch failed"), { cause: new Error("ECONNRESET") });
 
 // ---------- tags, key, url ----------
@@ -535,7 +536,7 @@ test("retries: create, exec-bg and delete retry the same way", async () => {
   assert.equal(posts(b.reqs, /execs$/).length, 2);
   const d = await go(["delete", ID, "--task", TASK, "--op", "d"], [
     ["DELETE", new RegExp(`^/v1/sandboxes/${ID}$`), seq(dropped(), () => j(202, sandbox("deleting")))],
-    ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(200, sandbox("deleted")))],
+    ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), seq(MINE, () => j(200, sandbox("deleted")))],
     ["GET", new RegExp(`^/v1/sandboxes/${ID}/receipts$`), once(() => j(200, { receipts: [], next_after: null }))],
   ]);
   assert.equal(d.r.code, 0, d.r.stdout);
@@ -675,28 +676,37 @@ test("put: never retried; a dropped connection and a 503 are one request each an
   }
 });
 
-test("put --check: equal bytes read back is landed; a mismatch or a missing path stays outcome unknown with what is there now", async () => {
+test("put --check is read-only: after a lost PUT answer it makes 0 PUTs and 1 GET, and compares the sha256 of the local file", async () => {
   const src = path.join(tmp, "check.txt");
   writeFileSync(src, "payload");
   const sha = createHash("sha256").update("payload").digest("hex");
-  const landed = await go(putArgs(src, "chk", ["--check"]), [filesRoute("PUT", seq(dropped())), filesRoute("GET", once(() => bin(200, Buffer.from("payload"))))]);
+  const lost = await go(putArgs(src, "chk"), [filesRoute("PUT", seq(dropped()))]);
+  assert.match(lost.r.out.hint, /put --check/, "the hint names the recovery command");
+  assert.match(lost.r.out.hint, /same (args|arguments)/i);
+
+  const landed = await go(putArgs(src, "chk", ["--check"]), [filesRoute("PUT", once(() => empty(204))), filesRoute("GET", once(() => bin(200, Buffer.from("payload"))))]);
   assert.equal(landed.r.code, 0, landed.r.stdout);
+  assert.equal(landed.r.out.ok, true);
   assert.equal(landed.r.out.landed, true);
-  assert.equal(landed.reqs.filter((q) => q.method === "PUT").length, 1);
+  assert.equal(landed.r.out.sha256, sha);
+  assert.equal(landed.reqs.filter((q) => q.method === "PUT").length, 0);
   assert.equal(landed.reqs.filter((q) => q.method === "GET").length, 1);
 
   // the upload landed and a later step changed the file: never "not landed"
-  const changed = await go(putArgs(src, "chk", ["--check"]), [filesRoute("PUT", seq(dropped())), filesRoute("GET", once(() => bin(200, Buffer.from("changed by another step"))))]);
+  const changed = await go(putArgs(src, "chk", ["--check"]), [filesRoute("PUT", once(() => empty(204))), filesRoute("GET", once(() => bin(200, Buffer.from("changed by another step"))))]);
   assert.equal(changed.r.code, 1);
-  assert.equal(changed.r.out.error, "upload_outcome_unknown");
+  assert.equal(changed.r.out.ok, false);
+  assert.equal(changed.r.out.error, "outcome_unknown");
   assert.equal(changed.r.out.observed.sha256, createHash("sha256").update("changed by another step").digest("hex"));
   assert.notEqual(changed.r.out.observed.sha256, sha);
   assert.ok(!/not landed/i.test(changed.r.stdout));
+  assert.equal(changed.reqs.filter((q) => q.method === "PUT").length, 0);
 
-  const absent = await go(putArgs(src, "chk", ["--check"]), [filesRoute("PUT", seq(dropped())), filesRoute("GET", once(() => j(404, { detail: { error: "file_not_found" } })))]);
-  assert.equal(absent.r.out.error, "upload_outcome_unknown");
+  const absent = await go(putArgs(src, "chk", ["--check"]), [filesRoute("PUT", once(() => empty(204))), filesRoute("GET", once(() => j(404, { detail: { error: "file_not_found" } })))]);
+  assert.equal(absent.r.out.error, "outcome_unknown");
   assert.equal(absent.r.out.observed.absent, true);
   assert.ok(!/not landed/i.test(absent.r.stdout));
+  assert.equal(absent.reqs.filter((q) => q.method === "PUT").length, 0);
 });
 
 test("put over 200 MiB is refused before any request; a 413 is reported and stops", async () => {
@@ -874,18 +884,19 @@ test("verify: a bad signature and a broken link both fail, and say which receipt
 test("delete: polls until deleted, then fetches the chain again so the head includes the delete receipt", async () => {
   const x = await go(["delete", ID, "--task", TASK, "--op", "del"], [
     ["DELETE", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(202, sandbox("deleting")))],
-    ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), seq(() => j(200, sandbox("deleting")), () => j(200, sandbox("deleting")), () => j(200, sandbox("deleted")))],
+    ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), seq(MINE, () => j(200, sandbox("deleting")), () => j(200, sandbox("deleting")), () => j(200, sandbox("deleted")))],
     receiptsRoute(once(() => j(200, { receipts: mkReceipts(1, 4), next_after: null }))),
   ]);
   assert.equal(x.r.code, 0, x.r.stdout);
   assert.deepEqual(x.reqs.map((q) => `${q.method} ${q.path.replace(ID, ":id")}`), [
+    "GET /v1/sandboxes/:id",
     "DELETE /v1/sandboxes/:id",
     "GET /v1/sandboxes/:id",
     "GET /v1/sandboxes/:id",
     "GET /v1/sandboxes/:id",
     "GET /v1/sandboxes/:id/receipts",
   ]);
-  assert.equal(x.reqs[0].headers["idempotency-key"], `bitbull-${TASK}-del`);
+  assert.equal(x.reqs[1].headers["idempotency-key"], `bitbull-${TASK}-del`);
   assert.equal(x.r.out.state, "deleted");
   assert.equal(x.r.out.receipts.count, 4);
   assert.equal(x.r.out.receipts.head_n, 4);
@@ -896,7 +907,7 @@ test("delete: polls until deleted, then fetches the chain again so the head incl
 test("delete: a stuck delete reports the id after the 5 minute limit (counted through sleep)", async () => {
   const x = await go(["delete", ID, "--task", TASK, "--op", "del"], [
     ["DELETE", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(202, sandbox("deleting")))],
-    ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), seq(() => j(200, sandbox("deleting")))],
+    ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), seq(MINE, () => j(200, sandbox("deleting")))],
   ]);
   assert.equal(x.r.code, 1);
   assert.equal(x.r.out.ok, false);
@@ -983,4 +994,126 @@ test("run never throws: an unexpected failure inside a command comes back as one
   assert.equal(x.r.code, 1);
   assert.equal(x.r.out.ok, false);
   assert.ok(!x.r.stdout.includes(KEY));
+});
+
+// ---------- round 2 (Astra's code review) ----------
+
+test("retries use a fresh timeout signal per attempt, with the same body and key", async () => {
+  const signals: AbortSignal[] = [];
+  const bodies: string[] = [];
+  const keys: string[] = [];
+  let n = 0;
+  const realTimeout = AbortSignal.timeout;
+  // the first attempt's signal is already aborted by the time the retry runs
+  AbortSignal.timeout = ((ms: number) => {
+    const c = new AbortController();
+    if (signals.length === 0) setTimeout(() => c.abort(), 0);
+    signals.push(c.signal);
+    return c.signal;
+  }) as typeof AbortSignal.timeout;
+  try {
+    const fetchImpl = (async (_u: any, init: RequestInit = {}) => {
+      n++;
+      bodies.push(String(init.body));
+      keys.push((init.headers as Record<string, string>)["Idempotency-Key"]);
+      if (n === 1) {
+        await new Promise((r) => setTimeout(r, 5));
+        if (init.signal?.aborted) throw Object.assign(new Error("aborted"), { name: "TimeoutError" });
+      }
+      if (init.signal?.aborted) throw Object.assign(new Error("aborted"), { name: "TimeoutError" });
+      return j(200, { exit_code: 0, stdout: "ok", stderr: "", timed_out: false });
+    }) as typeof fetch;
+    const r = await run(EXEC_ARGS, { env: { CATHEDRAL_API_KEY: KEY }, fetch: fetchImpl, sleep: async () => {} });
+    assert.equal(r.code, 0, r.stdout);
+    assert.equal(n, 2);
+    assert.notEqual(signals[0], signals[1]);
+    assert.equal(bodies[0], bodies[1]);
+    assert.equal(keys[0], keys[1]);
+  } finally {
+    AbortSignal.timeout = realTimeout;
+  }
+});
+
+test("Retry-After above 60 s is not shortened: the helper stops with retry_after_s set and retry_with_same_key true", async () => {
+  const x = await go(EXEC_ARGS, [execRoute(seq(() => j(503, { detail: { error: "sealed_pool_throttled", retry_after_s: 120 } }, { "Retry-After": "120" }), EXEC_OK))]);
+  assert.equal(posts(x.reqs, /exec$/).length, 1);
+  assert.equal(x.sleeps.length, 0);
+  assert.equal(x.r.code, 1);
+  assert.equal(x.r.out.retry_after_s, 120);
+  assert.equal(x.r.out.retry_with_same_key, true);
+  const edge = await go(EXEC_ARGS, [execRoute(seq(() => j(503, { detail: { error: "busy" } }, { "Retry-After": "60" }), EXEC_OK))]);
+  assert.equal(edge.r.code, 0, "exactly 60 s is waited for");
+  assert.deepEqual(edge.sleeps, [60000]);
+});
+
+test("retry history never overwrites terminal guidance", async () => {
+  const seqRun = (terminal: () => Response) => go(EXEC_ARGS, [execRoute(seq(dropped(), terminal))]);
+  const unknown = await seqRun(() => j(502, { detail: { error: "exec_outcome_unknown", replay_safe: false, billed: false, retry_after_s: null } }));
+  assert.equal(unknown.r.out.error, "exec_outcome_unknown");
+  assert.equal(unknown.r.out.replay_safe, false);
+  assert.notEqual(unknown.r.out.retry_with_same_key, true);
+  const reuse = await seqRun(() => j(409, { detail: { error: "idempotency_key_reused_with_different_request", message: "x" } }));
+  assert.notEqual(reuse.r.out.retry_with_same_key, true);
+  const startUnknown = await seqRun(() => j(502, { detail: { error: "process_start_unknown", replay_safe: false } }));
+  assert.notEqual(startUnknown.r.out.retry_with_same_key, true);
+  const explicit = await seqRun(() => j(422, { detail: { error: "invalid_env_vars", retry_with_same_key: false } }));
+  assert.equal(explicit.r.out.retry_with_same_key, false, "what the response set is kept");
+  const plain = await seqRun(() => j(422, { detail: { error: "invalid_env_vars" } }));
+  assert.equal(plain.r.out.retry_with_same_key, true, "no guidance in the response: the history adds it");
+});
+
+test("a malformed budget is not a cap: create refuses with account_malformed, even with the uncapped switch on", async () => {
+  for (const budget of ["garbage", "", "-1", "NaN", "Infinity", {}, true]) {
+    const acct: Route = ["GET", /^\/v1\/account$/, once(() => j(200, acctBody({ api_key: { id: "k", expires_at: null, budget_usd: budget, committed_usd: "0", remaining_usd: "4.000000" } })))];
+    const x = await go(CREATE(), [acct, createRoute()], { CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" });
+    assert.equal(x.r.code, 1, JSON.stringify(budget));
+    assert.equal(x.r.out.error, "account_malformed", JSON.stringify(budget));
+    assert.equal(posts(x.reqs, /sandboxes$/).length, 0);
+  }
+  for (const remaining of ["garbage", "", "-0.5", "NaN"]) {
+    const acct: Route = ["GET", /^\/v1\/account$/, once(() => j(200, acctBody({ api_key: { id: "k", expires_at: null, budget_usd: "5.000000", committed_usd: "0", remaining_usd: remaining } })))];
+    const x = await go(CREATE(), [acct, createRoute()]);
+    assert.equal(x.r.out.error, "account_malformed", `remaining ${remaining}`);
+    assert.equal(posts(x.reqs, /sandboxes$/).length, 0);
+  }
+  const zero = await go(CREATE(), [["GET", /^\/v1\/account$/, once(() => j(200, acctBody({ api_key: { id: "k", expires_at: null, budget_usd: "0.000000", committed_usd: "0", remaining_usd: "0.000000" } })))], createRoute()]);
+  assert.equal(zero.r.out.error, "max_spend_above_remaining", "zero is a real cap");
+});
+
+test("delete checks ownership first: a sandbox labelled for another task is refused and nothing is deleted", async () => {
+  const get = (labels: Record<string, string>): Route => ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(200, sandbox("running", { labels })))];
+  const del: Route = ["DELETE", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(202, sandbox("deleting")))];
+  for (const labels of [{ bitbull: "1", bitbull_task: "tother" }, {}, { bitbull_task: TASK }]) {
+    const x = await go(["delete", ID, "--task", TASK, "--op", "del"], [get(labels), del]);
+    assert.equal(x.r.code, 1, JSON.stringify(labels));
+    assert.equal(x.r.out.error, "not_this_task");
+    assert.equal(x.reqs.filter((q) => q.method === "DELETE").length, 0);
+  }
+  const gone = await go(["delete", ID, "--task", TASK, "--op", "del"], [["GET", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(404, { detail: { error: "sandbox_not_found" } }))], del]);
+  assert.equal(gone.r.code, 1);
+  assert.equal(gone.r.out.error, "sandbox_not_found");
+  assert.equal(gone.reqs.filter((q) => q.method === "DELETE").length, 0);
+});
+
+test("a request that carries the key value is refused before anything is sent: exec, exec-bg and put", async () => {
+  const cmds: string[][] = [
+    ["exec", ID, "--task", TASK, "--op", "e", "--cmd", `echo ${KEY}`],
+    ["exec", ID, "--task", TASK, "--op", "e", "--", "echo", KEY],
+    ["exec-bg", ID, "--task", TASK, "--op", "b", "--timeout", "60", "--cmd", `curl -H "Authorization: Bearer ${KEY}" x`],
+  ];
+  for (const argv of cmds) {
+    const x = await go(argv);
+    assert.equal(x.r.code, 1, argv.join(" "));
+    assert.equal(x.r.out.error, "secret_in_request");
+    assert.equal(x.reqs.length, 0);
+    assert.ok(!x.r.stdout.includes(KEY));
+  }
+  const src = path.join(tmp, "secret.txt");
+  writeFileSync(src, `token=${KEY}\n`);
+  const p = await go(putArgs(src, "sec"));
+  assert.equal(p.r.out.error, "secret_in_request");
+  assert.equal(p.reqs.length, 0);
+  const clean = path.join(tmp, "clean.txt");
+  writeFileSync(clean, "nothing secret");
+  assert.equal((await go(putArgs(clean, "sec2"), [filesRoute("PUT", once(() => empty(204)))])).r.code, 0);
 });
