@@ -122,8 +122,10 @@ export function parseFindings(text: string, o: HoundOptions): { verdict?: Verdic
   } catch {
     return {};
   }
+  // no findings list is not "nothing found": treat the block as unread
+  if (!j || typeof j !== "object" || !Array.isArray(j.findings)) return {};
   const verdict = (["use", "fix-first", "do-not-use"] as const).find((v) => v === j.verdict);
-  const list = Array.isArray(j.findings) ? j.findings.slice(0, 100) : [];
+  const list = j.findings.slice(0, 100);
   const findings: Finding[] = [];
   for (const f of list) {
     if (!f || typeof f !== "object") continue;
@@ -160,10 +162,13 @@ export function judge(f: Finding, o: HoundOptions): Finding {
   return { ...f, shown: !why.length, heldBecause: why.length ? why.join(", ") : undefined };
 }
 
-/** What the PR gets: request changes for a shown finding at or above the blocking severity, else approve; a partial run only comments. */
-export function prEvent(findings: Finding[], o: HoundOptions, complete: boolean): "APPROVE" | "REQUEST_CHANGES" | "COMMENT" {
+/**
+ * What the PR gets: request changes for a shown finding at or above the blocking severity;
+ * approve only a complete run whose verdict is "use"; anything else only comments.
+ */
+export function prEvent(findings: Finding[], o: HoundOptions, complete: boolean, verdict: Verdict | undefined): "APPROVE" | "REQUEST_CHANGES" | "COMMENT" {
   if (findings.some((f) => f.shown && rank(f.severity) >= rank(o.prBlocking))) return "REQUEST_CHANGES";
-  return complete ? "APPROVE" : "COMMENT";
+  return complete && verdict === "use" ? "APPROVE" : "COMMENT";
 }
 
 const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
@@ -172,7 +177,9 @@ const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 export function prBody(input: { target: string; models: string[]; verdict?: Verdict; findings: Finding[]; spentUsd: number; partial?: string }): string {
   const shown = input.findings.filter((f) => f.shown);
   const held = input.findings.length - shown.length;
-  const verdict = { use: "✅ Use as is", "fix-first": "🛠️ Fix first", "do-not-use": "⛔ Do not use" }[input.verdict ?? "fix-first"];
+  const verdict = input.verdict
+    ? { use: "✅ Use as is", "fix-first": "🛠️ Fix first", "do-not-use": "⛔ Do not use" }[input.verdict]
+    : "❔ No verdict: the findings block couldn't be read";
   const lines = [
     `### 🐶 QA Hound: ${verdict}`,
     `\`${input.target}\` reviewed by ${input.models.join(" and ")}, checked against each other.${input.partial ? ` **Partial run:** ${input.partial}.` : ""}`,
