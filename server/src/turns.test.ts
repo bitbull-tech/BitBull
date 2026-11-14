@@ -198,3 +198,23 @@ test("a turn left running by a restart is marked interrupted", () => {
     });
   });
 });
+
+test("a turn that fails before it starts doesn't lock the chat", async () => {
+  const s = newSession();
+  const add = messages.add;
+  messages.add = () => {
+    throw new Error("database is locked");
+  };
+  try {
+    await collectTurn(startTurn(s, { prompt: "hi", model: "test-model" }).turnId);
+  } finally {
+    messages.add = add;
+  }
+  fakeEngine([
+    { type: "text", delta: "ok" },
+    { type: "done", engineSessionId: "engine-lock" },
+  ]);
+  const { events, status } = await collectTurn(startTurn(s, { prompt: "again", model: "test-model" }).turnId);
+  assert.equal(status, "done");
+  assert.equal(text(events), "ok");
+});
