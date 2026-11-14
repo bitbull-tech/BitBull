@@ -276,7 +276,7 @@ export function runSchedule(id: string, now = Date.now()): { turnId?: string; sk
     session = sessions.create({ title: `⏰ ${s.name}`, engine: s.engine, model: s.model, projectId: s.projectId });
     db.prepare("UPDATE schedules SET session_id = ? WHERE id = ?").run(session.id, id);
   }
-  const { turnId } = startTurn(session, { prompt: RUN_RULES(s.name, new Date(now)) + s.prompt, model: s.model });
+  const { turnId } = startTurn(session, { prompt: RUN_RULES(s.name, new Date(now)) + s.prompt, model: s.model, unattended: true });
   db.prepare("UPDATE schedules SET last_run_at = ?, last_turn_id = ?, last_note = NULL WHERE id = ?").run(now, turnId, id);
   record({ level: "info", source: "schedule", message: `Scheduled run started: ${s.name}`, sessionId: session.id, sessionTitle: session.title });
   // the result goes to the owner's phone when they asked for that; a run nobody is paired for just stays in its chat

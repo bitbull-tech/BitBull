@@ -137,7 +137,7 @@ function finish(t: LiveTurn, status: TurnStatus) {
  */
 export function startTurn(
   session: SessionRow,
-  input: { prompt: string; model: string; attachments?: string[]; plan?: boolean },
+  input: { prompt: string; model: string; attachments?: string[]; plan?: boolean; /** nobody is at the screen (schedule, Telegram) */ unattended?: boolean },
 ): { turnId: string; status: TurnStatus; created: boolean } {
   const existing = activeBySession.get(session.id);
   if (existing) return { turnId: existing, status: "running", created: false };
@@ -161,7 +161,7 @@ export function startTurn(
   void (async () => {
     let status: TurnStatus = "done";
     try {
-      for await (const ev of runTurn(session, input.prompt, input.model, input.attachments ?? [], { plan: input.plan })) {
+      for await (const ev of runTurn(session, input.prompt, input.model, input.attachments ?? [], { plan: input.plan, unattended: input.unattended })) {
         if (ev.type === "error") status = "error";
         emit(t, ev);
       }

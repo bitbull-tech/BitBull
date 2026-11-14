@@ -378,6 +378,33 @@ export interface LinkedFolder {
   readOnly: boolean
   noExec: boolean
 }
+/** A change the agent proposed to a linked folder (server/src/folderChanges.ts) */
+export interface FolderChangeFile {
+  path: string
+  status: 'new' | 'modified'
+  size: number
+  sha256: string
+  added: number
+  removed: number
+}
+export interface FolderChange {
+  id: string
+  link: string
+  summary: string
+  sessionId?: string
+  sessionTitle?: string
+  files: FolderChangeFile[]
+  deletes: string[]
+  /** the git repo the files sit in ("" = the folder itself), or null */
+  repo: string | null
+  branch: string
+  hostStaging: string | null
+  status: 'pending' | 'applied' | 'branch' | 'declined' | 'failed' | 'expired'
+  message?: string
+  createdAt: string
+  decidedAt?: string
+}
+export type FolderChangeDetail = Omit<FolderChange, 'files'> & { files: Array<FolderChangeFile & { diff?: string }> }
 export interface RepoBranch {
   name: string
   current: boolean
@@ -574,6 +601,10 @@ export const api = {
   status: () => req<Status>('/api/status'),
   network: () => req<NetworkState>('/api/network'),
   links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),
+  folderChanges: () => req<{ changes: FolderChange[] }>('/api/folder-changes'),
+  folderChange: (id: string) => req<FolderChangeDetail>(`/api/folder-changes/${id}`),
+  decideFolderChange: (id: string, status: 'applied' | 'branch' | 'declined' | 'failed', message?: string) =>
+    req<{ change: FolderChange; changes: FolderChange[] }>(`/api/folder-changes/${id}`, { method: 'POST', body: JSON.stringify({ status, message }) }),
   vault: () => req<{ unlocked: boolean; exists: boolean; keys: string[]; file: string }>('/api/vault'),
   vaultUnlock: (key: string) => req<{ unlocked: boolean; keys: string[]; moved: string[] }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ key }) }),
   vaultLock: () => req<{ unlocked: boolean }>('/api/vault/lock', { method: 'POST' }),

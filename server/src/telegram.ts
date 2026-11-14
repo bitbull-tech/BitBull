@@ -372,7 +372,7 @@ async function ownerMessage(tok: string, m: TgMessage) {
   if (activeTurnId(session.id)) return send(tok, chatId, "Still working on your last message. Send /stop to cancel it, or wait for the reply.");
 
   record({ level: "info", source: "telegram", message: "Message from Telegram: turn started", sessionId: session.id, sessionTitle: session.title });
-  const { turnId } = startTurn(session, { prompt: TELEGRAM_RULES + text, model: session.model });
+  const { turnId } = startTurn(session, { prompt: TELEGRAM_RULES + text, model: session.model, unattended: true });
   // not awaited by the poll loop: /stop has to get through while this runs
   void typingWhile(tok, chatId, collectTurn(turnId))
     .then(({ events, status }) => send(tok, chatId, replyText(events, status)))

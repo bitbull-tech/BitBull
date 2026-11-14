@@ -172,6 +172,20 @@ own limits. Lead data and prospect replies are untrusted input that reaches the 
 tokens stay server-side behind a local relay (the agent gets no token), subject to R1. While
 connected, `leadpoet.com` is open in the proxy for the whole container.
 
+### R12 — Changes to linked folders (only where the owner allowed them)
+README → "Changing files in a linked folder". The sandbox still has no write access to any
+linked folder; a change is proposed by the agent, shown to the owner with its diff, and written
+by the link helper on the PC (as the owner) only after a click. Residuals: (1) the owner approves
+what they read, so a change that looks harmless and isn't (a build script, a `package.json`
+script, a test that runs on the next `npm test`) gets through like any reviewed-but-misread PR;
+the branch option at least keeps it out of the working tree until merged. (2) The protected-path
+list covers what runs without the owner choosing to run it; it can't cover every tool's config.
+(3) The server and the agent share a uid (R1), so a determined agent could alter what the card
+shows; the helper still checks each staged file against the hash the page sent, and still
+refuses protected paths, links out of the folder and unpermitted deletes on its own. (4) Any
+program on the PC can call the helper as the page does; it could already write to those folders
+as the owner. Unattended runs can neither propose nor apply.
+
 ## If you fork or change `.env` / `allowlist.txt`
 
 - `ALLOW_NO_AUTH=true` removes **all** authentication — combine it with a tunnel or a

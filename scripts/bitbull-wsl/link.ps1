@@ -18,6 +18,10 @@
   Adding or removing a link restarts the BitBull container (about 10 seconds); a turn that is
   running at that moment is marked interrupted.
 
+  Changing files in a linked folder is a separate thing and never done by the agent: it proposes,
+  you approve in BitBull, and link-helper.ps1 writes (folder-apply.ps1; Settings > Folders lists
+  and removes the permission). This script only ever makes read-only links.
+
   A linked folder is readable from EVERY chat in this BitBull (attaching it to a chat only points
   that chat at it), and anything in it may be sent to the model the agent uses. So folders
   that hold keys, passwords or wallets are not linked as they are: link them with -Hide

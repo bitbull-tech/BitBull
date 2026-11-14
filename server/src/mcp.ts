@@ -11,6 +11,7 @@ import { proxied, requestAccess } from "./egress.js";
 import { execCapableConfig } from "./repos.js";
 import { record } from "./activity.js";
 import { cli, dittoCliEnv } from "./providerKeys.js";
+import { outcomeText, propose, waitForDecision } from "./folderChanges.js";
 
 /**
  * BitBull's own MCP server, attached to both engines as "bitbull": tools that need the user or the
@@ -31,6 +32,12 @@ export const BITBULL_MCP_HEADER = "x-bitbull-internal";
 let runningSessions: () => string[] = () => [];
 export function setRunningSessions(fn: () => string[]) {
   runningSessions = fn;
+}
+
+/** Is this chat's running turn (or, when the chat isn't known, any running turn) one nobody is watching? */
+let unattendedCheck: (sessionId?: string) => boolean = () => false;
+export function setUnattendedCheck(fn: (sessionId?: string) => boolean) {
+  unattendedCheck = fn;
 }
 
 export const bitbullMcpEnabled = () => proxied();
@@ -77,6 +84,45 @@ function build(sessionHint: string | undefined) {
       const title = sid ? sessions.get(sid)?.title : undefined;
       const r = await requestAccess({ domain, reason, sessionId: sid, sessionTitle: title });
       return { content: [{ type: "text" as const, text: r.text }] };
+    },
+  );
+
+  server.registerTool(
+    "propose_folder_changes",
+    {
+      title: "Propose changes to a linked folder",
+      description:
+        "Linked folders (/links/<name>) are the user's real folders, read-only to you. Use this when the user asks you to change files there. " +
+        "First write the complete new version of each file somewhere in your workspace; then call this with where each one goes. " +
+        "The user is shown the list and the diff and decides on their own computer: apply the files, put them on a new git branch instead, or decline. " +
+        "The call waits for the answer (up to a few minutes) and tells you which it was. Nothing is written unless they approve. " +
+        "Never written, whoever approves: .git (hooks, config), .vscode, .idea, .github/workflows, .husky, shell start-up files, .env files, programs and shortcuts. " +
+        "Deleting only happens if the user has allowed deleting in that folder. Not available in scheduled runs or from Telegram: say what you would change instead. " +
+        "One proposal per piece of work, with every file in it; don't propose the same change twice.",
+      inputSchema: {
+        folder: z.string().describe("The linked folder's name: the <name> in /links/<name>"),
+        summary: z.string().describe("One line the user can judge: what this change does"),
+        files: z
+          .array(z.object({ to: z.string().describe("Path inside the linked folder, e.g. myrepo/src/app.ts"), from: z.string().describe("Workspace-relative path of the file holding the complete new content") }))
+          .default([])
+          .describe("Files to create or replace"),
+        deletes: z.array(z.string()).default([]).describe("Paths inside the linked folder to delete (files only)"),
+      },
+    },
+    async ({ folder, summary, files, deletes }) => {
+      const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+      const live = runningSessions();
+      const sid = sessionHint && sessions.get(sessionHint) ? sessionHint : live.length === 1 ? live[0] : undefined;
+      if (unattendedCheck(sid))
+        return text(
+          "Not from here: this is a scheduled run or a Telegram message, and nobody is at BitBull's screen to look at the change and approve it. Linked folders stay read-only in unattended runs. " +
+            "Keep the new files in your workspace and say exactly what you would change; the user can ask for it from a chat on screen.",
+        );
+      const session = sid ? sessions.get(sid) : undefined;
+      const project = session?.project_id ? projects.get(session.project_id) : null;
+      const r = propose({ link: folder.replace(/^\/?links\//, "").replace(/\/+$/, ""), summary, files, deletes, workspace: project ? workspaceFor(project) : paths.workspace, sessionId: sid, sessionTitle: session?.title });
+      if (!r.set) return text(r.text);
+      return text(outcomeText(await waitForDecision(r.set.id), r.text));
     },
   );
 

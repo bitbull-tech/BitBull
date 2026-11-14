@@ -31,6 +31,7 @@ import { routerBackground, routerMcpServers, routerModels, routerReview } from "
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
 import { balances } from "./balances.js";
 import { isPastedName, pastedContent, rememberPasted, searchChats } from "./pasted.js";
+import { decide as decideChange, getChange, listChanges } from "./folderChanges.js";
 import { compatState, runCompat, scheduleCompat } from "./compat.js";
 import { MAX_SCHEDULES, runSchedule, ScheduleInput, schedules, startScheduler } from "./schedules.js";
 import { cancelPairing, notifyOwner, startPairing, startTelegram, syncTelegram, telegramState, unpair } from "./telegram.js";
@@ -464,6 +465,22 @@ app.get("/api/network", (c) => c.json(networkState()));
 
 // ---------- read-only folder links (added from Windows with link.ps1; listed only) ----------
 app.get("/api/links", (c) => c.json({ available: linksAvailable(), links: listLinks() }));
+/**
+ * Changes the agent proposed to a linked folder (server/src/folderChanges.ts). The owner's
+ * browser shows them, asks the link helper on the PC to apply one, and reports the outcome here.
+ * Nothing in these routes writes to a linked folder: this server can't.
+ */
+app.get("/api/folder-changes", (c) => c.json({ changes: listChanges() }));
+app.get("/api/folder-changes/:id", (c) => {
+  const s = getChange(c.req.param("id"));
+  return s ? c.json(s) : c.json({ error: "not found" }, 404);
+});
+app.post("/api/folder-changes/:id", async (c) => {
+  const body = z.object({ status: z.enum(["applied", "branch", "declined", "failed"]), message: z.string().max(600).optional() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "status must be applied, branch, declined or failed" }, 400);
+  const s = decideChange(c.req.param("id"), body.data.status, body.data.message);
+  return s ? c.json({ change: s, changes: listChanges() }) : c.json({ error: "not found" }, 404);
+});
 app.post("/api/network/requests/:id", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { decision?: string };
   if (body.decision !== "host" && body.decision !== "domain" && body.decision !== "deny") return c.json({ error: "decision must be host, domain or deny" }, 400);

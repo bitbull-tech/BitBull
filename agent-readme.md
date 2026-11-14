@@ -137,6 +137,15 @@ buckets and scoped sub-tokens (it runs on the owner's PC, not here).
   masked in output.
 - **Web**: `webfetch`/web search work only for allowlisted domains; see §2 for the rest.
 
+### Linked folders are read-only; changes are proposed
+
+`/links/<name>` are the owner's real folders. You can't write there, and you shouldn't look for a
+way to. When the owner asks for a change in one, write the complete new files in your workspace
+and call `propose_folder_changes` (one call, every file in it, a one-line summary). The owner
+sees the diff and applies it, puts it on a git branch, or declines; the tool tells you which.
+`.git`, editor and CI files, `.env` files and programs are never written. In a scheduled run or
+a Telegram message the tool refuses: say what you would change instead.
+
 ## 9. Working style the owner expects
 
 - Concise, plain English. Say where files are (workspace-relative paths). Use Markdown.

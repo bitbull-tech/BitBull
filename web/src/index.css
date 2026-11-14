@@ -942,6 +942,24 @@ button.file-row:hover { background: var(--hover); }
 .net-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .net-actions .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .net-panel h3 { font-size: 13px; margin: 18px 0 6px; }
+.prompt-stack { position: fixed; right: 16px; bottom: 52px; z-index: 75; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; max-height: calc(100vh - 110px); overflow-y: auto; pointer-events: none; }
+.prompt-stack > * { pointer-events: auto; }
+.prompt-stack .net-prompts { position: static; }
+.fc-prompts { width: min(560px, calc(100vw - 32px)); }
+.fc-files { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; max-height: 300px; overflow-y: auto; }
+.fc-files li { border-top: 1px solid var(--line); }
+.fc-files li:first-child { border-top: none; }
+.fc-file { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border: none; background: none; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; }
+button.fc-file { cursor: pointer; }
+button.fc-file:hover { background: var(--hover); }
+.fc-file .mono { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fc-count { font: 11.5px var(--mono); white-space: nowrap; }
+.fc-add { color: var(--good, #2f9e44); font-weight: 500; }
+.fc-del { color: var(--bad); font-weight: 500; }
+.fc-diff { margin: 0; padding: 8px 10px; max-height: 240px; overflow: auto; background: var(--panel); border-top: 1px solid var(--line); font: 11.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.fc-diff span { display: block; }
+.fc-safer { margin: 0; padding: 7px 10px; border-radius: 8px; background: var(--accent-soft); }
+.pill.warn { border-color: color-mix(in srgb, var(--accent-2, #e8a92c) 60%, transparent); color: var(--text); }
 .net-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; }
 .net-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 13px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .net-list li:first-child { border-top: none; }

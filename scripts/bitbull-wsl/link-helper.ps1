@@ -21,6 +21,18 @@
   linking needs you to pick the folder, removing needs you to press OK. Refresh only re-copies
   a filtered link after a fresh scan for secrets.
 
+  Changing files in a linked folder (folder-apply.ps1 has the rules):
+    - BitBull only ever sees a linked folder read-only. A change reaches it one way: the agent
+      proposes it, BitBull's page shows you the files and the diff, and when you approve the page
+      asks this helper to copy the staged files in (/apply). The helper checks each file against
+      the hash you were shown and refuses protected paths, whatever it is asked.
+    - Only folders you allowed changes in are written to (/grant: a Windows box asks you). Deleting
+      is a second, separate permission. Both are kept in %LOCALAPPDATA%\BitBull\folder-access.json,
+      on this PC, where nothing in the sandbox can reach, and are listed in Settings > Folders,
+      where you can take them away again (/revoke: no question asked, it only removes access).
+    - Putting a change on a new git branch (mode "branch") leaves your working files alone. With
+      no write permission on the folder, a Windows box asks you each time.
+
       powershell -ExecutionPolicy Bypass -STA -File scripts\bitbull-wsl\link-helper.ps1
 #>
 param(
@@ -31,6 +43,10 @@ param(
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
 $linkScript = Join-Path $PSScriptRoot "link.ps1"
+. (Join-Path $PSScriptRoot "folder-apply.ps1")
+$bitbullLocal = Join-Path $env:LOCALAPPDATA "BitBull"
+$grantFile = Join-Path $bitbullLocal "folder-access.json"
+$backupRoot = Join-Path $bitbullLocal "folder-backups"
 Add-Type -AssemblyName System.Windows.Forms
 
 $origins = @()
@@ -84,9 +100,120 @@ function Get-Links {
   $rows = @(& wsl.exe -d $Distro -u root --exec /usr/local/sbin/bitbull-links list 2>$null)
   $list = @()
   foreach ($r in $rows) {
-    if ($r -match '^(\S+)\s+(mounted|missing)\s+(live|filtered)\s+(.+)$') { $list += @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim() } }
+    if ($r -match '^(\S+)\s+(mounted|missing)\s+(live|filtered)\s+(.+)$') {
+      $l = @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim(); write = $false; delete = $false }
+      $g = Get-Grant $l
+      if ($g) { $l.write = $g.write; $l.delete = ($g.write -and $g.delete); $l.since = $g.since }
+      $list += $l
+    }
   }
   return ,$list
+}
+
+# The permission you gave for a link, if it still names the same folder (a link name reused for
+# another folder starts with none) and the link is the live folder, not a filtered copy.
+function Get-Grant($link) {
+  if ($link.mode -ne "live") { return $null }
+  $all = Get-BitBullGrants $grantFile
+  if (-not $all.ContainsKey($link.name)) { return $null }
+  $g = $all[$link.name]
+  if ($g.path.TrimEnd('\').ToLowerInvariant() -ne $link.path.TrimEnd('\').ToLowerInvariant()) { return $null }
+  return $g
+}
+
+function Find-Link([string]$name) {
+  if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,39}$') { return $null }
+  foreach ($l in (Get-Links)) { if ($l.name -eq $name) { return $l } }
+  return $null
+}
+
+function Do-Grant([string]$name, [string]$what) {
+  $link = Find-Link $name
+  if (-not $link) { return @{ ok = $false; message = "No such link." } }
+  if ($link.mode -ne "live") { return @{ ok = $false; message = "This link is a filtered copy, so there is nothing of yours to change through it. Link the folder itself to allow changes." } }
+  if ($what -ne "write" -and $what -ne "delete") { return @{ ok = $false; message = "bad request" } }
+  $all = Get-BitBullGrants $grantFile
+  $cur = Get-Grant $link
+  if ($what -eq "delete" -and -not ($cur -and $cur.write)) { return @{ ok = $false; message = "Allow changes in this folder first." } }
+  $owner = New-Owner
+  try {
+    if ($what -eq "write") {
+      $q = [System.Windows.Forms.MessageBox]::Show($owner,
+        "Allow BitBull to change files in this folder?`n`n$($link.path)`n`n" +
+        "The agent still can't write here by itself. When it proposes a change, BitBull shows you the files and the diff, and only what you approve there is copied in.`n`n" +
+        "Never written, whatever is approved: .git (hooks, config), .vscode, .idea, .github\workflows, shell start-up files, .env files, programs and shortcuts.`n" +
+        "Deleting files stays off unless you allow it separately. Scheduled runs and Telegram can't change anything here.`n`n" +
+        "You can take this away again in BitBull: Settings > Folders.",
+        "BitBull: allow changes in this folder?", "OKCancel", "Warning", "Button2")
+    } else {
+      $q = [System.Windows.Forms.MessageBox]::Show($owner,
+        "Also allow BitBull to DELETE files in this folder?`n`n$($link.path)`n`n" +
+        "Only files in a change you approve are deleted, and they go to the Recycle Bin, with a copy kept in BitBull's backup folder. Protected paths (.git and the rest) are never deleted.",
+        "BitBull: allow deleting in this folder?", "OKCancel", "Warning", "Button2")
+    }
+  } finally { $owner.Close() }
+  if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not changed." } }
+  if ($what -eq "write") { $all[$link.name] = @{ write = $true; delete = $false; path = $link.path; since = (Get-Date).ToString("yyyy-MM-dd") } }
+  else { $all[$link.name].delete = $true }
+  Save-BitBullGrants $grantFile $all
+  return @{ ok = $true; message = "Allowed." }
+}
+
+# Taking access away needs no question: it can only make BitBull able to do less.
+function Do-Revoke([string]$name, [string]$what) {
+  if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,39}$') { return @{ ok = $false; message = "bad name" } }
+  $all = Get-BitBullGrants $grantFile
+  if ($all.ContainsKey($name)) {
+    if ($what -eq "delete") { $all[$name].delete = $false } else { $all.Remove($name) }
+    Save-BitBullGrants $grantFile $all
+  }
+  return @{ ok = $true; message = "Removed." }
+}
+
+# BitBull's staged files, as this PC reads them. The page sends the path as the distro sees it.
+function Resolve-Staging([string]$p) {
+  if ($p -notmatch '^/home/[a-z_][a-z0-9_-]{0,31}/bitbull-data/folder-changes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { return $null }
+  $rel = ($p -replace '/', '\')
+  $unc = "\\wsl.localhost\$Distro$rel"
+  if (-not (Test-Path -LiteralPath $unc)) { $unc = "\\wsl$\$Distro$rel" }
+  if (-not (Test-Path -LiteralPath $unc -PathType Container)) { return $null }
+  return $unc
+}
+
+function Do-Apply($body) {
+  $link = Find-Link ([string]$body.name)
+  if (-not $link) { return @{ ok = $false; message = "No such link." } }
+  if ($link.mode -ne "live" -or $link.state -ne "mounted") { return @{ ok = $false; message = "That folder isn't linked as a live folder right now." } }
+  if (-not (Test-Path -LiteralPath $link.path -PathType Container)) { return @{ ok = $false; message = "The folder is not there: $($link.path)" } }
+  $staging = Resolve-Staging ([string]$body.staging)
+  if (-not $staging) { return @{ ok = $false; message = "The staged files can't be read from this PC. Run start.ps1 once after updating (it makes BitBull's data folder readable from here), then try again." } }
+  $manifest = @($body.manifest | Where-Object { $_ })
+  $deletes = @($body.deletes | Where-Object { $_ } | ForEach-Object { [string]$_ })
+  $grant = Get-Grant $link
+  $mode = [string]$body.mode
+
+  if ($mode -eq "branch") {
+    if (-not ($grant -and $grant.write)) {
+      # no standing permission: a branch touches none of your files, but you still say yes, here
+      $owner = New-Owner
+      try {
+        $q = [System.Windows.Forms.MessageBox]::Show($owner,
+          "Create the branch $([string]$body.branch) in a git repo under`n`n$($link.path)`n`nwith the $($manifest.Count + $deletes.Count) file change(s) you just looked at in BitBull?`n`nYour working files and your current branch are not touched.",
+          "BitBull: create a branch?", "OKCancel", "Question", "Button1")
+      } finally { $owner.Close() }
+      if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not created." } }
+    }
+    return (Invoke-BitBullBranch -Root $link.path -Staging $staging -Manifest $manifest -Deletes $deletes -Branch ([string]$body.branch) -Message ([string]$body.message))
+  }
+
+  if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder. Allow them in Settings > Folders first (or put the change on a branch)." } }
+  $backup = Join-Path $backupRoot ((Get-Date).ToString("yyyyMMdd-HHmmss") + "-" + $link.name)
+  $r = Invoke-BitBullApply -Root $link.path -Staging $staging -Manifest $manifest -Deletes $deletes -AllowDelete ([bool]$grant.delete) -BackupDir $backup
+  # keep the thirty most recent backups
+  try {
+    @(Get-ChildItem -LiteralPath $backupRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -Skip 30) | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+  } catch {}
+  return $r
 }
 
 function Do-Link {
@@ -147,6 +274,8 @@ function Do-Unlink([string]$name) {
   if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not removed." } }
   $r = Invoke-Link @("-Remove", $name)
   if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 2) -join " " } }
+  # a removed link takes its permissions with it
+  Do-Revoke $name "write" | Out-Null
   return @{ ok = $true; message = "Removed $name" }
 }
 
@@ -247,7 +376,7 @@ while ($listener.IsListening) {
     if ($origin -and -not ($origins -contains $origin)) { Send $ctx 403 @{ ok = $false; message = "origin not allowed" }; continue }
     if ($req.HttpMethod -eq "OPTIONS") { Send $ctx 204 @{}; continue }
     $path = $req.Url.AbsolutePath
-    if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links) }; continue }
+    if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links); caps = @("changes") }; continue }
     if ($req.HttpMethod -eq "GET" -and $path -eq "/vault-key") {
       if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBull's page only" }; continue }
       Send $ctx 200 (Do-VaultKey); continue
@@ -261,6 +390,12 @@ while ($listener.IsListening) {
     if ($path -eq "/open") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json
       Send $ctx 200 (Do-Open ([string]$body.path)); continue
+    }
+    if ($path -eq "/grant" -or $path -eq "/revoke" -or $path -eq "/apply") {
+      $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
+      if ($path -eq "/grant") { Send $ctx 200 (Do-Grant ([string]$body.name) ([string]$body.what)); continue }
+      if ($path -eq "/revoke") { Send $ctx 200 (Do-Revoke ([string]$body.name) ([string]$body.what)); continue }
+      Send $ctx 200 (Do-Apply $body); continue
     }
     if ($path -eq "/unlink") {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json

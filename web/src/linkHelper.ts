@@ -14,6 +14,11 @@ export interface HelperLink {
   /** live: the folder itself; filtered: a read-only copy without its secrets (refresh to update) */
   mode: 'live' | 'filtered'
   path: string
+  /** you allowed changes in this folder (each one still needs your approval in BitBull) */
+  write?: boolean
+  /** and deleting files as part of a change */
+  delete?: boolean
+  since?: string
 }
 
 /** BitBull on a Mac: the helper is the BitBull app itself, folders open in Finder, links are copies. */
@@ -26,13 +31,13 @@ export const HELPER_CMD = isMac ? 'Open the BitBull app (it stays in the menu ba
 
 export const onThisPc = () => ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
 
-export async function helperStatus(): Promise<{ links: HelperLink[] } | null> {
+export async function helperStatus(): Promise<{ links: HelperLink[]; caps: string[] } | null> {
   if (!onThisPc()) return null
   try {
     const r = await fetch(`${HELPER}/status`, { signal: AbortSignal.timeout(2500) })
     if (!r.ok) return null
-    const j = (await r.json()) as { ok: boolean; links?: HelperLink[] }
-    return j.ok ? { links: j.links ?? [] } : null
+    const j = (await r.json()) as { ok: boolean; links?: HelperLink[]; caps?: string[] }
+    return j.ok ? { links: j.links ?? [], caps: j.caps ?? [] } : null
   } catch {
     return null
   }
@@ -93,6 +98,21 @@ export async function unlinkFolder(name: string, onStep?: (s: string) => void) {
 export async function refreshFolder(name: string, onStep?: (s: string) => void) {
   onStep?.(`Refreshing ${name}: checking it for secrets and copying it again…`)
   return post('/refresh', { name })
+}
+
+/** Allow changes ("write") or deleting ("delete") in a linked folder: the helper asks you in a box on this PC. */
+export const grantFolder = (name: string, what: 'write' | 'delete') => post('/grant', { name, what })
+/** Take that permission away again. No question: it only makes BitBull able to do less. */
+export const revokeFolder = (name: string, what: 'write' | 'delete') => post('/revoke', { name, what })
+
+/**
+ * Apply a change set you approved: the helper copies the staged files into the folder (mode
+ * "files") or makes a new git branch holding them (mode "branch"). It checks every file against
+ * the hash given here, which is the one you were shown.
+ */
+export async function applyChange(body: { name: string; staging: string; manifest: { path: string; sha256: string }[]; deletes: string[]; mode: 'files' | 'branch'; branch: string; message: string }) {
+  const r = await fetch(`${HELPER}/apply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  return (await r.json()) as { ok: boolean; cancelled?: boolean; message?: string; branch?: string; repo?: string; written?: number; deleted?: number; backup?: string }
 }
 
 /** Open a folder of BitBull's data in Explorer (the helper maps the distro path to \\wsl.localhost\…) or Finder. */

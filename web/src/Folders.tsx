@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconLock, IconPlus, IconRefresh, IconTrash } from './icons'
-import { HELPER_HINT, helperStatus, linkFolder, onThisPc, refreshFolder, unlinkFolder, type HelperLink } from './linkHelper'
+import { grantFolder, HELPER_HINT, helperStatus, linkFolder, onThisPc, refreshFolder, revokeFolder, unlinkFolder, type HelperLink } from './linkHelper'
+import { FolderChangeHistory } from './FolderChanges'
 
 /** Settings → Folders: the read-only links, with Link / Remove through the helper on this PC. */
 export function FoldersPanel() {
   const [links, setLinks] = useState<{ available: boolean; links: LinkedFolder[] } | null>(null)
-  const [helper, setHelper] = useState<{ links: HelperLink[] } | null | 'checking'>('checking')
+  const [helper, setHelper] = useState<{ links: HelperLink[]; caps: string[] } | null | 'checking'>('checking')
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -34,20 +35,28 @@ export function FoldersPanel() {
   }
 
   const ready = helper && helper !== 'checking'
-  const rows: Array<{ name: string; path?: string; mode?: string; inBitBull?: LinkedFolder; state?: string }> = []
+  // changes can be allowed only where the helper on this PC knows how (Windows for now)
+  const canGrant = ready && helper.caps.includes('changes')
+  const rows: Array<{ name: string; path?: string; mode?: string; inBitBull?: LinkedFolder; state?: string; write?: boolean; del?: boolean; since?: string }> = []
   for (const l of links?.links ?? []) {
     const h = ready ? helper.links.find((x) => x.name === l.name) : undefined
-    rows.push({ name: l.name, inBitBull: l, path: h?.path, mode: h?.mode })
+    rows.push({ name: l.name, inBitBull: l, path: h?.path, mode: h?.mode, write: h?.write, del: h?.delete, since: h?.since })
   }
-  if (ready) for (const h of helper.links) if (!rows.some((r) => r.name === h.name)) rows.push({ name: h.name, path: h.path, mode: h.mode, state: h.state })
+  if (ready) for (const h of helper.links) if (!rows.some((r) => r.name === h.name)) rows.push({ name: h.name, path: h.path, mode: h.mode, state: h.state, write: h.write, del: h.delete, since: h.since })
 
   return (
     <div className="net-panel">
       <p className="muted small">
-        Linked folders are folders on this PC that the agent can <b>read but never change</b>: they are mounted read-only, and BitBull restarts
-        (about 10 seconds) whenever one is added or removed. Every chat in this BitBull can read them. A folder holding .env files, keys or
-        wallets (BitBull's own repo, for one) is linked as a read-only copy without them: the agent never sees those files, and Refresh
-        updates the copy. To give the agent a copy it may change, use the folder button in the chat → Upload a copy.
+        Linked folders are folders on this PC that the agent can <b>read but never write to</b>: they are mounted read-only, and BitBull
+        restarts (about 10 seconds) whenever one is added or removed. Every chat in this BitBull can read them. A folder holding .env files,
+        keys or wallets (BitBull's own repo, for one) is linked as a read-only copy without them: the agent never sees those files, and
+        Refresh updates the copy.
+      </p>
+      <p className="muted small">
+        <b>Changes.</b> If you allow changes in a folder, the agent can <i>propose</i> them: you are shown the files and the diff, and only
+        what you approve is copied in, by the helper on this PC. For files in a git repo you can put the change on a new branch instead and
+        leave your working files alone: the safer choice, and it needs no standing permission (a box on this PC asks each time). Git hooks and config, editor and CI files, .env
+        files and programs are never written. Deleting is a separate permission. Scheduled runs and Telegram can't change anything here.
       </p>
       {links && !links.available ? (
         <p className="muted">Links work in the sandboxed BitBull (Docker) only.</p>
@@ -70,6 +79,47 @@ export function FoldersPanel() {
                     <span className="pill" title="A read-only copy without .env, keys and wallets. Changes to the folder show up after Refresh.">
                       copy, secrets hidden
                     </span>
+                  )}
+                  {r.write && (
+                    <span className="pill warn" title={`You allowed changes here${r.since ? ` on ${r.since}` : ''}. Each change still needs your approval.`}>
+                      changes allowed{r.del ? ' · deleting too' : ''}
+                    </span>
+                  )}
+                  {canGrant && r.mode === 'live' && r.inBitBull && !r.write && (
+                    <button
+                      className="btn sm"
+                      disabled={!!busy}
+                      title="A box on this PC asks you to confirm"
+                      onClick={() => {
+                        setBusy(`Confirm in the box that opened on this PC to allow changes in ${r.name}…`)
+                        void run(() => grantFolder(r.name, 'write'), `Changes allowed in ${r.name}. Each one still waits for your approval.`)
+                      }}
+                    >
+                      Allow changes…
+                    </button>
+                  )}
+                  {canGrant && r.write && !r.del && (
+                    <button
+                      className="btn sm"
+                      disabled={!!busy}
+                      title="A box on this PC asks you to confirm"
+                      onClick={() => {
+                        setBusy(`Confirm in the box that opened on this PC to allow deleting in ${r.name}…`)
+                        void run(() => grantFolder(r.name, 'delete'), `Deleting allowed in ${r.name}.`)
+                      }}
+                    >
+                      Allow deleting…
+                    </button>
+                  )}
+                  {canGrant && r.del && (
+                    <button className="btn sm" disabled={!!busy} onClick={() => (setBusy('…'), void run(() => revokeFolder(r.name, 'delete'), `Deleting is off again in ${r.name}.`))}>
+                      Stop deleting
+                    </button>
+                  )}
+                  {canGrant && r.write && (
+                    <button className="btn sm danger" disabled={!!busy} onClick={() => (setBusy('…'), void run(() => revokeFolder(r.name, 'write'), `${r.name} is read-only again.`))}>
+                      Make read-only
+                    </button>
                   )}
                   {ready && r.mode === 'filtered' && (
                     <button
@@ -125,6 +175,8 @@ export function FoldersPanel() {
           </div>
           {busy && <p className="small fm-busy">{busy}</p>}
           {msg && <p className={`small ${msg.ok ? 'good' : 'error'}`}>{msg.text}</p>}
+          {ready && !canGrant && <p className="muted small">Allowing changes needs the helper that comes with this version on Windows; on a Mac, links are read-only copies for now.</p>}
+          <FolderChangeHistory />
         </>
       )}
     </div>

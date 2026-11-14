@@ -18,6 +18,7 @@ import { ReposDialog } from './ReposDialog'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
+import { FolderChangePrompt } from './FolderChanges'
 import { ModelsDialog } from './ModelsDialog'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
@@ -870,12 +871,21 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         <ActivityDock sessionId={active?.id} onOpenFull={() => (clearToasts(), setActivityOpen(true))} />
       </main>
       {!activityOpen && <ErrorToasts onOpen={() => (clearToasts(), setActivityOpen(true))} />}
-      <NetworkPrompt
-        onOpenSession={(id) => {
-          const s = sessions.find((x) => x.id === id)
-          if (s) openSession(s)
-        }}
-      />
+      {/* things waiting for your answer, stacked in one corner */}
+      <div className="prompt-stack">
+        <FolderChangePrompt
+          onOpenSession={(id) => {
+            const s = sessions.find((x) => x.id === id)
+            if (s) openSession(s)
+          }}
+        />
+        <NetworkPrompt
+          onOpenSession={(id) => {
+            const s = sessions.find((x) => x.id === id)
+            if (s) openSession(s)
+          }}
+        />
+      </div>
       {activityOpen && <ActivityView onClose={() => setActivityOpen(false)} />}
       <SelectionAsk />
 
