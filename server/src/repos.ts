@@ -1,12 +1,15 @@
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, renameSync, statSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { LINKS_ROOT, listLinks } from "./links.js";
 
 /**
- * Git clones inside a workspace, read-only: what the UI shows when you open a project's
- * Repositories view. Nothing here changes a repo; every action (checkout, pull, commit…)
- * goes through the agent in the chat, where it is visible and reviewable.
+ * Git clones inside a workspace: what the UI shows when you open a project's Repositories view.
+ * Almost nothing here changes a repo; checkout, pull, commit and the rest go through the agent
+ * in the chat, where they are visible and reviewable. The exceptions are the plumbing of where
+ * a working copy comes from: Sync (fetch + fast-forward), pointing a copy at a new origin, and
+ * making a working copy from a repo in one of the owner's linked folders.
  *
  * Everything is read with `git` itself from the clone's own directory, with a timeout and
  * the output size capped, and the clone is agent-written, so results are data to display,
@@ -155,14 +158,204 @@ export function findRepos(ws: string): string[] {
   return out.sort();
 }
 
-async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await run("git", [...GIT_SAFE_FLAGS, ...args], {
+async function git(cwd: string, args: string[], opts: { timeout?: number; pre?: string[] } = {}): Promise<string> {
+  const { stdout } = await run("git", [...GIT_SAFE_FLAGS, ...(opts.pre ?? []), ...args], {
     cwd,
-    timeout: 15_000,
+    timeout: opts.timeout ?? 15_000,
     maxBuffer: 2 * 1024 * 1024,
     env: gitEnv(),
   });
   return stdout;
+}
+
+/**
+ * Why a git command failed, in words. Node's message is the whole command line (all the -c
+ * flags), which says nothing; what git itself said is on stderr.
+ */
+export function gitError(e: unknown): string {
+  const err = e as { stderr?: unknown; killed?: boolean; message?: string };
+  const said = typeof err?.stderr === "string" ? err.stderr : "";
+  const lines = said
+    .split("\n")
+    .map((l) => l.replace(/^(fatal|error|remote|warning):\s*/i, "").trim())
+    .filter(Boolean);
+  const text = lines.join(" ");
+  if (err?.killed) return "it took too long and was stopped";
+  if (/repository .* not found|not found$/i.test(text)) return "there is no repository at that address any more (renamed, moved, or private). Point this copy at where it lives now with Change remote";
+  if (/could not read Username|Authentication failed|terminal prompts disabled/i.test(text)) return "that repository needs a sign-in, which this button doesn't use (it is private). Ask the agent to fetch it: it has your GitHub token";
+  if (/CONNECT tunnel failed|403|Could not resolve host|Failed to connect/i.test(text)) return "the remote couldn't be reached from the sandbox (not on the network allowlist, or offline)";
+  if (/dubious ownership/i.test(text)) return "git won't read that folder because another user owns it";
+  if (/does not appear to be a git repository/i.test(text)) return "that isn't a git repository";
+  return clean(text || (err?.message ?? String(e)).replace(/^Command failed: git .*$/m, "git failed"), 200);
+}
+
+// ---------- where a working copy comes from ----------
+
+export interface RepoSource {
+  kind: "linked" | "url";
+  /** what git is given: an absolute path under /links, or an https address */
+  url: string;
+  /** how it is shown: links/<name>/<repo>, or the address */
+  label: string;
+  /** a folder name for a copy of it */
+  name: string;
+}
+
+/** Repos in the owner's linked folders (a few levels deep), as "links/<name>/<path>". */
+export function linkedRepos(): Array<{ ref: string; name: string }> {
+  const out: Array<{ ref: string; name: string }> = [];
+  for (const l of listLinks()) {
+    for (const rel of findRepos(path.join(LINKS_ROOT, l.name))) {
+      const ref = rel === "." ? `links/${l.name}` : `links/${l.name}/${rel}`;
+      out.push({ ref, name: rel === "." ? l.name : path.basename(rel) });
+    }
+  }
+  return out;
+}
+
+/**
+ * What the owner typed or picked → something git can be pointed at, or why not. Two kinds only:
+ * a repo inside a linked folder (links/<name>/…), and an https address with no sign-in in it.
+ */
+export function resolveSource(input: string): RepoSource | { error: string } {
+  const s = input.trim();
+  if (!s) return { error: "Say where it is: a linked repo (links/…) or an https address." };
+  if (/^https:\/\//i.test(s)) {
+    let u: URL;
+    try {
+      u = new URL(s);
+    } catch {
+      return { error: "That isn't an address." };
+    }
+    if (u.username || u.password) return { error: "Leave sign-in details out of the address: a token in a remote ends up in the repo's config." };
+    if (!/^[A-Za-z0-9.-]+$/.test(u.hostname) || u.search || u.hash || !/^\/[A-Za-z0-9._~/-]+$/.test(u.pathname) || u.pathname.includes("..")) return { error: "That address has parts a git remote shouldn't (a query, a fragment or odd characters)." };
+    const name = path.basename(u.pathname).replace(/\.git$/i, "");
+    if (!name) return { error: "That address doesn't name a repository." };
+    return { kind: "url", url: `https://${u.host}${u.pathname}`, label: `https://${u.host}${u.pathname}`, name };
+  }
+  // owner/name is GitHub, as everywhere else
+  if (/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(s) && !s.startsWith("links/")) {
+    const name = s.split("/")[1].replace(/\.git$/i, "");
+    return { kind: "url", url: `https://github.com/${s.replace(/\.git$/i, "")}.git`, label: `https://github.com/${s.replace(/\.git$/i, "")}.git`, name };
+  }
+  const m = /^\/?links\/([a-z0-9][a-z0-9-]{0,39})(?:\/(.*))?$/.exec(s.replace(/\\/g, "/").replace(/\/+$/, ""));
+  if (!m) return { error: "Give a repo in a linked folder (links/<folder>/<repo>), owner/name on GitHub, or an https address." };
+  const link = listLinks().find((l) => l.name === m[1]);
+  if (!link) return { error: `There is no linked folder called "${m[1]}". Link it under Settings → Folders first.` };
+  const sub = (m[2] ?? "").split("/").filter((x) => x && x !== "." && x !== "..");
+  const root = path.join(LINKS_ROOT, link.name);
+  const abs = path.join(root, ...sub);
+  try {
+    const realRoot = realpathSync(root);
+    const real = realpathSync(abs);
+    if (real !== realRoot && !real.startsWith(realRoot + path.sep)) return { error: "That path leaves the linked folder." };
+  } catch {
+    return { error: `"${s}" isn't in that linked folder.` };
+  }
+  if (!existsSync(path.join(abs, ".git"))) return { error: `"${s}" isn't a git repository (no .git there).` };
+  return { kind: "linked", url: abs, label: ["links", link.name, ...sub].join("/"), name: sub.at(-1) ?? link.name };
+}
+
+/** git refuses a repo another user owns; a linked folder is the owner's own, mounted under another uid. */
+const trustLinked = (url: string | null | undefined) => (url && path.isAbsolute(url) && (url === LINKS_ROOT || url.startsWith(LINKS_ROOT + path.sep)) ? ["-c", `safe.directory=${url}`, "-c", `safe.directory=${path.join(url, ".git")}`] : []);
+
+const safeFolder = (name: string) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/.test(name) && !name.endsWith(".") && name.toLowerCase() !== ".git";
+
+/** A linked repo's own https origin (GitHub, usually) is kept on the copy as the remote "upstream", without any sign-in in it. */
+async function keepUpstream(dir: string, src: RepoSource): Promise<string> {
+  if (src.kind !== "linked") return "";
+  try {
+    const theirs = (await git(src.url, ["config", "--get", "remote.origin.url"], { pre: trustLinked(src.url) })).trim();
+    const up = resolveSource(theirs.replace(/\/\/[^@/]+@/, "//"));
+    if ("error" in up || up.kind !== "url") return "";
+    const remotes = (await git(dir, ["remote"])).split("\n").map((x) => x.trim());
+    if (remotes.includes("upstream")) return "";
+    await git(dir, ["remote", "add", "upstream", up.url]);
+    return ` Its own origin (${up.label}) is kept as the remote "upstream".`;
+  } catch {
+    return ""; // no origin of its own, or not readable: the copy is still good
+  }
+}
+
+/**
+ * Point a working copy at a new origin (the repo moved or was renamed, or it should follow the
+ * owner's own folder), fetch from it, and optionally rename the folder to match. Uncommitted work
+ * and local branches are not touched.
+ */
+export async function setRemote(ws: string, rel: string, sourceInput: string, rename = false): Promise<{ ok: boolean; message: string; path?: string }> {
+  const dir = containedDir(ws, rel);
+  if (!dir) return { ok: false, message: "That path leaves the workspace through a link; refusing to change it." };
+  const unsafe = await execCapableConfig(dir);
+  if (unsafe.length) return { ok: false, message: UNSAFE_REPO(unsafe) };
+  const src = resolveSource(sourceInput);
+  if ("error" in src) return { ok: false, message: src.error };
+  try {
+    const remotes = (await git(dir, ["remote"])).split("\n").map((x) => x.trim());
+    await git(dir, remotes.includes("origin") ? ["remote", "set-url", "origin", src.url] : ["remote", "add", "origin", src.url]);
+  } catch (e) {
+    return { ok: false, message: `Could not set the remote: ${gitError(e)}.` };
+  }
+  let note = "";
+  try {
+    await git(dir, ["fetch", "--quiet", "--prune", "origin"], { timeout: 120_000, pre: trustLinked(src.url) });
+    // follow the same-named branch there, when there is one
+    const branch = (await git(dir, ["symbolic-ref", "--quiet", "--short", "HEAD"]).catch(() => "")).trim();
+    if (branch && /^[A-Za-z0-9._/-]{1,200}$/.test(branch)) {
+      const has = await git(dir, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`]).then(
+        () => true,
+        () => false,
+      );
+      if (has) await git(dir, ["branch", "--quiet", `--set-upstream-to=origin/${branch}`, branch]);
+      else note = ` There is no branch called ${branch} there, so this one follows nothing yet.`;
+    }
+  } catch (e) {
+    return { ok: false, message: `The remote is now ${src.label}, but fetching from it failed: ${gitError(e)}.` };
+  }
+  note += await keepUpstream(dir, src);
+  let newRel = rel;
+  if (rename && rel !== "." && src.name !== path.basename(rel)) {
+    const target = path.join(path.dirname(dir), src.name);
+    if (!safeFolder(src.name)) note += ` The folder wasn't renamed: "${src.name}" isn't a usable folder name.`;
+    else if (existsSync(target)) note += ` The folder wasn't renamed: ${src.name} already exists here.`;
+    else {
+      try {
+        renameSync(dir, target);
+        newRel = path.relative(ws, target).split(path.sep).join("/");
+        note += ` The folder is now ${newRel}.`;
+      } catch (e) {
+        note += ` The folder couldn't be renamed (${e instanceof Error ? e.message : String(e)}).`;
+      }
+    }
+  }
+  return { ok: true, message: `Now follows ${src.label}.${note}`, path: newRel };
+}
+
+/**
+ * Make a working copy, in this workspace, of a repo in one of the owner's linked folders. The
+ * copy's origin is that folder, so Sync brings in whatever the owner has committed there. If the
+ * owner's repo has an https origin of its own (GitHub), it is added as the remote "upstream".
+ * GitHub addresses are not cloned here: the agent does that in the chat, with the owner's token.
+ */
+export async function addRepo(ws: string, sourceInput: string): Promise<{ ok: boolean; message: string; path?: string }> {
+  const src = resolveSource(sourceInput);
+  if ("error" in src) return { ok: false, message: src.error };
+  if (src.kind !== "linked") return { ok: false, message: "From here, working copies are made from repos in your linked folders. For a GitHub address, ask the agent to clone it." };
+  if (!safeFolder(src.name)) return { ok: false, message: `"${src.name}" isn't a usable folder name.` };
+  let root: string;
+  try {
+    root = realpathSync(ws);
+  } catch {
+    return { ok: false, message: "This workspace doesn't exist yet." };
+  }
+  const dest = path.join(root, src.name);
+  if (existsSync(dest)) return { ok: false, message: `There is already a ${src.name} in this workspace. Use Change remote on it, or remove it first.` };
+  try {
+    await git(root, ["clone", "--quiet", "--no-hardlinks", "--origin", "origin", "--", src.url, dest], { timeout: 180_000, pre: trustLinked(src.url) });
+  } catch (e) {
+    return { ok: false, message: `Could not copy ${src.label}: ${gitError(e)}.` };
+  }
+  const note = await keepUpstream(dest, src);
+  return { ok: true, message: `Working copy made at ${src.name}, following ${src.label}. Sync brings in what you commit there.${note}`, path: src.name };
 }
 
 const UNSAFE_REPO = (keys: string[]) =>
@@ -325,9 +518,10 @@ export async function syncRepo(ws: string, rel: string, fetchOnly = false): Prom
     return { ok: false, message: "Uncommitted changes here: sync would overwrite them. Ask the agent to commit or stash first." };
   }
   try {
-    await git(dir, ["fetch", "--quiet", "--prune"]);
+    const origin = (await git(dir, ["config", "--get", "remote.origin.url"]).catch(() => "")).trim();
+    await git(dir, ["fetch", "--quiet", "--prune"], { timeout: 120_000, pre: trustLinked(origin) });
   } catch (e) {
-    return { ok: false, message: `Could not fetch: ${clean(e instanceof Error ? e.message : String(e), 200)}` };
+    return { ok: false, message: `Could not fetch: ${gitError(e)}.` };
   }
   const after = await inspectRepo(ws, rel);
   // fetchOnly: just make `behind` truthful, so a caller can warn before spending anything.
@@ -341,7 +535,7 @@ export async function syncRepo(ws: string, rel: string, fetchOnly = false): Prom
   try {
     await git(dir, ["merge", "--ff-only", "--quiet", "@{upstream}"]);
   } catch (e) {
-    return { ok: false, message: `Fetched, but could not fast-forward: ${clean(e instanceof Error ? e.message : String(e), 200)}` };
+    return { ok: false, message: `Fetched, but could not fast-forward: ${gitError(e)}.` };
   }
   return { ok: true, message: `Fast-forwarded ${after.behind} commit${after.behind === 1 ? "" : "s"} to ${after.upstream}.` };
 }

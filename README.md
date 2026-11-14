@@ -879,10 +879,17 @@ partial (and comment, saying so, on your own PR, which GitHub won't let you appr
 **Repos** (top bar), the branch icon on a project, or right-click a project → **Repositories**
 lists every git clone in that workspace: current branch, what's uncommitted, ahead/behind its
 upstream, last commit, remote, branches (local, and remote on request), stashes, and a summary
-of the uncommitted changes. **Browse files** opens the Files view at that clone. The view only
-reads; every other button (explain changes, fetch and compare, pull, review and propose a
-commit, new branch, switch, compare) puts a request in the chat for the agent, so git actions
-run in the sandbox where you can see them and the reviewer can check them.
+of the uncommitted changes. **Browse files** opens the Files view at that clone. Three buttons
+act directly: **Sync from origin** fetches and fast-forwards a copy; **Change remote…** points a
+copy at a new origin (a repo in a linked folder as `links/<folder>/<repo>`, `owner/name` on
+GitHub, or an https address with no sign-in in it), fetches, and can rename the folder to match;
+and **Add a repository** makes a working copy of a repo in one of your linked folders, which then
+follows that folder, so Sync brings in what you commit on your PC (its GitHub origin is kept as
+the remote `upstream`). A GitHub repository is cloned by the agent in the chat, because private
+ones need your token. Every other button (explain changes, fetch and compare, review and propose
+a commit, new branch, switch, compare) puts a request in the chat for the agent, so git actions
+run in the sandbox where you can see them and the reviewer can check them. A failed fetch now
+says why (renamed or private repository, not on the network allowlist) instead of the command.
 
 ## Ditto Router and Ditto Review
 

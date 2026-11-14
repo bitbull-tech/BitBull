@@ -50,7 +50,7 @@ import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, Scop
 import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, LEADPOET_MCP_PATH, mcpTokenOk } from "./mcp.js";
 import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, finishFromUrl as leadpoetFinishFromUrl, leadpoetState, proxyMcp as leadpoetMcp, startConnect as leadpoetConnect } from "./leadpoet.js";
 import { linksAvailable, listLinks } from "./links.js";
-import { inspectRepo, listRepos, repoDiffStat, syncRepo } from "./repos.js";
+import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote } from "./repos.js";
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
@@ -1075,6 +1075,29 @@ app.get("/api/projects/:id/repos", async (c) => {
   const ws = workspaceOf(c.req.param("id"));
   if (!ws) return c.json({ error: "project not found" }, 404);
   return c.json({ repos: await listRepos(ws) });
+});
+/** Repos in the owner's linked folders, to make a working copy from or point one at. */
+app.get("/api/projects/:id/repos/sources", (c) => c.json({ linked: linkedRepos() }));
+/** Point a working copy at a new origin (a linked repo, owner/name or an https address) and fetch; optionally rename its folder. */
+app.post("/api/projects/:id/repos/remote", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const rel = safeRel(typeof body.repo === "string" ? body.repo : "");
+  if (rel === null || typeof body.source !== "string") return c.json({ error: "repo and source required" }, 400);
+  const r = await setRemote(ws, rel || ".", body.source, body.rename === true);
+  record({ level: r.ok ? "info" : "warn", source: "server", message: `repo remote ${rel || "."}: ${r.message}` });
+  return c.json({ ...r, repos: await listRepos(ws) });
+});
+/** Make a working copy of a repo from a linked folder in this workspace. */
+app.post("/api/projects/:id/repos/add", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (typeof body.source !== "string") return c.json({ error: "source required" }, 400);
+  const r = await addRepo(ws, body.source);
+  record({ level: r.ok ? "info" : "warn", source: "server", message: `repo add: ${r.message}` });
+  return c.json({ ...r, repos: await listRepos(ws) });
 });
 /** Fetch + fast-forward one clone in this workspace onto origin (the Sync button). */
 app.post("/api/projects/:id/repos/sync", async (c) => {

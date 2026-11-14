@@ -1019,6 +1019,17 @@ button.fc-file:hover { background: var(--hover); }
 .repo-facts dd { margin: 0; overflow-wrap: anywhere; }
 .repo-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
 .repo-actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+.repo-remote { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2, var(--panel)); }
+.repo-remote > label:first-child { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.repo-remote-row { display: flex; gap: 6px; align-items: center; }
+.repo-remote-row input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; }
+.repo-remote p { margin: 0; }
+.repo-add { margin: 14px 0; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.repo-add .section-head { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.repo-add-linked { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.repo-add-linked .btn { display: inline-flex; gap: 6px; align-items: baseline; }
+.repo-add-linked .btn .mono { font-size: 11px; }
+.repo-add p { margin: 0; }
 .repo-section { margin-top: 8px; }
 .repo-section .section-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 6px 0; }
 .repo-section .check { display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; font-weight: 500; }
@@ -1057,6 +1068,16 @@ button.fc-file:hover { background: var(--hover); }
 .swarm-modal .field { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .swarm-modal .field > span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
 .swarm-modal .field input, .swarm-modal .field select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+.tp { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.tp-list { position: absolute; top: 40px; left: 0; right: 0; z-index: 30; max-height: 300px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 4px; }
+.tp-group { padding: 6px 8px 4px; font-size: 11px; color: var(--muted); }
+.tp-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.tp-row.cur { background: var(--hover); }
+.tp-row.sel .tp-name { font-weight: 600; }
+.tp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-in { flex: none; }
+.tp-empty { padding: 10px 8px; font-size: 12.5px; color: var(--muted); }
+.tp-foot { padding: 6px 8px 4px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 4px; }
 .swarm-modal .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .swarm-modal .reviewers .field { margin: 8px 0; }
 .swarm-modal .reviewers select { width: 100%; min-width: 0; }

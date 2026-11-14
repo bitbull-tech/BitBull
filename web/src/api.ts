@@ -609,6 +609,17 @@ export const api = {
   vaultUnlock: (key: string) => req<{ unlocked: boolean; keys: string[]; moved: string[] }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ key }) }),
   vaultLock: () => req<{ unlocked: boolean }>('/api/vault/lock', { method: 'POST' }),
   repos: (projectId: string) => req<{ repos: RepoInfo[] }>(`/api/projects/${projectId}/repos`),
+  repoSources: (projectId: string) => req<{ linked: Array<{ ref: string; name: string }> }>(`/api/projects/${projectId}/repos/sources`),
+  setRepoRemote: (projectId: string, repo: string, source: string, rename: boolean) =>
+    req<{ ok: boolean; message: string; path?: string; repos: RepoInfo[] }>(`/api/projects/${projectId}/repos/remote`, {
+      method: 'POST',
+      body: JSON.stringify({ repo, source, rename }),
+    }),
+  addRepo: (projectId: string, source: string) =>
+    req<{ ok: boolean; message: string; path?: string; repos: RepoInfo[] }>(`/api/projects/${projectId}/repos/add`, {
+      method: 'POST',
+      body: JSON.stringify({ source }),
+    }),
   syncRepo: (projectId: string, repo: string, fetchOnly = false) =>
     req<{ ok: boolean; message: string; repos: RepoInfo[] }>(`/api/projects/${projectId}/repos/sync`, {
       method: 'POST',

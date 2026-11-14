@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type HoundOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm } from './api'
 import { IconX } from './icons'
 import { priceLabel } from './ModelPicker'
+import { TargetPicker } from './TargetPicker'
 import houndArt from './assets/qa-hound.webp'
 
 const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
@@ -164,32 +165,16 @@ export function SwarmDialog({
           </p>
             </div>
           </div>
-          <label className="field">
-            <span>Target (path in this workspace)</span>
-            <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="my-repo, src/, uploads/script.py …" list="swarm-repos" />
-            <datalist id="swarm-repos">
-              {repos.map((r) => (
-                <option key={r.path} value={r.path}>
-                  {r.name} ({r.branch ?? 'no branch'})
-                </option>
-              ))}
-            </datalist>
-            {repos.length > 1 && (
-              <span className="chips">
-                {repos.map((r) => (
-                  <button key={r.path} type="button" className={`chip${target === r.path ? ' on' : ''}`} onClick={() => setTarget(r.path)}>
-                    {r.name}
-                  </button>
-                ))}
-              </span>
-            )}
+          <div className="field">
+            <span>What to review (a repo, folder or file in this workspace)</span>
+            <TargetPicker projectId={project?.id ?? 'general'} repos={repos} value={target} onChange={setTarget} />
             {reposLoaded && repos.length === 0 && (
               <span className="muted small">
-                No repos cloned in {project ? `"${project.name}"` : 'the general workspace'}. Clone one from Repositories first, or give a path to
-                something that is here (an upload, a linked folder).
+                No repos are cloned in {project ? `"${project.name}"` : 'the general workspace'}: clone one from Repositories, or pick a folder or file
+                from the list (uploads are under <code>uploads/</code>).
               </span>
             )}
-          </label>
+          </div>
           {/* one under the other: side by side, a long model name pushed the second out of view */}
           <div className="reviewers">
             <label className="field">
