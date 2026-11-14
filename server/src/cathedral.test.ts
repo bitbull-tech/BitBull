@@ -1083,7 +1083,7 @@ test("a malformed budget is not a cap: create refuses with account_malformed, ev
 test("delete checks ownership first: a sandbox labelled for another task is refused and nothing is deleted", async () => {
   const get = (labels: Record<string, string>): Route => ["GET", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(200, sandbox("running", { labels })))];
   const del: Route = ["DELETE", new RegExp(`^/v1/sandboxes/${ID}$`), once(() => j(202, sandbox("deleting")))];
-  for (const labels of [{ bitbull: "1", bitbull_task: "tother" }, {}, { bitbull_task: TASK }]) {
+  for (const labels of [{ bitbull: "1", bitbull_task: "tother" }, {}, { bitbull_task: TASK }] as Array<Record<string, string>>) {
     const x = await go(["delete", ID, "--task", TASK, "--op", "del"], [get(labels), del]);
     assert.equal(x.r.code, 1, JSON.stringify(labels));
     assert.equal(x.r.out.error, "not_this_task");
