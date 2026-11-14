@@ -427,7 +427,7 @@ test("every mutating command refuses a missing --task or --op, and names with ot
     ["create", "--size", "sealed-1x2", "--lifetime", "300", "--max-spend", "0.01", ...extra],
     ["exec", ID, "--cmd", "true", ...extra],
     ["exec-bg", ID, "--timeout", "60", "--cmd", "true", ...extra],
-    ["put", ID, "--src", path.join(tmp, "nope"), "--path", "/root/x", ...extra],
+    ["put", ID, "--src", path.join(tmp, "nope"), "--path", "/work/x", ...extra],
     ["delete", ID, ...extra],
   ];
   for (const extra of [[], ["--task", TASK], ["--op", "x"]]) {
@@ -629,7 +629,7 @@ test("error shapes: object, string and list details; top-level metadata; billed 
 
 // ---------- files ----------
 
-const putArgs = (src: string, op = "putreadme", extra: string[] = []) => ["put", ID, "--task", TASK, "--op", op, "--src", src, "--path", "/root/README.md", ...extra];
+const putArgs = (src: string, op = "putreadme", extra: string[] = []) => ["put", ID, "--task", TASK, "--op", op, "--src", src, "--path", "/work/README.md", ...extra];
 const filesRoute = (method: string, h: Handler): Route => [method, new RegExp(`^/v1/sandboxes/${ID}/files$`), h];
 
 test("put: 204 with an empty body succeeds; one request with the key, the content hash and the bytes", async () => {
@@ -643,7 +643,7 @@ test("put: 204 with an empty body succeeds; one request with the key, the conten
   assert.equal(x.r.out.sha256, sha);
   const r = x.reqs[0];
   assert.equal(r.method, "PUT");
-  assert.equal(r.q.get("path"), "/root/README.md");
+  assert.equal(r.q.get("path"), "/work/README.md");
   assert.equal(r.q.get("mode"), "420");
   assert.equal(r.headers.authorization, `Bearer ${KEY}`);
   assert.equal(r.headers["idempotency-key"], `bitbull-${TASK}-putreadme-${sha.slice(0, 12)}`);
@@ -724,19 +724,19 @@ test("put over 200 MiB is refused before any request; a 413 is reported and stop
 test("get: binary content is written byte for byte, with max_bytes on the request", async () => {
   const all = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
   const out = path.join(tmp, "dl.bin");
-  const x = await go(["get", ID, "--path", "/root/data.bin", "--out", out], [filesRoute("GET", once(() => bin(200, all)))]);
+  const x = await go(["get", ID, "--path", "/work/data.bin", "--out", out], [filesRoute("GET", once(() => bin(200, all)))]);
   assert.equal(x.r.code, 0, x.r.stdout);
   assert.deepEqual(readFileSync(out), all);
   assert.equal(x.r.out.bytes, 256);
   assert.equal(x.r.out.sha256, createHash("sha256").update(all).digest("hex"));
-  assert.equal(x.reqs[0].q.get("path"), "/root/data.bin");
+  assert.equal(x.reqs[0].q.get("path"), "/work/data.bin");
   assert.equal(x.reqs[0].q.get("max_bytes"), String(200 * 1024 * 1024));
-  const small = await go(["get", ID, "--path", "/root/data.bin", "--out", out, "--max-bytes", "1024"], [filesRoute("GET", once(() => bin(200, all)))]);
+  const small = await go(["get", ID, "--path", "/work/data.bin", "--out", out, "--max-bytes", "1024"], [filesRoute("GET", once(() => bin(200, all)))]);
   assert.equal(small.reqs[0].q.get("max_bytes"), "1024");
-  const over = await go(["get", ID, "--path", "/root/data.bin", "--out", out, "--max-bytes", String(200 * 1024 * 1024 + 1)], [filesRoute("GET", once(() => bin(200, all)))]);
+  const over = await go(["get", ID, "--path", "/work/data.bin", "--out", out, "--max-bytes", String(200 * 1024 * 1024 + 1)], [filesRoute("GET", once(() => bin(200, all)))]);
   assert.equal(over.r.code, 1);
   assert.equal(over.reqs.length, 0);
-  const r413 = await go(["get", ID, "--path", "/root/data.bin", "--out", path.join(tmp, "never.bin")], [filesRoute("GET", once(() => j(413, { detail: { error: "file_too_large" } })))]);
+  const r413 = await go(["get", ID, "--path", "/work/data.bin", "--out", path.join(tmp, "never.bin")], [filesRoute("GET", once(() => j(413, { detail: { error: "file_too_large" } })))]);
   assert.equal(r413.r.code, 1);
   assert.equal(r413.r.out.status, 413);
 });
@@ -776,6 +776,32 @@ test("receipts: the head hash equals Cathedral's own (Python json.dumps, sort_ke
   const x = await go(["receipts", ID], [receiptsRoute(() => j(200, { receipts: [d], next_after: null }))]);
   assert.equal(x.r.code, 0, x.r.stdout);
   assert.equal(x.r.out.head_sha256, "2ce7678f350b8e963c4c17d0048e9d0ea0316443a69209875b4c9be280045bfa");
+});
+
+test("files: put and get refuse paths outside /work before calling Cathedral", async () => {
+  // Found live on 13 Nov: a sealed room's files API reaches /work only and answers 422 otherwise.
+  const src = path.join(tmp, "w.txt");
+  writeFileSync(src, "w");
+  for (const bad of ["/root/x", "/work", "/workx/a", "/work/../etc/passwd", "/work/./a", "work/a"]) {
+    const p = await go(["put", ID, "--task", TASK, "--op", "putw", "--src", src, "--path", bad], []);
+    assert.equal(p.r.out.error, "path_outside_work", bad);
+    assert.equal(p.reqs.length, 0, bad);
+    const g = await go(["get", ID, "--path", bad, "--out", path.join(tmp, "w.out")], []);
+    assert.equal(g.r.out.error, "path_outside_work", bad);
+    assert.equal(g.reqs.length, 0, bad);
+  }
+});
+
+test("errors: an edge answer with an empty detail says Cathedral's public message", async () => {
+  const x = await go(["get", ID, "--path", "/work/a", "--out", path.join(tmp, "e.out")], [
+    filesRoute("GET", once(() => j(422, { error: "Check the values and try again.", public_message: "Check the values and try again.", failed_by: "you", billed: false, retry_after_s: null, detail: {} }))),
+  ]);
+  assert.equal(x.r.out.ok, false);
+  assert.equal(x.r.out.status, 422);
+  assert.equal(x.r.out.error, "http_422");
+  assert.equal(x.r.out.message, "Check the values and try again.");
+  assert.equal(x.r.out.failed_by, "you");
+  assert.equal(x.r.out.billed, false);
 });
 
 const verifyRoute = (h: Handler): Route => ["GET", new RegExp(`^/v1/sandboxes/${ID}/receipts/verify$`), h];
@@ -942,13 +968,13 @@ test("key leaks: the API error, a validation item's input and the command's own 
   const echoed = await go(["exec", ID, "--task", TASK, "--op", "e", "--cmd", `echo ${KEY}`], [execRoute(seq(() => j(200, { exit_code: 0, stdout: `${KEY}\n`, stderr: "", timed_out: false })))]);
   assert.ok(!echoed.r.stdout.includes(KEY));
   // a bad path: the error the helper builds itself never carries the key either
-  const badPath = await go(["get", ID, "--path", `/root/${KEY}`, "--out", path.join(tmp, "k.out")], [filesRoute("GET", once(() => j(404, { detail: { error: "file_not_found", message: `no file /root/${KEY}` } })))]);
+  const badPath = await go(["get", ID, "--path", `/work/${KEY}`, "--out", path.join(tmp, "k.out")], [filesRoute("GET", once(() => j(404, { detail: { error: "file_not_found", message: `no file /work/${KEY}` } })))]);
   assert.ok(!badPath.r.stdout.includes(KEY));
 });
 
 test("the helper never writes the key to disk: put and get files carry only the bytes", async () => {
   const out = path.join(tmp, "leakcheck.bin");
-  await go(["get", ID, "--path", "/root/f", "--out", out], [filesRoute("GET", once(() => bin(200, Buffer.from("plain"))))]);
+  await go(["get", ID, "--path", "/work/f", "--out", out], [filesRoute("GET", once(() => bin(200, Buffer.from("plain"))))]);
   assert.equal(readFileSync(out, "utf8"), "plain");
 });
 

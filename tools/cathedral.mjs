@@ -146,6 +146,9 @@ function normaliseError(status, body, headers) {
     error = typeof obj.error === "string" ? obj.error : error;
     message = typeof obj.message === "string" ? obj.message : error;
   }
+  // The cathedral.computer edge can answer with an empty detail and the reason
+  // only in public_message: keep the generic code, but say Cathedral's sentence.
+  if (message === `Cathedral answered ${status}` && typeof top.public_message === "string") message = top.public_message;
   const pick = (k) => (k in obj ? obj[k] : k in top ? top[k] : undefined);
   const headerRetry = headers?.get?.("retry-after");
   const headerSeconds = headerRetry && /^\d+$/.test(headerRetry.trim()) ? Number(headerRetry.trim()) : null;
@@ -571,10 +574,20 @@ async function cmdExecWait(ctx, { id, flags }) {
   }
 }
 
+/** A sealed room's files API reaches /work only (Cathedral answers 422 otherwise). */
+function workPath(path) {
+  const parts = path.split("/");
+  if (!path.startsWith("/work/") || path.length > 2048 || path.includes("\u0000") || parts.some((x) => x === ".." || x === ".")) {
+    throw new Refusal("path_outside_work", "Sealed sandboxes move files under /work only. Use a path like /work/notes.txt");
+  }
+  return path;
+}
+
 async function cmdPut(ctx, parsed) {
   const { flags, id } = parsed;
   const { key } = operationKey(parsed);
   if (!flags.src || !flags.path) throw new Refusal("usage", "put needs --src <local file> and --path <path in the sandbox>");
+  workPath(flags.path);
   const mode = flags.mode === undefined ? 420 : intArg(flags.mode, 0, 4095);
   if (mode === null) throw new Refusal("invalid_mode", "--mode is a decimal file mode such as 420 (octal 644)");
   let size;
@@ -615,6 +628,7 @@ async function cmdPut(ctx, parsed) {
 
 async function cmdGet(ctx, { id, flags }) {
   if (!flags.path || !flags.out) throw new Refusal("usage", "get needs --path <path in the sandbox> and --out <local file>");
+  workPath(flags.path);
   const max = flags["max-bytes"] === undefined ? MAX_FILE_BYTES : intArg(flags["max-bytes"], 1, MAX_FILE_BYTES);
   if (max === null) throw new Refusal("invalid_max_bytes", "--max-bytes must be 1 to 209715200 (200 MiB)");
   const r = await api(ctx, "GET", `/v1/sandboxes/${id}/files?path=${encodeURIComponent(flags.path)}&max_bytes=${max}`);
