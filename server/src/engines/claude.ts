@@ -13,7 +13,7 @@ import { reviewModelId, ROUTER_HEADERS, ROUTER_SESSION_HEADER, routerBackground,
  * (or a stray ANTHROPIC_* var) can never be sent to the gateway instead of the
  * gateway's own key.
  */
-function cleanEnv(): Record<string, string> {
+export function cleanEnv(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue;

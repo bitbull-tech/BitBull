@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { config, githubTokenKind, paths, readFileOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
+import { config, effectiveCathedralCap, githubTokenKind, paths, readFileOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
 import { record } from "./activity.js";
 import { resetDitto } from "./ditto.js";
 import { probeDitto } from "./ditto.js";
@@ -183,6 +183,22 @@ export function describeSettings() {
         row("TAOSTATS_API_KEY", "API key", config.integrations.taostats.apiKey, {
           secret: true,
           hint: "Bittensor data via https://api.taostats.io/v1 (old /api/ routes stop on 9 Nov 2026). The agent reads it from its environment; see the taostats-api skill.",
+        }),
+      ],
+    },
+    {
+      id: "cathedral",
+      title: "Cathedral",
+      rows: [
+        row("CATHEDRAL_API_KEY", "API key", config.integrations.cathedral.apiKey, {
+          secret: true,
+          hint: "Use a Cathedral key with its own spending cap.",
+        }),
+        row("CATHEDRAL_MAX_SPEND_USD", "Most one sandbox may hold (USD)", effectiveCathedralCap(config.integrations.cathedral.maxSpendUsd).toFixed(2), {
+          hint: "A positive amount up to 25.00; anything else means 0.50. The agent's helper refuses to create a sandbox that could hold more, or more than the key has left.",
+        }),
+        row("CATHEDRAL_ALLOW_UNCAPPED_KEY", "Allow a key with no spending cap", config.integrations.cathedral.allowUncapped ? "on" : "off", {
+          hint: "off: the helper refuses to create sandboxes with a key that has no cap of its own. on: it creates with such a key, limited only by the amount above. A key's own cap is the real backstop, so leave this off.",
         }),
       ],
     },
