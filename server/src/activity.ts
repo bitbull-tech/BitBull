@@ -51,6 +51,7 @@ const secrets = () =>
     config.integrations.four04.modelKey,
     config.integrations.github.token,
     config.integrations.taostats.apiKey,
+    config.integrations.cathedral.apiKey,
     config.integrations.telegram.botToken,
     ...oauthTokens(config.integrations.leadpoet.oauth),
     ...oauthTokens(config.saygm.oauth),

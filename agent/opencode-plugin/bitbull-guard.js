@@ -19,7 +19,7 @@ const HIDE = [
   "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENCODE_CONFIG_CONTENT", "OPENCODE_SERVER_PASSWORD",
 ];
 // Given to the agent on purpose, but their values still shouldn't be echoed to the model
-const MASK_ONLY = ["GITHUB_TOKEN", "GH_TOKEN", "TAOSTATS_API_KEY", "FOUR04_MODEL_KEY"];
+const MASK_ONLY = ["GITHUB_TOKEN", "GH_TOKEN", "TAOSTATS_API_KEY", "FOUR04_MODEL_KEY", "CATHEDRAL_API_KEY"];
 
 function secretValues() {
   const vals = new Set();
