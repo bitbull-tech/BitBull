@@ -346,3 +346,55 @@ test("skill: valid front matter, helper named, mirrored into a workspace by the 
 test("the helper file exists next to the other tools", () => {
   assert.ok(existsSync(path.join(root, "tools/cathedral.mjs")));
 });
+
+// ---- round 2: probe redaction and malformed budgets ----
+
+test("probe: the key is redacted from every result string, even when Cathedral echoes it back", async () => {
+  await withKey();
+  // in sealed.reason
+  serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason: `weird ${KEY} reason` } }));
+  let r = await probeCathedral();
+  assert.ok(!JSON.stringify(r).includes(KEY));
+  assert.match(r.detail, /\[REDACTED\]/);
+  // in the expiry field and a size name
+  serve(
+    () => json(200, account({ api_key: { id: "k", expires_at: `${KEY}`, budget_usd: "5", committed_usd: "0", remaining_usd: "5" } })),
+    () => json(200, { sealed: { available: true, sizes: [{ template: `size-${KEY}`, hourly_rate_usd: "0.01" }] } }),
+  );
+  r = await probeCathedral();
+  assert.ok(!JSON.stringify(r).includes(KEY));
+  // through the dispatch the Settings API uses
+  serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason: KEY } }));
+  const all = await probeIntegrations();
+  assert.ok(!JSON.stringify(all).includes(KEY));
+  // a network error whose message carries the key
+  stub = async () => {
+    throw Object.assign(new Error(`dial ${KEY}`), { name: "FetchError" });
+  };
+  r = await probeCathedral();
+  assert.ok(!JSON.stringify(r).includes(KEY));
+  await updateSettings({ CATHEDRAL_API_KEY: null });
+});
+
+test("probe: a malformed budget or remaining amount is red, never a cap", async () => {
+  await withKey();
+  for (const budget of ["garbage", "", "-1", "NaN", {}]) {
+    serve(() => json(200, account({ api_key: { id: "k", expires_at: null, budget_usd: budget, committed_usd: "0", remaining_usd: "4" } })), () => json(200, catalogReady));
+    const r = await probeCathedral();
+    assert.equal(r.ok, false, JSON.stringify(budget));
+    assert.equal((r as any).level, "red");
+    assert.match(r.detail, /malformed/i);
+    assert.doesNotMatch(r.detail, /NaN/);
+  }
+  for (const remaining of ["garbage", "", "-2"]) {
+    serve(() => json(200, account({ api_key: { id: "k", expires_at: null, budget_usd: "5", committed_usd: "1", remaining_usd: remaining } })), () => json(200, catalogReady));
+    const r = await probeCathedral();
+    assert.equal(r.ok, false, remaining);
+    assert.match(r.detail, /malformed/i);
+  }
+  // the uncapped switch does not excuse a malformed budget
+  await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" });
+  serve(() => json(200, account({ api_key: { id: "k", expires_at: null, budget_usd: "garbage", committed_usd: "0", remaining_usd: null } })), () => json(200, catalogReady));
+  assert.equal((await probeCathedral()).ok, false);
+  await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: null, CATHEDRAL_API_KEY: null });
+});
