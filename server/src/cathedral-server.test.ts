@@ -331,7 +331,7 @@ test("skill: valid front matter, helper named, mirrored into a workspace by the 
   assert.match(m[1], /^description: .{20,}$/m);
   assert.ok(listSkills().some((s) => s.dir === "cathedral-sandbox" && s.name === "cathedral-sandbox"));
   assert.match(md, /cathedral\.mjs/);
-  assert.doesNotMatch(md, /—/);
+  assert.doesNotMatch(md, /\u2014/);
 
   const ws = path.join(dir, "ws");
   assert.deepEqual(mirrorSkillsInto(ws), []);
