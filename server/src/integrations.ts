@@ -57,7 +57,7 @@ export function integrations(): IntegrationDef[] {
       docs: "https://cathedral.computer",
       env: [
         { key: "CATHEDRAL_API_KEY", label: "API key (cat_sk_…)", secret: true, value: ca.apiKey },
-        { key: "CATHEDRAL_MAX_SPEND_USD", label: "Most one sandbox may hold (USD)", value: effectiveCathedralCap(ca.maxSpendUsd).toFixed(2) },
+        { key: "CATHEDRAL_MAX_SPEND_USD", label: "Spend limit per sandbox (USD)", value: effectiveCathedralCap(ca.maxSpendUsd).toFixed(2) },
         { key: "CATHEDRAL_ALLOW_UNCAPPED_KEY", label: "Allow a key with no spending cap", value: ca.allowUncapped ? "on" : "off" },
       ],
       configured: !!ca.apiKey,

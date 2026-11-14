@@ -194,7 +194,7 @@ export function describeSettings() {
           secret: true,
           hint: "Use a Cathedral key with its own spending cap.",
         }),
-        row("CATHEDRAL_MAX_SPEND_USD", "Most one sandbox may hold (USD)", effectiveCathedralCap(config.integrations.cathedral.maxSpendUsd).toFixed(2), {
+        row("CATHEDRAL_MAX_SPEND_USD", "Spend limit per sandbox (USD)", effectiveCathedralCap(config.integrations.cathedral.maxSpendUsd).toFixed(2), {
           hint: "A positive amount up to 25.00; anything else means 0.50. The agent's helper refuses to create a sandbox that could hold more, or more than the key has left.",
         }),
         row("CATHEDRAL_ALLOW_UNCAPPED_KEY", "Allow a key with no spending cap", config.integrations.cathedral.allowUncapped ? "on" : "off", {
