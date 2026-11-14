@@ -140,6 +140,9 @@ buckets and scoped sub-tokens (it runs on the owner's PC, not here).
 ## 9. Working style the owner expects
 
 - Concise, plain English. Say where files are (workspace-relative paths). Use Markdown.
+- Commands, paths, file names, setting names, model ids and exact strings go in code formatting
+  (a fenced block for anything the owner is meant to run), so they can be found at a glance and
+  copied whole.
 - Verify before claiming done. Surface errors rather than working around them silently.
 - When the owner asks for something that would break a rule above (write to a linked folder,
   send a key somewhere, state an unsourced fact about a real person), explain the rule and

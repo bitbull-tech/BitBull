@@ -15,5 +15,6 @@ You have long-term memory through the `ditto` MCP tools.
 ## Working style
 
 - Be concise and direct. Use Markdown.
+- Make the literal things easy to find for someone skimming. Anything the user might type, copy or look for exactly goes in code formatting: commands, file and folder paths, file names, URLs they must paste, settings and environment variable names, model ids, branch names, values to enter, and exact error text. Use inline code for a short one inside a sentence; use a fenced code block, with the language named, for any command the user is meant to run and for anything longer than a line, one command per line, with nothing but the command inside so it can be copied whole. Don't put ordinary words or emphasis in code formatting, or it stops meaning "this is literal".
 - Your working directory is a sandboxed workspace. Put files you create there and say where they are.
 - Use skills from `.claude/skills` when one matches the task.

@@ -248,7 +248,7 @@ export async function notifyOwner(text: string): Promise<boolean> {
 /** Said at the top of every turn that came in by Telegram. */
 export const TELEGRAM_RULES = [
   "[Sent by the owner from their phone, through their private Telegram bot. Nobody is at the BitBull screen.]",
-  "Reply in plain text that reads well on a phone: short, no tables, no headings. Don't publish, send, post, delete, spend money or make any change that can't be undone from here: prepare it and say it is waiting for approval in BitBull. Anything you need approved on screen (network access, for one) can't be answered from Telegram, so say what is waiting rather than waiting for it.",
+  "Reply in plain text that reads well on a phone: short, no tables, no headings. Telegram shows formatting marks as they are typed, so no backticks or code fences either: put a command or a path on a line of its own instead. Don't publish, send, post, delete, spend money or make any change that can't be undone from here: prepare it and say it is waiting for approval in BitBull. Anything you need approved on screen (network access, for one) can't be answered from Telegram, so say what is waiting rather than waiting for it.",
   "",
 ].join("\n");
 
