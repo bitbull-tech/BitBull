@@ -98,8 +98,6 @@ export async function* runTurn(
     return;
   }
   const engine = engines[session.engine];
-  const ctrl = new AbortController();
-  running.set(session.id, ctrl);
 
   const project = projects.get(session.project_id);
   const cwd = workspaceFor(project);
@@ -149,6 +147,9 @@ export async function* runTurn(
   let engineSessionId = session.engine_session_id;
   const tools: Array<{ id: string; name: string; input?: unknown; output?: string; isError?: boolean; parent?: string }> = [];
 
+  // set only here, right before the try whose finally clears it: a throw above must not lock the chat
+  const ctrl = new AbortController();
+  running.set(session.id, ctrl);
   try {
     for await (const ev of engine.run({
       engineSessionId,

@@ -43,6 +43,7 @@ test("findings are typed, judged by the thresholds, and ranked", () => {
     o,
   );
   assert.equal(verdict, "fix-first");
+  assert.ok(findings);
   assert.equal(findings.length, 4);
   assert.equal(findings[0].title, "token leak");
   assert.ok(findings[0].shown);
@@ -57,8 +58,8 @@ test("findings are typed, judged by the thresholds, and ranked", () => {
   assert.match(body, /token leak/);
   assert.doesNotMatch(body, /maybe race/);
   assert.match(body, /3 more findings held back/);
-  assert.deepEqual(parseFindings("no block here", o).findings, []);
-  assert.deepEqual(parseFindings("```qa-hound\n{not json\n```", o).findings, []);
+  assert.equal(parseFindings("no block here", o).findings, undefined);
+  assert.equal(parseFindings("```qa-hound\n{not json\n```", o).findings, undefined);
 });
 
 test("Router models: per-token and per-million prices, matching across prefixes", () => {
