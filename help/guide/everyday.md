@@ -59,7 +59,9 @@ outreach. Connected, BitBull can plan and run a campaign with it: write the cust
 request leads, review them, draft the sequences, build the campaign and report on replies.
 
 1. **Settings → Integrations → Leadpoet → Connect Leadpoet.** Sign in with your Leadpoet account
-   and approve; there is no key to paste.
+   and approve; there is no key to paste. New to Leadpoet? Create the account on that same page
+   (Continue with Google is one click). Its first 10-company request is free, started in
+   Leadpoet's app; the agent gives you the link.
 2. In the project you run campaigns from, open project settings and tick **Leadpoet**.
 3. Ask: "Plan a campaign to get us ten meetings with heads of logistics at UK retailers."
 
