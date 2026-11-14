@@ -29,7 +29,8 @@ const VOICE_HINT: Record<string, string> = {
 
 const greeting = () => {
   const h = new Date().getHours()
-  return h < 5 ? 'good night' : h < 12 ? 'good morning' : h < 18 ? 'good afternoon' : 'good evening'
+  // the small hours are still someone's evening: a greeting, never a goodbye
+  return h >= 5 && h < 12 ? 'good morning' : h >= 12 && h < 18 ? 'good afternoon' : 'good evening'
 }
 
 interface ViewMessage {
