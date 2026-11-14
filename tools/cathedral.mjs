@@ -49,7 +49,8 @@ function toMicros(v) {
   const [whole, frac = ""] = s.split(".");
   const digits = (frac + "000000").slice(0, 6);
   const rest = frac.slice(6);
-  return Number(whole) * 1e6 + Number(digits) + (/[1-9]/.test(rest) ? 1 : 0);
+  const micros = Number(whole) * 1e6 + Number(digits) + (/[1-9]/.test(rest) ? 1 : 0);
+  return Number.isSafeInteger(micros) ? micros : null; // too large to hold exactly is not an amount
 }
 const usd = (micros) => `${Math.floor(micros / 1e6)}.${String(micros % 1e6).padStart(6, "0")}`;
 /** hourly rate x seconds / 3600, rounded up to the micro-dollar */

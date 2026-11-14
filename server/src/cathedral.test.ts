@@ -1063,14 +1063,14 @@ test("retry history never overwrites terminal guidance", async () => {
 });
 
 test("a malformed budget is not a cap: create refuses with account_malformed, even with the uncapped switch on", async () => {
-  for (const budget of ["garbage", "", "-1", "NaN", "Infinity", {}, true]) {
+  for (const budget of ["garbage", "", "-1", "NaN", "Infinity", {}, true, "9".repeat(400)]) {
     const acct: Route = ["GET", /^\/v1\/account$/, once(() => j(200, acctBody({ api_key: { id: "k", expires_at: null, budget_usd: budget, committed_usd: "0", remaining_usd: "4.000000" } })))];
     const x = await go(CREATE(), [acct, createRoute()], { CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" });
     assert.equal(x.r.code, 1, JSON.stringify(budget));
     assert.equal(x.r.out.error, "account_malformed", JSON.stringify(budget));
     assert.equal(posts(x.reqs, /sandboxes$/).length, 0);
   }
-  for (const remaining of ["garbage", "", "-0.5", "NaN"]) {
+  for (const remaining of ["garbage", "", "-0.5", "NaN", "9".repeat(400)]) {
     const acct: Route = ["GET", /^\/v1\/account$/, once(() => j(200, acctBody({ api_key: { id: "k", expires_at: null, budget_usd: "5.000000", committed_usd: "0", remaining_usd: remaining } })))];
     const x = await go(CREATE(), [acct, createRoute()]);
     assert.equal(x.r.out.error, "account_malformed", `remaining ${remaining}`);

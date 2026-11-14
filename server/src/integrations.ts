@@ -183,13 +183,19 @@ const CATHEDRAL_SOLD_OUT = new Set(["sealed_capacity_unavailable", "sealed_pool_
 /** A plain non-negative amount ("5", "0.25", 1.5): the only thing a budget or balance may be. */
 const plainAmount = (v: unknown): number | null => {
   if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
-  return typeof v === "string" && /^\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : null;
+  if (typeof v !== "string" || !/^\d+(\.\d+)?$/.test(v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null; // "9" x 400 parses to Infinity: not an amount
 };
 
 /** Everything the probe returns goes to the Settings page, so every string passes through redact(). */
 export async function probeCathedral(): Promise<CathedralProbe> {
+  // The key this probe sends, kept for redaction: the user may save a new key
+  // while the probe waits, and redact() reads the configuration as it is then.
+  const sent = config.integrations.cathedral.apiKey;
   const r = await probeCathedralRaw();
-  return { ...r, detail: redact(r.detail) };
+  const detail = redact(r.detail);
+  return { ...r, detail: sent ? detail.split(sent).join("[REDACTED]") : detail };
 }
 
 async function probeCathedralRaw(): Promise<CathedralProbe> {
