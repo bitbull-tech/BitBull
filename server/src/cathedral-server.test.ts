@@ -257,21 +257,24 @@ test("probe: no api_key block or a null budget is red unless the uncapped switch
   await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: null });
 });
 
-test("probe: sealed unavailable gives its reason as given; sold out only for a capacity reason", async () => {
+test("probe: sealed unavailable gives its reason as given; sold out for Cathedral's sold-out reasons", async () => {
   await withKey();
   serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason: "no_admitted_host" } }));
   let r = await probeCathedral();
   assert.equal(r.ok, false);
   assert.match(r.detail, /no_admitted_host/);
   assert.doesNotMatch(r.detail, /sold out/i);
-  serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason: "sealed_pool_unavailable" } }));
+  serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason: "not_bound_to_this_account" } }));
   r = await probeCathedral();
-  assert.match(r.detail, /sealed_pool_unavailable/);
+  assert.match(r.detail, /not_bound_to_this_account/);
   assert.doesNotMatch(r.detail, /sold out/i);
-  serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason: "sealed_capacity_unavailable" } }));
-  r = await probeCathedral();
-  assert.match(r.detail, /sold out/i);
-  assert.equal(r.ok, false);
+  for (const reason of ["sealed_capacity_unavailable", "sealed_pool_throttled", "sealed_pool_unavailable", "sealed_pool_unreachable"]) {
+    serve(() => json(200, account()), () => json(200, { sealed: { available: false, reason } }));
+    r = await probeCathedral();
+    assert.match(r.detail, /sold out/i, reason);
+    assert.doesNotMatch(r.detail, /unavailable/i, reason);
+    assert.equal(r.ok, false);
+  }
   serve(() => json(200, account()), () => json(200, {}));
   r = await probeCathedral();
   assert.equal(r.ok, false);

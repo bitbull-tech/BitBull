@@ -177,6 +177,8 @@ type CathedralProbe = { id: "cathedral"; ok: boolean; configured: boolean; detai
  * Creates nothing and spends nothing. The key goes only to the two GET routes below, over https,
  * and no error text from the network is shown (the class of the error only).
  */
+const CATHEDRAL_SOLD_OUT = new Set(["sealed_capacity_unavailable", "sealed_pool_throttled", "sealed_pool_unavailable", "sealed_pool_unreachable"]);
+
 export async function probeCathedral(): Promise<CathedralProbe> {
   const c = config.integrations.cathedral;
   const out = (ok: boolean, detail: string, level: "red" | "amber" | "green" = ok ? "green" : "red"): CathedralProbe => ({ id: "cathedral", ok, configured: true, detail, level });
@@ -202,7 +204,9 @@ export async function probeCathedral(): Promise<CathedralProbe> {
     if (!sealed) return out(false, "Cathedral's catalog has no sealed offer");
     if (!sealed.available) {
       const reason = String(sealed.reason ?? "unavailable");
-      return out(false, /capacity|no_free_rooms/i.test(reason) ? "Sealed sandboxes are sold out right now" : `Sealed sandboxes are unavailable: ${reason}`);
+      // Cathedral's own sold-out set (SOLD_OUT_ERRORS in its broker): a full,
+      // throttled, down or unreachable pool reads as sold out, never unavailable.
+      return out(false, CATHEDRAL_SOLD_OUT.has(reason) ? "Sealed sandboxes are sold out right now" : `Sealed sandboxes are unavailable: ${reason}`);
     }
     const sizes = (sealed.sizes ?? []).map((s) => `${s.template ?? s.name} $${Number(s.hourly_rate_usd)}/h`).join(", ");
     const account = capped
