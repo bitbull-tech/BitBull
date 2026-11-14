@@ -26,7 +26,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
 - Show it a window or send it a web page (browser extension), get every file a reply made with one
   click, archive and bulk-tidy chats
 - Bittensor services wired in: Taostats, Atlas, 404 (3D as code), Hippius storage, Ditto memory
-  and Ditto Review
+  and Ditto Review; Cathedral sealed sandboxes for running code away from your computer (capped key, closed network, receipts)
 
 Installing for the first time? The step-by-step guide for Windows, Mac and Linux is at
 **[bitbull.tech/guide](https://www.bitbull.tech/guide/getting-started)**, or paste this into the AI

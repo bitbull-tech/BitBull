@@ -4,7 +4,7 @@
  * No test here reaches the network: global fetch is replaced before anything can use it.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -38,6 +38,7 @@ const { describeSettings, updateSettings } = await import("./settings.js");
 const { integrations, probeCathedral, probeIntegrations } = await import("./integrations.js");
 const { VAULT_KEYS, lockVault, unlockVault, vaultUnlocked, vaultValues } = await import("./vault.js");
 const { redact } = await import("./activity.js");
+const { mirrorSkillsInto, listSkills } = await import("./skills.js");
 const { cleanEnv } = await import("./engines/claude.js");
 const root = path.resolve(import.meta.dirname, "../..");
 // loaded by path so the server typecheck does not need to resolve files outside src
@@ -318,4 +319,27 @@ test("config: URL is env-only, defaults to cathedral.computer, uncapped switch d
 test("allowlist: egress/allowlist.txt has the exact host cathedral.computer", () => {
   const lines = readFileSync(path.join(root, "egress/allowlist.txt"), "utf8").split("\n").map((l) => l.trim());
   assert.ok(lines.includes("cathedral.computer"));
+});
+
+// ---- 10. skill ----
+
+test("skill: valid front matter, helper named, mirrored into a workspace by the real mirror function", () => {
+  const md = readFileSync(path.join(root, "skills/cathedral-sandbox/SKILL.md"), "utf8");
+  const m = md.match(/^---\n([\s\S]*?)\n---\n/);
+  assert.ok(m, "front matter present");
+  assert.match(m[1], /^name: cathedral-sandbox$/m);
+  assert.match(m[1], /^description: .{20,}$/m);
+  assert.ok(listSkills().some((s) => s.dir === "cathedral-sandbox" && s.name === "cathedral-sandbox"));
+  assert.match(md, /cathedral\.mjs/);
+  assert.doesNotMatch(md, /—/);
+
+  const ws = path.join(dir, "ws");
+  assert.deepEqual(mirrorSkillsInto(ws), []);
+  const mirrored = path.join(ws, ".claude", "skills", "cathedral-sandbox", "SKILL.md");
+  assert.equal(readFileSync(mirrored, "utf8"), md);
+  assert.ok(readdirSync(path.join(ws, ".claude", "skills")).includes("cathedral-sandbox"));
+});
+
+test("the helper file exists next to the other tools", () => {
+  assert.ok(existsSync(path.join(root, "tools/cathedral.mjs")));
 });
