@@ -589,6 +589,9 @@ code, pre, kbd { font-family: var(--mono); }
 .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); animation: pulse 1.2s infinite; }
 .status-card.ok .pulse { background: var(--ok); animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
 .status-card.bad .pulse { background: var(--bad); animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--bad) 20%, transparent); }
+.status-card.warn .pulse { background: var(--warn); animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 20%, transparent); }
+.status-card.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.status-card.mini.warn { border-color: transparent; }
 .status-card.bad { border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
 .row-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .skill-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }

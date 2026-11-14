@@ -55,11 +55,13 @@ export interface IntegrationInfo {
   env: { key: string; label: string; set: boolean; value: string }[]
 }
 export interface IntegrationStatus {
-  id: IntegrationId
+  id: IntegrationId | 'cathedral'
   ok: boolean
   configured: boolean
   detail: string
   tools?: string[]
+  /** Cathedral's probe: red, amber (uncapped key allowed) or green */
+  level?: 'red' | 'amber' | 'green'
 }
 
 /** Your usage of one model here, from stored turns and replies (server/src/advisor.ts). */

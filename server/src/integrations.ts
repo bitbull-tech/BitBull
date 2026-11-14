@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { config, githubTokenKind } from "./config.js";
+import { config, effectiveCathedralCap, githubTokenKind } from "./config.js";
+import { redact } from "./activity.js";
 
 /**
  * Registry of external services the agent can be wired to. Each integration is a
@@ -11,7 +12,7 @@ import { config, githubTokenKind } from "./config.js";
  *
  * Adding a service = one entry here. Engines read `mcpServersFor(project)`.
  */
-export type IntegrationId = "atlas" | "four04" | "github";
+export type IntegrationId = "atlas" | "four04" | "github" | "cathedral";
 
 export interface IntegrationDef {
   id: IntegrationId;
@@ -32,6 +33,7 @@ export function integrations(): IntegrationDef[] {
   const a = config.integrations.atlas;
   const f = config.integrations.four04;
   const g = config.integrations.github;
+  const ca = config.integrations.cathedral;
   return [
     {
       id: "github",
@@ -47,6 +49,21 @@ export function integrations(): IntegrationDef[] {
       global: true,
       notes:
         "Fine-grained tokens (github_pat_…) are recommended: grant only the repositories the agent works on, with Contents read/write (plus Pull requests if it should open PRs). Classic tokens (ghp_…) also work; give them the repo scope. The token reaches git through a credential helper and gh through GH_TOKEN; it is never written into a repository.",
+    },
+    {
+      id: "cathedral",
+      name: "Cathedral sandboxes",
+      blurb: "Run code in an isolated sealed sandbox (AMD SEV-SNP) away from your computer, with signed receipts. The agent asks before it spends.",
+      docs: "https://cathedral.computer",
+      env: [
+        { key: "CATHEDRAL_API_KEY", label: "API key (cat_sk_…)", secret: true, value: ca.apiKey },
+        { key: "CATHEDRAL_MAX_SPEND_USD", label: "Spend limit per sandbox (USD)", value: effectiveCathedralCap(ca.maxSpendUsd).toFixed(2) },
+        { key: "CATHEDRAL_ALLOW_UNCAPPED_KEY", label: "Allow a key with no spending cap", value: ca.allowUncapped ? "on" : "off" },
+      ],
+      configured: !!ca.apiKey,
+      global: true,
+      notes:
+        "Use a key with its own spending cap: Cathedral enforces it on every create, and it is the backstop if the agent misbehaves. The agent runs everything through tools/cathedral.mjs (see the cathedral-sandbox skill), which keeps the network closed unless you ask for internet, holds to the spend limit above and deletes what it creates. Files and commands sent to a sandbox leave your computer.",
     },
     {
       id: "atlas",
@@ -154,11 +171,82 @@ async function probeFour04() {
   }
 }
 
+type CathedralProbe = { id: "cathedral"; ok: boolean; configured: boolean; detail: string; level?: "red" | "amber" | "green" };
+
+/**
+ * Live check of the Cathedral key: reads the key's account (scopes, cap) and the sealed catalog.
+ * Creates nothing and spends nothing. The key goes only to the two GET routes below, over https,
+ * and no error text from the network is shown (the class of the error only).
+ */
+const CATHEDRAL_SOLD_OUT = new Set(["sealed_capacity_unavailable", "sealed_pool_throttled", "sealed_pool_unavailable", "sealed_pool_unreachable"]);
+
+/** A plain non-negative amount ("5", "0.25", 1.5): the only thing a budget or balance may be. */
+const plainAmount = (v: unknown): number | null => {
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
+  if (typeof v !== "string" || !/^\d+(\.\d+)?$/.test(v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null; // "9" x 400 parses to Infinity: not an amount
+};
+
+/** Everything the probe returns goes to the Settings page, so every string passes through redact(). */
+export async function probeCathedral(): Promise<CathedralProbe> {
+  // The key this probe sends, kept for redaction: the user may save a new key
+  // while the probe waits, and redact() reads the configuration as it is then.
+  const sent = config.integrations.cathedral.apiKey;
+  const r = await probeCathedralRaw();
+  const detail = redact(r.detail);
+  return { ...r, detail: sent ? detail.split(sent).join("[REDACTED]") : detail };
+}
+
+async function probeCathedralRaw(): Promise<CathedralProbe> {
+  const c = config.integrations.cathedral;
+  const out = (ok: boolean, detail: string, level: "red" | "amber" | "green" = ok ? "green" : "red"): CathedralProbe => ({ id: "cathedral", ok, configured: true, detail, level });
+  if (!c.apiKey) return { id: "cathedral", ok: false, configured: false, detail: "Not configured: add an API key below" };
+  if (!/^https:\/\//i.test(c.apiUrl)) return out(false, "CATHEDRAL_API_URL must be https, so the key is not sent");
+  const get = (route: string) =>
+    fetch(`${c.apiUrl}${route}`, { headers: { Authorization: `Bearer ${c.apiKey}`, Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+  try {
+    const acct = await get("/v1/account");
+    if (acct.status === 401) return out(false, "Cathedral refused the key (401): key refused or revoked");
+    if (acct.status === 403) return out(false, "The key may not read its account (403): check its scopes");
+    if (!acct.ok) return out(false, `Cathedral said ${acct.status} reading the account`);
+    const a = (await acct.json().catch(() => ({}))) as { scopes?: unknown; api_key?: { budget_usd?: unknown; committed_usd?: unknown; remaining_usd?: unknown; expires_at?: unknown } | null };
+    if (Array.isArray(a.scopes) && !a.scopes.includes("sandboxes:control")) return out(false, "This key cannot create sandboxes: it lacks the sandboxes:control scope");
+    const k = a.api_key;
+    const capped = !!k && k.budget_usd !== null && k.budget_usd !== undefined;
+    // a budget that is not a plain amount is a malformed answer, not a cap (and not "uncapped" either)
+    if (capped && (plainAmount(k!.budget_usd) === null || plainAmount(k!.remaining_usd) === null || (k!.committed_usd !== undefined && plainAmount(k!.committed_usd) === null))) {
+      return out(false, "Cathedral's account answer is malformed (the key's budget or remaining amount is not a plain amount), so the cap cannot be trusted", "red");
+    }
+    if (!capped && !c.allowUncapped) return out(false, "This key has no spending cap; the integration will not create sandboxes. Use a capped key.", "red");
+
+    const cat = await get("/v1/sandboxes/catalog");
+    if (!cat.ok) return out(false, `Cathedral said ${cat.status} reading the catalog`);
+    const body = (await cat.json().catch(() => ({}))) as { sealed?: { available?: boolean; reason?: string; sizes?: Array<{ template?: string; name?: string; hourly_rate_usd?: unknown }> } };
+    const sealed = body.sealed;
+    if (!sealed) return out(false, "Cathedral's catalog has no sealed offer");
+    if (!sealed.available) {
+      const reason = String(sealed.reason ?? "unavailable");
+      // Cathedral's own sold-out set (SOLD_OUT_ERRORS in its broker): a full,
+      // throttled, down or unreachable pool reads as sold out, never unavailable.
+      return out(false, CATHEDRAL_SOLD_OUT.has(reason) ? "Sealed sandboxes are sold out right now" : `Sealed sandboxes are unavailable: ${reason}`);
+    }
+    const sizes = (sealed.sizes ?? []).map((s) => `${s.template ?? s.name} $${Number(s.hourly_rate_usd)}/h`).join(", ");
+    const account = capped
+      ? `cap $${Number(k!.budget_usd)}, committed $${Number(k!.committed_usd ?? 0)}, remaining $${Number(k!.remaining_usd ?? 0)}${k!.expires_at ? `, expires ${String(k!.expires_at).slice(0, 10)}` : ""}`
+      : "no spending cap on this key (your switch allows it; the limit above applies)";
+    return out(true, `Ready · ${account} · sizes: ${sizes || "none listed"}`, capped ? "green" : "amber");
+  } catch (e) {
+    return out(false, `Cathedral is not answering (${e instanceof Error ? e.name : "error"})`);
+  }
+}
+
 export async function probeIntegrations() {
   return Promise.all(
     integrations().map(async (i) => {
       if (i.id === "github") return probeGithub();
       if (i.id === "four04") return probeFour04();
+      if (i.id === "cathedral") return probeCathedral();
       if (!i.mcp) return { id: i.id, ok: false, configured: i.configured, detail: i.configured ? "Configured (no MCP endpoint)" : "Not configured" };
       try {
         const c = new Client({ name: "bitbull-agent-probe", version: "0.1.0" });

@@ -17,6 +17,9 @@ models.opencode.ai
 # Bittensor data
 api.taostats.io
 
+# Cathedral sealed sandboxes (the agent's helper sends code and files to a remote sandbox)
+cathedral.computer
+
 # Hippius: off-machine storage for uploads (encrypted before it leaves here)
 s3.hippius.com
 
