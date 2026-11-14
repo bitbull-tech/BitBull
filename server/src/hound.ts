@@ -112,15 +112,15 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u
  * Read the handler's findings block. Its text came from a model that read possibly hostile
  * content: every field is typed, trimmed and capped; anything malformed is dropped.
  */
-export function parseFindings(text: string, o: HoundOptions): { verdict?: Verdict; findings: Finding[] } {
+export function parseFindings(text: string, o: HoundOptions): { verdict?: Verdict; findings?: Finding[] } {
   const blocks = [...text.matchAll(new RegExp("```" + FINDINGS_FENCE + "\\s*\\n([\\s\\S]*?)```", "g"))];
   const raw = blocks.at(-1)?.[1];
-  if (!raw) return { findings: [] };
+  if (!raw) return {};
   let j: { verdict?: unknown; findings?: unknown };
   try {
     j = JSON.parse(raw);
   } catch {
-    return { findings: [] };
+    return {};
   }
   const verdict = (["use", "fix-first", "do-not-use"] as const).find((v) => v === j.verdict);
   const list = Array.isArray(j.findings) ? j.findings.slice(0, 100) : [];

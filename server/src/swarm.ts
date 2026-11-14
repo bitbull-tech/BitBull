@@ -518,8 +518,9 @@ async function postToPr(s: Swarm, ws: string) {
   if (!info.branch || info.detached) throw new Error(`${repo} isn't on a branch`);
   const pr = await openPrFor(gh, info.branch);
   if (!pr) throw new Error(`${info.branch} has no open pull request on ${gh.owner}/${gh.repo}`);
+  // no parsable findings block means the verdict is unknown: comment, never approve
+  const complete = s.phase === "done" && !s.stopped && s.findings !== undefined;
   const findings = s.findings ?? [];
-  const complete = s.phase === "done" && !s.stopped && findings !== undefined;
   const event = prEvent(findings, s.options, complete);
   const body = prBody({ target: s.target, models: s.reviewers.map((r) => r.model), verdict: s.verdict, findings, spentUsd: s.spentUsd, partial: s.stopped ?? (s.phase !== "done" ? s.error : undefined) });
   const res = await postReview(gh, pr.number, event, body, pr.headSha);
