@@ -121,7 +121,7 @@ export function Settings({
                 {SERVICES.map((svc) => {
                   const st = serviceState(svc.id, status, live, groups, tg, lp)
                   return (
-                    <button key={svc.id} className={`status-card as-link ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`} onClick={() => openIntegration(svc.id)}>
+                    <button key={svc.id} className={`status-card as-link ${statusClass(st)}`} onClick={() => openIntegration(svc.id)}>
                       <div className="status-title">
                         <span className="pulse" />
                         {svc.name}
@@ -166,7 +166,7 @@ export function Settings({
                   return (
                     <section key={svc.id} id={`int-${svc.id}`} className={`int-card ${focus === svc.id ? 'focus' : ''}`}>
                       <div className="int-head">
-                        <div className={`status-card mini ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`}>
+                        <div className={`status-card mini ${statusClass(st)}`}>
                           <span className="pulse" />
                         </div>
                         <div className="grow">
@@ -593,6 +593,13 @@ const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
   { id: 'hippius', name: 'Hippius storage', blurb: 'Encrypted copies of your uploads on decentralised S3 storage.', docs: 'https://hippius.com' },
 ]
 
+/** Card colour class: amber (works, but a spending risk the user chose) gets its own, not green. */
+function statusClass(st: { loading: boolean; ok: boolean; configured: boolean; level?: string }) {
+  if (st.loading) return ''
+  if (st.ok) return st.level === 'amber' ? 'warn' : 'ok'
+  return st.configured ? 'bad' : 'off'
+}
+
 /** One line of state for a service, from whichever check covers it. */
 function serviceState(
   id: string,
@@ -601,7 +608,7 @@ function serviceState(
   groups: SettingGroup[] | null,
   tg: TelegramState | null,
   lp: LeadpoetState | null,
-): { loading: boolean; ok: boolean; configured: boolean; detail: string } {
+): { loading: boolean; ok: boolean; configured: boolean; detail: string; level?: 'red' | 'amber' | 'green' } {
   switch (id) {
     case 'leadpoet':
       if (!lp) return { loading: true, ok: false, configured: false, detail: '' }
@@ -639,7 +646,7 @@ function serviceState(
       // the live probe reads the key's account and the sealed catalog; no tokens or credits are spent
       const st = live?.find((l) => l.id === 'cathedral')
       if (!st) return { loading: !live, ok: false, configured: false, detail: live ? 'Not configured: add an API key below' : '' }
-      return { loading: false, ok: st.ok, configured: st.configured, detail: st.detail }
+      return { loading: false, ok: st.ok, configured: st.configured, detail: st.detail, level: st.level }
     }
     default: {
       const st = live?.find((l) => l.id === id)
