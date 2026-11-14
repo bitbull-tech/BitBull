@@ -26,6 +26,9 @@ const POLL_MS = 2000;
 const POLL_LIMIT_MS = 5 * 60 * 1000;
 const RETRIES = 3;
 const BACKOFF_MS = [1000, 2000, 4000];
+const MAX_WAIT_S = 60;
+// answers that say the same key cannot recover the operation
+const NO_SAME_KEY = new Set(["exec_outcome_unknown", "process_start_unknown", "idempotency_key_reused_with_different_request"]);
 
 class Refusal extends Error {
   constructor(error, message, extra = {}) {
@@ -196,9 +199,11 @@ function makeContext({ env, fetch, sleep }) {
  */
 async function api(ctx, method, route, { headers = {}, body, retry = true } = {}) {
   const max = retry ? RETRIES : 0;
-  const init = { method, headers: { Authorization: `Bearer ${ctx.key}`, Accept: "application/json", ...headers }, signal: AbortSignal.timeout(120000) };
-  if (body !== undefined) init.body = body;
   for (let attempt = 0; ; attempt++) {
+    // a fresh deadline for every attempt: a retry must not inherit an already expired signal.
+    // The headers and body are the same each time, so the idempotency key still names one operation.
+    const init = { method, headers: { Authorization: `Bearer ${ctx.key}`, Accept: "application/json", ...headers }, signal: AbortSignal.timeout(120000) };
+    if (body !== undefined) init.body = body;
     let res;
     let buf;
     try {
@@ -223,20 +228,30 @@ async function api(ctx, method, route, { headers = {}, body, retry = true } = {}
     if (res.ok) return { ok: true, status: res.status, buf, json, headers: res.headers };
     const full = normaliseError(res.status, json, res.headers);
     const retryable = (res.status >= 500 && full.replay_safe !== false && !full._doNotPoll) || (res.status === 409 && (full.error === "exec_in_progress" || full.error === "process_start_in_progress"));
-    if (retry && retryable && attempt < max) {
-      const wait = full.retry_after_s !== null ? Math.min(full.retry_after_s * 1000, 60000) : BACKOFF_MS[attempt];
-      await ctx.sleep(wait);
+    // a server that asks for more than a minute is not waited for in a shortened time:
+    // stop, say how long it asked for, and let the agent run the same command later
+    const tooLong = retryable && full.retry_after_s !== null && full.retry_after_s > MAX_WAIT_S;
+    if (retry && retryable && attempt < max && !tooLong) {
+      await ctx.sleep(full.retry_after_s !== null ? full.retry_after_s * 1000 : BACKOFF_MS[attempt]);
       continue;
     }
     const err = publicError(full);
     if (err.error === "idempotency_key_reused_with_different_request") {
       err.message = "This --task and --op were already used with different arguments. Use a new --op name for a different step. (Cathedral: " + err.message + ")";
     }
-    if (attempt > 0) {
-      err.retry_with_same_key = true;
-      err.retries = attempt;
-    }
+    if (attempt > 0) err.retries = attempt;
+    // the retry history adds guidance only where the response gave none, and never where
+    // the response says the same key cannot recover the operation
+    const terminal = err.replay_safe === false || NO_SAME_KEY.has(err.error);
+    if (err.retry_with_same_key === null && !terminal && (attempt > 0 || tooLong)) err.retry_with_same_key = true;
     return { ok: false, error: err, status: res.status };
+  }
+}
+
+/** The key is never sent anywhere but the Authorization header: refuse a command or file that carries it. */
+function refuseSecret(ctx, content) {
+  if (ctx.key.length >= 8 && (typeof content === "string" ? content.includes(ctx.key) : Buffer.from(content).includes(ctx.key))) {
+    throw new Refusal("secret_in_request", "That command or file contains the Cathedral key. Nothing was sent. Do not put the key into a sandbox.");
   }
 }
 
@@ -414,11 +429,14 @@ async function cmdCreate(ctx, parsed) {
   if (Array.isArray(account.scopes) && !account.scopes.includes("sandboxes:control")) throw new Refusal("missing_scope", "This key cannot create sandboxes: it lacks the sandboxes:control scope");
   let limit = capMicros;
   let remaining = null;
+  if (block.budget_usd !== null && toMicros(block.budget_usd) === null) {
+    throw new Refusal("account_malformed", "Cathedral's account answer has a budget that is not a plain non-negative amount, so the key's cap cannot be trusted. Nothing was created.");
+  }
   if (block.budget_usd === null) {
     if (ctx.env.CATHEDRAL_ALLOW_UNCAPPED_KEY !== "on") throw new Refusal("uncapped_key_refused", "This key has no spending cap of its own, so the helper will not create sandboxes with it. Use a capped key, or the user can turn on Allow a key with no spending cap in Settings.");
   } else {
     remaining = toMicros(block.remaining_usd);
-    if (remaining === null) throw new Refusal("account_unreadable", "Cathedral's account answer has a cap but no readable remaining amount. Nothing was created.");
+    if (remaining === null) throw new Refusal("account_malformed", "Cathedral's account answer has a cap but its remaining amount is missing or not a plain non-negative amount. Nothing was created.");
     limit = Math.min(capMicros, remaining);
   }
 
@@ -508,6 +526,7 @@ async function cmdExec(ctx, parsed) {
   const timeout = parsed.flags.timeout === undefined ? 45 : intArg(parsed.flags.timeout, 1, 45);
   if (timeout === null) throw new Refusal("invalid_timeout", "--timeout for exec must be 1 to 45 seconds; use exec-bg for longer");
   const body = commandBody(parsed, timeout);
+  refuseSecret(ctx, JSON.stringify(body));
   const r = await api(ctx, "POST", `/v1/sandboxes/${parsed.id}/exec`, { headers: { "Idempotency-Key": key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) return r.error;
   const x = r.json ?? {};
@@ -538,6 +557,7 @@ async function cmdExecBg(ctx, parsed) {
   const timeout = intArg(parsed.flags.timeout, 1, 1800);
   if (timeout === null) throw new Refusal("invalid_timeout", "exec-bg needs an explicit --timeout from 1 to 1800 seconds");
   const body = commandBody(parsed, timeout);
+  refuseSecret(ctx, JSON.stringify(body));
   const r = await api(ctx, "POST", `/v1/sandboxes/${parsed.id}/execs`, { headers: { "Idempotency-Key": key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) return r.error;
   const x = r.json ?? {};
@@ -598,7 +618,21 @@ async function cmdPut(ctx, parsed) {
   }
   if (size > MAX_FILE_BYTES) throw new Refusal("file_too_large", "The file is over 200 MiB, the limit for one upload. Nothing was sent.");
   const bytes = readFileSync(flags.src);
+  refuseSecret(ctx, bytes);
   const sha = hex(bytes);
+  const readPath = `/v1/sandboxes/${id}/files?path=${encodeURIComponent(flags.path)}&max_bytes=${MAX_FILE_BYTES}`;
+  if (flags.check) {
+    // read-only recovery: never uploads. Compares what the path holds with the local file.
+    const unknown = (observed, hint) => failOut("outcome_unknown", "Upload outcome unknown: the path does not hold this file now, but it may have landed and been changed or removed since.", { sandbox_id: id, billed: "unknown", sha256: sha, observed, hint });
+    const back = await api(ctx, "GET", readPath);
+    if (back.ok) {
+      const seen = hex(back.buf);
+      if (seen === sha) return { ok: true, landed: true, path: flags.path, bytes: bytes.length, sha256: sha };
+      return unknown({ sha256: seen, bytes: back.buf.length }, "The path holds different bytes now. Ask the user before uploading again over it.");
+    }
+    if (back.status === 404) return unknown({ absent: true }, "The path is absent now. Ask the user before uploading again.");
+    return unknown({ unreadable: true }, "The path could not be read back. Ask the user before uploading again.");
+  }
   const r = await api(ctx, "PUT", `/v1/sandboxes/${id}/files?path=${encodeURIComponent(flags.path)}&mode=${mode}`, {
     headers: { "Idempotency-Key": `${key}-${sha.slice(0, 12)}`, "Content-Type": "application/octet-stream" },
     body: bytes,
@@ -607,21 +641,13 @@ async function cmdPut(ctx, parsed) {
   if (r.ok) return { ok: true, path: flags.path, bytes: bytes.length, sha256: sha };
   // an answer that is not a plain refusal (the connection dropped, or a 5xx) leaves the upload's fate unknown
   if (r.network || (r.status ?? 0) >= 500) {
-    const unknown = failOut("upload_outcome_unknown", "Upload outcome unknown: the answer was lost, and the file may or may not have landed.", {
+    return failOut("upload_outcome_unknown", "Upload outcome unknown: the answer was lost, and the file may or may not have landed.", {
       status: r.status ?? null,
       sandbox_id: id,
       billed: "unknown",
       sha256: sha,
+      hint: "Run `put --check` with the same arguments (same --src and --path): it only reads the path back and compares, and never uploads. Decide with the user before sending again under a new --op.",
     });
-    if (!flags.check) return { ...unknown, hint: "Run put again with --check to read the path back, or decide with the user before sending again under a new --op." };
-    const back = await api(ctx, "GET", `/v1/sandboxes/${id}/files?path=${encodeURIComponent(flags.path)}&max_bytes=${MAX_FILE_BYTES}`);
-    if (back.ok) {
-      const seen = hex(back.buf);
-      if (seen === sha) return { ok: true, landed: true, path: flags.path, bytes: bytes.length, sha256: sha };
-      return { ...unknown, observed: { sha256: seen, bytes: back.buf.length }, hint: "The path holds different bytes now. The upload may have landed and been changed since by another step. Ask the user before uploading again." };
-    }
-    if (back.status === 404) return { ...unknown, observed: { absent: true }, hint: "The path is absent now. The upload may have landed and been removed since. Ask the user before uploading again." };
-    return { ...unknown, observed: { unreadable: true }, hint: "The path could not be read back. Ask the user before uploading again." };
   }
   return r.error;
 }
@@ -639,7 +665,13 @@ async function cmdGet(ctx, { id, flags }) {
 
 async function cmdDelete(ctx, parsed) {
   const { id } = parsed;
-  const { key } = operationKey(parsed);
+  const { task, key } = operationKey(parsed);
+  // only what this task created: read the labels first and send nothing if they name another task
+  const own = await api(ctx, "GET", `/v1/sandboxes/${id}`);
+  if (!own.ok) return own.error;
+  if (own.json?.labels?.bitbull_task !== task || own.json?.labels?.bitbull !== "1") {
+    throw new Refusal("not_this_task", `Sandbox ${id} is not labelled as created by task ${task}, so it was not deleted. Ask the user before deleting a sandbox this task did not create.`, { sandbox_id: id });
+  }
   const d = await api(ctx, "DELETE", `/v1/sandboxes/${id}`, { headers: { "Idempotency-Key": key } });
   if (!d.ok) return d.error;
   let state = d.json?.state;
