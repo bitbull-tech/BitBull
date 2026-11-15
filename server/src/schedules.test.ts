@@ -11,6 +11,23 @@ import { test } from "node:test";
 process.env.DATA_DIR = mkdtempSync(path.join(tmpdir(), "bitbull-schedules-"));
 const { describe, nextRun, RUN_RULES, schedules, SpecSchema, tick } = await import("./schedules.js");
 const { db } = await import("./db.js");
+const { engines } = await import("./agent.js");
+const { activeTurnId, collectTurn } = await import("./turns.js");
+
+// A scripted engine that waits until released. Without it a due schedule starts the real OpenCode
+// server, which outlives the tests and keeps this file (and CI) from ever finishing.
+let release!: () => void;
+const gate = new Promise<void>((r) => (release = r));
+for (const id of ["opencode", "claude"] as const)
+  engines[id] = {
+    id,
+    label: "Scripted",
+    async *run() {
+      await gate;
+      yield { type: "text", delta: "hello" };
+      yield { type: "done", engineSessionId: "scripted" };
+    },
+  };
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -76,6 +93,11 @@ test("due schedules run once in their own chat; a run still going is not doubled
   schedules.update(s.id, { enabled: false });
   assert.equal(schedules.get(s.id)!.nextRunAt, null);
   assert.equal(tick(Date.parse("2026-11-14T00:00:00Z")), 0);
+  // let the run finish, so nothing is left going when the tests end
+  const turnId = activeTurnId(after.sessionId!);
+  assert.ok(turnId, "the run is still going");
+  release();
+  assert.equal((await collectTurn(turnId)).status, "done");
   schedules.delete(s.id);
   assert.ok(db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(after.sessionId!));
 });
