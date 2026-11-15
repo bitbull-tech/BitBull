@@ -13,7 +13,7 @@ and how the agent runs a campaign is the `leadpoet` skill (`skills/leadpoet/SKIL
 
 1. **Settings → Integrations → Leadpoet.** Choose what BitBull may do (below) and press
    **Connect Leadpoet**.
-2. Leadpoet opens in your browser. Sign in (or create an account) and approve.
+2. Leadpoet opens in your browser. Sign in, or create an account there (below), and approve.
 3. The browser comes back to BitBull and says it is connected.
 4. Open the project you will run campaigns from → project settings → tick **Leadpoet**. Its tools
    reach chats in that project only.
@@ -24,6 +24,24 @@ it under "The browser ended on a page that wouldn't load?".
 
 Connect from BitBull on the computer it runs on (`http://127.0.0.1:8787`, or the desktop app), or
 over `https` if you reach it remotely. Other plain-http addresses are refused.
+
+## New to Leadpoet
+
+No account is needed before you press **Connect Leadpoet**. The page Leadpoet opens is also its
+sign-up:
+
+- **Continue with Google** creates the account and goes straight on to the approval.
+- **Email** sends a confirmation link. Open it in the same browser; it comes back to the
+  approval, and from there to BitBull.
+
+A new account skips Leadpoet's own setup and starts on the Free plan with no credits on its
+balance. Its first lead request is free: Leadpoet covers 100 credits, one 10-company request,
+within 30 days of signing up. Leadpoet lets that be claimed only in its own app (it runs a bot
+check there), so BitBull cannot spend it. When the agent's first lead request is refused for
+credits, Leadpoet's answer says whether the account can still claim it and where
+(`details.signup_credit_offer`, with a `claim_url`); the agent shows you that link. Submit the
+same customer profile there as a 10-company request, then come back: the agent reads and works
+those leads as usual. More credits: Leadpoet → Pricing.
 
 ## What BitBull may do
 

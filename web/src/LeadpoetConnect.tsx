@@ -84,7 +84,7 @@ export function LeadpoetConnect({ onState, onChanged }: { onState: (s: LeadpoetS
       {!s.connected && !s.pending && (
         <>
           <p className="small">
-            Sign in with your Leadpoet account, no key needed. New to Leadpoet? The sign-in page lets you create an account; a new one comes with free credits.
+            Sign in with your Leadpoet account, no key needed. New to Leadpoet? Create one on the same page (Google is one click). A new account's first 10-company request is free; you start it in Leadpoet.
           </p>
           {options}
           <div className="row-actions">

@@ -15,6 +15,14 @@ changes; this skill is how to work, not a list of calls.
 so and tell the owner: *Settings → Integrations → Leadpoet → Connect*, then tick Leadpoet in the
 project's settings. You can still do the planning steps (1 to 3) without it.
 
+**A new Leadpoet account** has no credits on its balance. If a lead request is refused with
+`insufficient_credits` and the error's `details.signup_credit_offer` is there, the account can
+still get its first 10-company request free. Only the owner can claim it, in Leadpoet's app:
+show them the offer's `message` and `claim_url`, and give them the ICP to paste there as a
+10-company request. Don't resend the refused request; once they have submitted it in Leadpoet,
+read that request's leads with the tools and carry on from step 5. With no offer, the account
+needs credits (Leadpoet → Pricing). For a new account, plan the first request as 10 companies.
+
 ## Three things that cost or can't be undone
 
 1. **Credits.** A lead request costs Leadpoet credits (10 a company; watching an account for
