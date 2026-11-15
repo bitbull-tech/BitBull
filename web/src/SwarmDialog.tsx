@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type HoundOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm } from './api'
+import { api, type HoundOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm, type HoundBench } from './api'
 import { IconX } from './icons'
 import { priceLabel } from './ModelPicker'
 import { TargetPicker } from './TargetPicker'
@@ -76,6 +76,32 @@ export function SwarmDialog({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // The model benchmark: which of the chosen reviewers may be behind an approval
+  const [bench, setBench] = useState<HoundBench | null>(null)
+  const [benchErr, setBenchErr] = useState<string | null>(null)
+  const chosenModels = [a, b].filter(Boolean)
+  const benchRunning = (bench?.running.length ?? 0) > 0
+  useEffect(() => {
+    if (!opts.prApprove) return
+    const load = () =>
+      void api
+        .houndBench()
+        .then(setBench)
+        .catch(() => {})
+    load()
+    if (!benchRunning) return
+    const t = setInterval(load, 3000)
+    return () => clearInterval(t)
+  }, [opts.prApprove, benchRunning])
+  const runBench = async (model: string) => {
+    setBenchErr(null)
+    try {
+      setBench(await api.startHoundBench(model))
+    } catch (e) {
+      setBenchErr(e instanceof Error ? e.message.replace(/^\d+ /, '').replace(/^\{.*"message":"([^"]*)".*$/, '$1') : String(e))
+    }
+  }
 
   const others = models.filter((m) => m.id !== primaryModel)
   // The id, not just the name: SayGM ships TEE and non-TEE builds under the SAME display name
@@ -274,11 +300,52 @@ export function SwarmDialog({
                   <input type="checkbox" checked={opts.prApprove} onChange={(e) => set({ prApprove: e.target.checked })} />
                   <span>
                     Let QA Hound approve the pull request when the run is complete, the verdict is "use", nothing that serious was even held
-                    back, and BitBull's own checks pass: every finding's quote is in the file, every changed file was opened, the copy is the
-                    pull request's commit, and each reviewer found two defects planted in a scratch copy (a short extra test, counted in the
-                    budget). <span className="muted">The approval is given under your GitHub account. These checks lower the chance of a missed problem; they don't remove it.</span>
+                    back, and every check BitBull runs itself passes.{' '}
+                    <span className="muted">The approval is given under your GitHub account. The checks lower the chance of a missed problem; they don't remove it.</span>
                   </span>
                 </label>
+                {opts.prApprove && (
+                  <div className="bench small">
+                    <span className="muted">
+                      An approval needs: two reviewers from different model families, each recommending "use" before and after reading the other;
+                      both models passed on the benchmark below; every finding's quote found in its file; every changed file opened; the copy at the
+                      pull request's commit; no key-shaped text in the change; the project's own CI green on that commit; nothing touching sign-in,
+                      key handling, CI or install files; and both reviewers finding two defects planted in a scratch copy (a short extra test,
+                      counted in the budget).
+                    </span>
+                    {chosenModels.length < 2 && <span className="warn-line">Choose two reviewers: with one, this run can't approve.</span>}
+                    {chosenModels.map((m) => {
+                      const r = bench?.results.find((x) => x.model === m)
+                      const run = bench?.running.find((x) => x.model === m)
+                      return (
+                        <div key={m} className="bench-row">
+                          <span className="mono">{m}</span>
+                          {run ? (
+                            <span className="pill run">benchmarking · case {run.step}</span>
+                          ) : r && !r.error ? (
+                            <span className={`pill ${r.grade ? 'ok' : 'bad'}`} title={r.missed.length ? `Missed: ${r.missed.join('; ')}` : 'Found every seeded defect'}>
+                              {r.grade ? 'approval-grade' : 'not approval-grade'} · found {r.caught} of {r.total}, {r.falseAlarms} false alarm{r.falseAlarms === 1 ? '' : 's'}
+                            </span>
+                          ) : (
+                            <span className="pill warn">{r?.error ? `benchmark failed: ${r.error}` : 'not benchmarked'}</span>
+                          )}
+                          {!run && (
+                            <button type="button" className="link small" onClick={() => void runBench(m)}>
+                              {r ? 'Run the benchmark again' : 'Run the benchmark'}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {bench && (
+                      <span className="muted">
+                        The benchmark is three short read-only reviews of code with {bench.total} seeded defects; a model passes with {bench.pass.caught}{' '}
+                        or more found and no more than {bench.pass.falseAlarms} false alarms. It costs what three short reviews cost on that model.
+                      </span>
+                    )}
+                    {benchErr && <span className="error">{benchErr}</span>}
+                  </div>
+                )}
               </div>
             )}
           </div>

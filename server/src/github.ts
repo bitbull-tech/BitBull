@@ -79,6 +79,18 @@ export async function prFiles(r: GhRepo, pr: number): Promise<string[] | null> {
   return null;
 }
 
+/** The automated checks on a commit: GitHub check runs (Actions and apps) and the older commit statuses. */
+export async function headChecks(r: GhRepo, sha: string): Promise<{ runs: Array<{ name: string; status: string; conclusion: string | null }>; statuses: Array<{ context: string; state: string }> }> {
+  if (!/^[0-9a-f]{7,64}$/.test(sha)) throw new Error("not a commit id");
+  const str = (v: unknown) => (typeof v === "string" ? v.slice(0, 120) : "");
+  const runs = await gh<{ check_runs?: Array<{ name?: unknown; status?: unknown; conclusion?: unknown }> }>(`/repos/${r.owner}/${r.repo}/commits/${sha}/check-runs?per_page=100`);
+  const st = await gh<{ statuses?: Array<{ context?: unknown; state?: unknown }> }>(`/repos/${r.owner}/${r.repo}/commits/${sha}/status?per_page=100`);
+  return {
+    runs: (runs.check_runs ?? []).map((c) => ({ name: str(c.name), status: str(c.status), conclusion: typeof c.conclusion === "string" ? c.conclusion.slice(0, 40) : null })),
+    statuses: (st.statuses ?? []).map((s) => ({ context: str(s.context), state: str(s.state) })),
+  };
+}
+
 /** Where to open a PR for a branch that has none yet. */
 export const compareUrl = (r: GhRepo, branch: string) => `https://github.com/${r.owner}/${r.repo}/compare/${encodeURIComponent(branch)}?expand=1`;
 

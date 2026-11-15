@@ -50,9 +50,11 @@ import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, Scop
 import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, LEADPOET_MCP_PATH, mcpTokenOk } from "./mcp.js";
 import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, finishFromUrl as leadpoetFinishFromUrl, leadpoetState, proxyMcp as leadpoetMcp, startConnect as leadpoetConnect } from "./leadpoet.js";
 import { linksAvailable, listLinks } from "./links.js";
-import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote } from "./repos.js";
+import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote, findRepos } from "./repos.js";
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
+import { benchState, startBench } from "./houndBench.js";
+import { checkQuote } from "./houndChecks.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
 
@@ -1017,6 +1019,28 @@ app.post("/api/swarm", async (c) => {
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
   }
+});
+// The model benchmark behind "approval-grade" (houndBench.ts)
+app.get("/api/hound/bench", (c) => c.json(benchState()));
+app.post("/api/hound/bench", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (typeof body.model !== "string") return c.json({ error: "model required" }, 400);
+  const r = startBench(body.model);
+  return c.json({ ...r, ...benchState() }, r.ok ? 202 : 409);
+});
+/** Is the code a finding quotes in the file it names, now? For the findings table in a chat. */
+app.post("/api/projects/:id/hound/quotes", async (c) => {
+  const ws = workspaceOf(c.req.param("id"));
+  if (!ws) return c.json({ error: "project not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as { items?: unknown };
+  const items = (Array.isArray(body.items) ? body.items : []).slice(0, 100);
+  const roots = [...findRepos(ws).map((r) => path.resolve(ws, r)), ws];
+  return c.json({
+    results: items.map((it) => {
+      const r = (it ?? {}) as Record<string, unknown>;
+      return checkQuote(ws, roots, { path: typeof r.path === "string" ? r.path.slice(0, 300) : "", line: typeof r.line === "number" ? r.line : undefined, quote: typeof r.quote === "string" ? r.quote.slice(0, 1500) : undefined });
+    }),
+  });
 });
 app.get("/api/swarm", (c) => c.json({ swarms: listSwarms(c.req.query("sessionId") || undefined).map(publicSwarm) }));
 app.get("/api/swarm/:id", (c) => {

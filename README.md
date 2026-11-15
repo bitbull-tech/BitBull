@@ -889,8 +889,31 @@ and every check BitBull runs itself passes:
 - **Planted defects.** Two known defects (an SQL injection and an ownership check the wrong way
   round) are added to a scratch copy of a few of the target's files, and each reviewer model
   reviews that copy in a short side test. A model that misses one doesn't get to approve. It works
-  for TypeScript, JavaScript, Python, Go, Rust and Java; with none of those there is no approval.
-  The scratch copy (`.hound-work/` in the workspace) is removed when the test ends.
+  for TypeScript, JavaScript, Python, Go, Rust, Java, Kotlin, C#, C and C++, Swift, PHP, Ruby,
+  PowerShell and shell scripts; with none of those in the target there is no approval. The scratch
+  copy (`.hound-work/` in the workspace) is removed when the test ends.
+- **Secrets.** The changed files are scanned for text shaped like a key or password. A hit is
+  reported by file and line, never by showing it.
+- **CI.** The project's own automated checks (GitHub check runs and commit statuses) exist, have
+  finished and passed on that exact commit. BitBull reads their result; it doesn't run the
+  project's build or tests itself, because that would mean executing code it is still reviewing.
+  Your GitHub token needs read access to checks and commit statuses.
+- **People.** A change that touches sign-in or key handling, CI, containers or install scripts
+  always goes to a person: QA Hound comments on it and never approves it.
+- **Agreement.** Two reviewers, from different model families, each recommend "use" on their own
+  (before reading the other) and still do after the challenge round. The model that writes the
+  verdict weighs them: it can come out lower than they did, never higher.
+- **Benchmark.** Both reviewer models have passed BitBull's benchmark: three short read-only
+  reviews of code with twelve seeded defects (path traversal, a missing `await` on a permission
+  check, a token whose signature is never checked, and so on) and files with nothing wrong in
+  them. A model passes with ten or more found and no more than two false alarms. Run it from the
+  QA Hound window (**Run the benchmark**, next to each chosen reviewer once approving is ticked);
+  it costs what three short reviews cost, the result is kept, and it is asked for again when the
+  benchmark changes. The cases are in this public repo, so a pass means "reads code carefully
+  enough to find these", not "finds every bug".
+
+In a chat, each row of the findings table says whether the code it quotes was found in the file
+(**quote found** or **quote not in the file**), checked against the workspace as it is now.
 
 The review lists each check and its result. The checks lower the chance of a missed problem; they
 don't remove it, and a review by models is not a review by a person.

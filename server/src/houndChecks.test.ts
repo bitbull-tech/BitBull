@@ -134,3 +134,97 @@ test("the review lists what BitBull checked, and says when it stopped an approva
   assert.match(body, /- ✅ Commit:/);
   assert.match(body, /- ❌ Coverage: 1 of 1 changed file was not opened/);
 });
+
+// ---------- gates, agreement, more languages ----------
+const { agreementCheck, benchmarkCheck, ciCheck, familyOf, needsPerson, parsePosition, peopleCheck, secretsCheck } = await import("./houndChecks.js");
+
+test("files that always go to a person", () => {
+  for (const f of [".github/workflows/ci.yml", "Dockerfile", "docker/Dockerfile.prod", "docker-compose.yml", "scripts/install.sh", "scripts/bitbull-wsl/setup.ps1", "src/auth/index.ts", "server/src/vault.ts", "web/src/LoginForm.tsx", "lib/oauthCallback.js", "app/session_store.py", "pkg/crypto/aes.go", "config/.env.example", "certs/server.pem", "src/userPermissions.ts", "egress/allowlist.txt", "src/encryption.rs"])
+    assert.equal(needsPerson(f), true, f);
+  for (const f of ["src/author.ts", "src/orders.ts", "README.md", "web/src/Chat.tsx", "docs/tokenizer-notes.md", "src/keyboard.ts", "lib/monkey.py", "src/authorsList.tsx"]) assert.equal(needsPerson(f), false, f);
+  assert.equal(peopleCheck(["src/a.ts"]).ok, true);
+  assert.equal(peopleCheck(undefined).ok, false);
+});
+
+test("secrets: a key-shaped line is found and reported by place only", () => {
+  const dir = path.join(repo, "cfg");
+  mkdirSync(dir, { recursive: true });
+  // built at run time so nothing key-shaped is in this file
+  const pat = "gh" + "p_" + "Z9y8".repeat(10);
+  const aws = "AK" + "IA" + "ABCDEFGHIJKLMNOP";
+  writeFileSync(path.join(dir, "a.ts"), `const x = 1\nconst t = "${pat}"\n`);
+  writeFileSync(path.join(dir, "b.env"), `REGION=eu\nKEY=${aws}\n`);
+  writeFileSync(path.join(dir, "c.ts"), `const password = "short"\nconst token = process.env.TOKEN\n`);
+  const bad = secretsCheck(ws, repo, ["cfg/a.ts", "cfg/b.env", "cfg/c.ts", "cfg/missing.ts"]);
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /2 lines.*`cfg\/a\.ts:2`, `cfg\/b\.env:2`/);
+  assert.ok(!bad.text.includes(pat) && !bad.text.includes(aws));
+  assert.equal(secretsCheck(ws, repo, ["cfg/c.ts", "src/auth.ts"]).ok, true);
+  assert.equal(secretsCheck(ws, repo, undefined).ok, false);
+});
+
+test("CI: some checks, all finished, all passed", () => {
+  const ok = { name: "build", status: "completed", conclusion: "success" };
+  assert.equal(ciCheck({ runs: [ok, { name: "lint", status: "completed", conclusion: "skipped" }], statuses: [{ context: "deploy", state: "success" }] }, "abc1234def").ok, true);
+  assert.equal(ciCheck({ runs: [ok, { name: "test", status: "completed", conclusion: "failure" }], statuses: [] }, "abc1234def").ok, false);
+  assert.equal(ciCheck({ runs: [{ name: "test", status: "queued", conclusion: null }], statuses: [] }, "abc1234def").ok, false);
+  assert.equal(ciCheck({ runs: [ok], statuses: [{ context: "x", state: "failure" }] }, "abc1234def").ok, false);
+  assert.equal(ciCheck({ runs: [], statuses: [] }, "abc1234def").ok, false);
+  assert.equal(ciCheck(undefined, "abc1234def", "GitHub 403").ok, false);
+});
+
+test("model families, and a reviewer's own recommendation", () => {
+  assert.equal(familyOf("claude-sonnet-4-5"), "Anthropic");
+  assert.equal(familyOf("ditto/anthropic/claude-opus"), "Anthropic");
+  assert.equal(familyOf("gpt-5.2"), "OpenAI");
+  assert.equal(familyOf("o3-mini"), "OpenAI");
+  assert.equal(familyOf("deepseek-v41-flash"), "DeepSeek");
+  assert.equal(familyOf("kimi-k3"), "Moonshot");
+  assert.equal(familyOf("moonshotai/kimi-k2"), "Moonshot");
+  assert.equal(familyOf("qwen3-coder"), "Alibaba");
+  assert.equal(familyOf("gemini-3-pro"), "Google");
+  assert.equal(familyOf("glm-5"), "Zhipu");
+  assert.equal(familyOf("somevendor/zephyr-7b"), "zephyr");
+  assert.notEqual(familyOf("zephyr-7b"), familyOf("orca-2"));
+
+  assert.equal(parsePosition("## Summary\nfine\n\nRECOMMENDATION: use"), "use");
+  assert.equal(parsePosition("**RECOMMENDATION:** fix-first (the token leak)"), "fix-first");
+  assert.equal(parsePosition("> RECOMMENDATION: `do-not-use`"), "do-not-use");
+  // the last one stands; prose that merely mentions the words doesn't count
+  assert.equal(parsePosition("RECOMMENDATION: use\n...\nRECOMMENDATION: fix-first"), "fix-first");
+  assert.equal(parsePosition("My recommendation: use it carefully"), undefined);
+  assert.equal(parsePosition("RECOMMENDATION: useful"), undefined);
+  assert.equal(parsePosition(undefined), undefined);
+});
+
+test("agreement: two reviewers, different makers, each saying use before and after", () => {
+  const a = { model: "kimi-k3", initial: "use" as const, final: "use" as const };
+  const b = { model: "deepseek-v4", initial: "use" as const, final: "use" as const };
+  assert.equal(agreementCheck([a, b]).ok, true);
+  assert.equal(agreementCheck([a]).ok, false);
+  assert.equal(agreementCheck([a, { ...b, failed: true }]).ok, false);
+  assert.equal(agreementCheck([a, { ...b, model: "kimi-k2" }]).ok, false);
+  assert.equal(agreementCheck([a, { ...b, initial: "fix-first" as const }]).ok, false);
+  assert.equal(agreementCheck([a, { ...b, final: "do-not-use" as const }]).ok, false);
+  assert.equal(agreementCheck([a, { model: "deepseek-v4" }]).ok, false);
+  assert.equal(benchmarkCheck(["a", "b"], [{ model: "a", grade: true, caught: 11, total: 12, falseAlarms: 0 }, undefined]).ok, false);
+});
+
+test("planted defects fit every language BitBull has them for", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "bitbull-langs-"));
+  const src = path.join(dir, "code");
+  mkdirSync(src);
+  const exts = [".ts", ".js", ".py", ".go", ".rs", ".java", ".kt", ".cs", ".c", ".cpp", ".swift", ".php", ".rb", ".ps1", ".sh"];
+  for (const e of exts) {
+    writeFileSync(path.join(src, `only${e}`), (e === ".php" ? "<?php\n" : "") + "// filler line of code\n".repeat(20) + (e === ".php" ? "?>\n" : ""));
+    const one = mkdtempSync(path.join(tmpdir(), "bitbull-lang-"));
+    const p = plant(one, path.join(src, `only${e}`), "id1", [])!;
+    assert.ok(p, e);
+    const text = readFileSync(path.join(one, p.dir, `only${e}`), "utf8");
+    assert.match(text, /find[-_]?account[-_]?by[-_]?name/i, e);
+    assert.match(text, /can[-_]?remove[-_]?document/i, e);
+    if (e === ".php") assert.doesNotMatch(text, /\?>/);
+    // a finding that names the function is credited, in any spelling
+    assert.deepEqual(plantedCaught(p, [f({ path: `only${e}`, title: text.match(/find[-_]?account[-_]?by[-_]?name/i)![0] }), f({ path: `only${e}`, line: p.planted[1].from })]).missed, [], e);
+  }
+});

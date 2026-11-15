@@ -4,8 +4,11 @@
  * folded away as "held back". The server keeps its own checked copy (server/src/hound.ts); this
  * only displays what the reply says, typed and capped like anything a model wrote.
  */
-import { useState } from 'react'
-import type { Severity } from './api'
+import { useEffect, useState } from 'react'
+import { api, type Severity } from './api'
+
+/** The project of the chat on screen, so a table can ask whether its quotes are in that workspace's files. */
+export const houndProject = { id: 'general' }
 
 const SEV: Severity[] = ['low', 'medium', 'high', 'critical']
 const VERDICT: Record<string, string> = { use: 'Use as is', 'fix-first': 'Fix first', 'do-not-use': 'Do not use' }
@@ -17,6 +20,7 @@ interface Row {
   line?: number
   title: string
   fix?: string
+  quote?: string
   status?: string
   foundBy: string[]
 }
@@ -47,6 +51,7 @@ export function parseHoundBlock(text: string): { verdict?: string; minSeverity: 
       line: typeof r.line === 'number' && r.line > 0 ? Math.floor(r.line) : undefined,
       title,
       fix: s(r.fix, 400) || undefined,
+      quote: s(r.quote, 1500) || undefined,
       status: s(r.status, 20) || undefined,
       foundBy: Array.isArray(r.foundBy) ? r.foundBy.map((x) => s(x, 60)).filter(Boolean).slice(0, 4) : [],
     })
@@ -58,6 +63,23 @@ export function parseHoundBlock(text: string): { verdict?: string; minSeverity: 
 export function HoundFindings({ text }: { text: string }) {
   const [showHeld, setShowHeld] = useState(false)
   const data = parseHoundBlock(text)
+  // Is the code each finding quotes in the file it names? Asked of the server, which reads the
+  // workspace as it is now: a file changed since the review can turn a match into a miss.
+  const [evidence, setEvidence] = useState<Record<string, 'verified' | 'mismatch' | 'none'>>({})
+  const keyOf = (r: Row) => `${r.path}\u0000${r.line ?? ''}\u0000${r.title}`
+  useEffect(() => {
+    const rows = data?.rows.filter((r) => r.quote && r.path) ?? []
+    if (!rows.length) return
+    let live = true
+    void api
+      .houndQuotes(houndProject.id, rows.map((r) => ({ path: r.path, line: r.line, quote: r.quote })))
+      .then((res) => live && setEvidence(Object.fromEntries(rows.map((r, i) => [keyOf(r), res.results[i]?.evidence ?? 'none']))))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text])
   if (!data) return null
   const passes = (r: Row) => SEV.indexOf(r.severity) >= SEV.indexOf(data.minSeverity) && r.confidence >= data.minConfidence
   const shown = data.rows.filter(passes)
@@ -91,7 +113,19 @@ export function HoundFindings({ text }: { text: string }) {
                 {r.line ? `:${r.line}` : ''}
               </code>
             </td>
-            <td>{r.title}</td>
+            <td>
+              {r.title}
+              {evidence[keyOf(r)] === 'verified' && (
+                <span className="quote-mark ok" title="The code this finding quotes is in that file">
+                  ✓ quote found
+                </span>
+              )}
+              {evidence[keyOf(r)] === 'mismatch' && (
+                <span className="quote-mark bad" title="The code this finding quotes is not in that file as it is now: treat the finding with suspicion">
+                  ✗ quote not in the file
+                </span>
+              )}
+            </td>
             <td className="muted">{r.fix}</td>
           </tr>
         ))}

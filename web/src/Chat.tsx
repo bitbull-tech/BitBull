@@ -1,5 +1,5 @@
 import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
-import { HoundFindings, parseHoundBlock } from './HoundFindings'
+import { HoundFindings, houndProject, parseHoundBlock } from './HoundFindings'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ReplyFiles } from './ReplyFiles'
@@ -115,6 +115,7 @@ export function Chat({
   /** "Use this model" from the home screen's advisor */
   onPickModel?: (id: string) => void
 }) {
+  houndProject.id = project?.id ?? 'general'
   const [msgs, setMsgs] = useState<ViewMessage[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)

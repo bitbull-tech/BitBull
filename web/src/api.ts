@@ -448,7 +448,7 @@ export interface Swarm {
   pr?: { url: string; event: string; number: number; note?: string }
   prError?: string
   /** what BitBull checked itself, whatever the models said */
-  checks?: Array<{ id: 'quotes' | 'coverage' | 'planted' | 'commit'; ok: boolean; text: string }>
+  checks?: Array<{ id: string; ok: boolean; text: string }>
 }
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
@@ -478,6 +478,15 @@ export interface HoundFinding {
   evidence?: 'verified' | 'mismatch' | 'none'
   shown: boolean
   heldBecause?: string
+}
+
+/** QA Hound's model benchmark (server/src/houndBench.ts): which models may be behind an approval */
+export interface HoundBench {
+  version: number
+  total: number
+  pass: { caught: number; falseAlarms: number }
+  results: Array<{ model: string; ranAt: number; caught: number; total: number; falseAlarms: number; missed: string[]; costUsd: number; grade: boolean; error?: string }>
+  running: Array<{ model: string; startedAt: number; step: string }>
 }
 
 /** A model on Ditto Router (server/src/router.ts) */
@@ -680,6 +689,10 @@ export const api = {
   startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus']; options?: Partial<HoundOptions> }) =>
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
   swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),
+  houndBench: () => req<HoundBench>('/api/hound/bench'),
+  startHoundBench: (model: string) => req<HoundBench & { ok: boolean; message: string }>('/api/hound/bench', { method: 'POST', body: JSON.stringify({ model }) }),
+  houndQuotes: (projectId: string, items: Array<{ path: string; line?: number; quote?: string }>) =>
+    req<{ results: Array<{ evidence: 'verified' | 'mismatch' | 'none'; line?: number }> }>(`/api/projects/${projectId}/hound/quotes`, { method: 'POST', body: JSON.stringify({ items }) }),
   swarms: (sessionId: string) => req<{ swarms: Swarm[] }>(`/api/swarm?sessionId=${encodeURIComponent(sessionId)}`),
   repoDiff: (projectId: string, repo: string, base?: string) =>
     req<{ stat: string }>(`/api/projects/${projectId}/repos/diff?repo=${encodeURIComponent(repo)}${base ? `&base=${encodeURIComponent(base)}` : ''}`),
