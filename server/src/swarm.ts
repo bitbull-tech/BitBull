@@ -505,8 +505,8 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
 
 /**
  * The verdict on the pull request: the target's repository, its current branch, that branch's
- * open PR. Request changes / approve by the findings shown (hound.ts prEvent); a partial run
- * only comments.
+ * open PR. Request changes by the findings shown, approve only a "use" verdict (hound.ts prEvent);
+ * a partial run only comments.
  */
 async function postToPr(s: Swarm, ws: string) {
   const repos = findRepos(ws).sort((a, b) => b.length - a.length);
@@ -518,9 +518,10 @@ async function postToPr(s: Swarm, ws: string) {
   if (!info.branch || info.detached) throw new Error(`${repo} isn't on a branch`);
   const pr = await openPrFor(gh, info.branch);
   if (!pr) throw new Error(`${info.branch} has no open pull request on ${gh.owner}/${gh.repo}`);
+  // no parsable findings block means the verdict is unknown: comment, never approve
+  const complete = s.phase === "done" && !s.stopped && s.findings !== undefined;
   const findings = s.findings ?? [];
-  const complete = s.phase === "done" && !s.stopped && findings !== undefined;
-  const event = prEvent(findings, s.options, complete);
+  const event = prEvent(findings, s.options, complete, s.verdict);
   const body = prBody({ target: s.target, models: s.reviewers.map((r) => r.model), verdict: s.verdict, findings, spentUsd: s.spentUsd, partial: s.stopped ?? (s.phase !== "done" ? s.error : undefined) });
   const res = await postReview(gh, pr.number, event, body, pr.headSha);
   s.pr = { url: res.url, event: res.event, number: pr.number, note: res.note };

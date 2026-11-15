@@ -43,6 +43,7 @@ test("findings are typed, judged by the thresholds, and ranked", () => {
     o,
   );
   assert.equal(verdict, "fix-first");
+  assert.ok(findings);
   assert.equal(findings.length, 4);
   assert.equal(findings[0].title, "token leak");
   assert.ok(findings[0].shown);
@@ -50,15 +51,35 @@ test("findings are typed, judged by the thresholds, and ranked", () => {
   assert.match(held["nit"]!, /below medium/);
   assert.match(held["maybe race"]!, /confidence 50 < 70/);
   assert.match(held["flaky"]!, /scope/);
-  assert.equal(prEvent(findings, o, true), "REQUEST_CHANGES");
-  assert.equal(prEvent(findings.filter((f) => f.title !== "token leak"), o, true), "APPROVE");
-  assert.equal(prEvent([], o, false), "COMMENT");
+  assert.equal(prEvent(findings, o, true, "fix-first"), "REQUEST_CHANGES");
+  assert.equal(prEvent(findings.filter((f) => f.title !== "token leak"), o, true, "use"), "APPROVE");
+  assert.equal(prEvent([], o, false, "use"), "COMMENT");
   const body = prBody({ target: "repo", models: ["a", "b"], verdict: "fix-first", findings, spentUsd: 0.4 });
   assert.match(body, /token leak/);
   assert.doesNotMatch(body, /maybe race/);
   assert.match(body, /3 more findings held back/);
-  assert.deepEqual(parseFindings("no block here", o).findings, []);
-  assert.deepEqual(parseFindings("```qa-hound\n{not json\n```", o).findings, []);
+  assert.equal(parseFindings("no block here", o).findings, undefined);
+  assert.equal(parseFindings("```qa-hound\n{not json\n```", o).findings, undefined);
+});
+
+test("a verdict other than use never approves, even with only low findings", () => {
+  const o = houndOptions({});
+  const { verdict, findings } = parseFindings(block({ verdict: "do-not-use", findings: [{ severity: "low", confidence: 95, path: "src/a.ts", title: "nit" }] }), o);
+  assert.equal(verdict, "do-not-use");
+  assert.ok(findings);
+  assert.equal(prEvent(findings, o, true, verdict), "COMMENT");
+  assert.equal(prEvent([], o, true, "fix-first"), "COMMENT");
+  assert.equal(prEvent([], o, true, undefined), "COMMENT");
+});
+
+test("a block without a findings list reads as missing and never approves", () => {
+  const o = houndOptions({});
+  for (const j of [{ verdict: "use" }, { verdict: "use", findings: "none" }, { verdict: "use", findings: {} }, null, []]) {
+    const parsed = parseFindings(block(j), o);
+    assert.equal(parsed.findings, undefined, JSON.stringify(j));
+    assert.equal(prEvent(parsed.findings ?? [], o, parsed.findings !== undefined, parsed.verdict), "COMMENT");
+  }
+  assert.match(prBody({ target: "repo", models: ["a"], findings: [], spentUsd: 0 }), /No verdict: the findings block couldn't be read/);
 });
 
 test("Router models: per-token and per-million prices, matching across prefixes", () => {
