@@ -447,6 +447,8 @@ export interface Swarm {
   findings?: HoundFinding[]
   pr?: { url: string; event: string; number: number; note?: string }
   prError?: string
+  /** what BitBull checked itself, whatever the models said */
+  checks?: Array<{ id: 'quotes' | 'coverage' | 'planted' | 'commit'; ok: boolean; text: string }>
 }
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
@@ -460,6 +462,7 @@ export interface HoundOptions {
   exclude: string[]
   pr: boolean
   prBlocking: Severity
+  prApprove: boolean
 }
 export interface HoundFinding {
   severity: Severity
@@ -471,6 +474,8 @@ export interface HoundFinding {
   fix?: string
   foundBy: string[]
   status: 'confirmed' | 'disputed' | 'single'
+  quote?: string
+  evidence?: 'verified' | 'mismatch' | 'none'
   shown: boolean
   heldBecause?: string
 }

@@ -51,9 +51,24 @@ test("findings are typed, judged by the thresholds, and ranked", () => {
   assert.match(held["nit"]!, /below medium/);
   assert.match(held["maybe race"]!, /confidence 50 < 70/);
   assert.match(held["flaky"]!, /scope/);
-  assert.equal(prEvent(findings, o, true, "fix-first"), "REQUEST_CHANGES");
-  assert.equal(prEvent(findings.filter((f) => f.title !== "token leak"), o, true, "use"), "APPROVE");
-  assert.equal(prEvent([], o, false, "use"), "COMMENT");
+  assert.equal(prEvent(findings, o, true, "fix-first", true), "REQUEST_CHANGES");
+  // "maybe race" is high but held back for low confidence: not a clean bill, so no approval
+  const yes = { ...o, prApprove: true };
+  const rest = findings.filter((f) => f.title !== "token leak");
+  assert.equal(prEvent(rest, yes, true, "use", true), "COMMENT");
+  // nor does a high one outside the scope filters: an approval covers the whole pull request
+  assert.equal(prEvent(rest.filter((f) => f.title !== "maybe race"), yes, true, "use", true), "COMMENT");
+  const minor = rest.filter((f) => f.severity !== "high");
+  assert.equal(prEvent(minor, yes, true, "use", true), "APPROVE");
+  // approving is off unless the run was allowed to
+  assert.equal(prEvent(minor, o, true, "use", true), "COMMENT");
+  assert.equal(houndOptions({}).prApprove, false);
+  assert.equal(houndOptions({ prApprove: "true" }).prApprove, false);
+  assert.equal(prEvent(minor, yes, false, "use", true), "COMMENT");
+  // and never when a check BitBull ran itself failed, whatever the verdict says
+  assert.equal(prEvent(minor, yes, true, "use", false), "COMMENT");
+  assert.equal(prEvent(findings, yes, true, "fix-first", false), "REQUEST_CHANGES");
+  assert.equal(prEvent([], o, false, "use", true), "COMMENT");
   const body = prBody({ target: "repo", models: ["a", "b"], verdict: "fix-first", findings, spentUsd: 0.4 });
   assert.match(body, /token leak/);
   assert.doesNotMatch(body, /maybe race/);
@@ -63,23 +78,29 @@ test("findings are typed, judged by the thresholds, and ranked", () => {
 });
 
 test("a verdict other than use never approves, even with only low findings", () => {
-  const o = houndOptions({});
+  const o = houndOptions({ prApprove: true });
   const { verdict, findings } = parseFindings(block({ verdict: "do-not-use", findings: [{ severity: "low", confidence: 95, path: "src/a.ts", title: "nit" }] }), o);
   assert.equal(verdict, "do-not-use");
   assert.ok(findings);
-  assert.equal(prEvent(findings, o, true, verdict), "COMMENT");
-  assert.equal(prEvent([], o, true, "fix-first"), "COMMENT");
-  assert.equal(prEvent([], o, true, undefined), "COMMENT");
+  assert.equal(prEvent(findings, o, true, verdict, true), "COMMENT");
+  assert.equal(prEvent([], o, true, "fix-first", true), "COMMENT");
+  assert.equal(prEvent([], o, true, undefined, true), "COMMENT");
 });
 
 test("a block without a findings list reads as missing and never approves", () => {
-  const o = houndOptions({});
+  const o = houndOptions({ prApprove: true });
   for (const j of [{ verdict: "use" }, { verdict: "use", findings: "none" }, { verdict: "use", findings: {} }, null, []]) {
     const parsed = parseFindings(block(j), o);
     assert.equal(parsed.findings, undefined, JSON.stringify(j));
-    assert.equal(prEvent(parsed.findings ?? [], o, parsed.findings !== undefined, parsed.verdict), "COMMENT");
+    assert.equal(prEvent(parsed.findings ?? [], o, parsed.findings !== undefined, parsed.verdict, true), "COMMENT");
   }
-  assert.match(prBody({ target: "repo", models: ["a"], findings: [], spentUsd: 0 }), /No verdict: the findings block couldn't be read/);
+  assert.match(prBody({ target: "repo", models: ["a"], findings: [], spentUsd: 0, unread: true }), /No verdict: the findings block couldn't be read/);
+  // a block that was read but gave no verdict says that, not "couldn't be read"
+  const none = prBody({ target: "repo", models: ["a"], findings: [], spentUsd: 0 });
+  assert.match(none, /No verdict given/);
+  assert.doesNotMatch(none, /couldn't be read/);
+  // a stopped run says so in the heading
+  assert.match(prBody({ target: "repo", models: ["a"], verdict: "fix-first", findings: [], spentUsd: 0, partial: "budget reached" }).split("\n")[0], /Fix first \(partial run\)/);
 });
 
 test("Router models: per-token and per-million prices, matching across prefixes", () => {

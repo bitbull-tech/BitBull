@@ -21,8 +21,29 @@ severity** and a **minimum confidence**: the verdict scores every finding 0–10
 after checking, that it is real, and anything under the thresholds is listed as held back with the
 reason. **Only these paths / Never these** scope the review with globs. **Post the verdict on the
 pull request** puts it on the open PR of the target repo's current branch: request changes when a
-shown finding is at or above the blocking severity, approve when none is, comment when the run was
-partial (and comment, saying so, on your own PR, which GitHub won't let you approve).
+shown finding is at or above the blocking severity, otherwise comment. It approves only if you
+also tick **Let QA Hound approve** (off by default, because the approval is given under your
+GitHub account on the word of a model that has just read the code), and then only when the run is
+complete, the verdict is "use", no finding at or above the blocking severity was even held back,
+and every check BitBull runs itself passes:
+
+- **Quotes.** Each finding quotes the lines it is about, and BitBull looks for the quote in the
+  file. A finding whose quote isn't there is held back; more than the odd slip and the whole list
+  isn't relied on. (This one runs on every QA Hound run, not only for pull requests.)
+- **Coverage.** The reviewers are told which files the pull request changes, and BitBull checks
+  from the tool log that each one was opened by a reviewer.
+- **Commit.** The working copy that was reviewed is at the pull request's commit, with nothing
+  uncommitted. If it isn't, Sync the copy and run again.
+- **Planted defects.** Two known defects (an SQL injection and an ownership check the wrong way
+  round) are added to a scratch copy of a few of the target's files, and each reviewer model
+  reviews that copy in a short side test. A model that misses one doesn't get to approve. It works
+  for TypeScript, JavaScript, Python, Go, Rust and Java; with none of those there is no approval.
+  The scratch copy (`.hound-work/` in the workspace) is removed when the test ends.
+
+The review lists each check and its result. The checks lower the chance of a missed problem; they
+don't remove it, and a review by models is not a review by a person.
+A partial run says so in the heading. On your own PR, which GitHub won't let you approve or block,
+it comments and says what it would have done.
 
 ## Subagents
 The agent can start specialists in parallel, like Claude Code's Task tool: `reviewer`,

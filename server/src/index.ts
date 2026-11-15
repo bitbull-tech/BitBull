@@ -1005,6 +1005,7 @@ const SwarmSchema = z.object({
       exclude: z.array(z.string().max(200)).max(30).optional(),
       pr: z.boolean().optional(),
       prBlocking: z.string().max(20).optional(),
+      prApprove: z.boolean().optional(),
     })
     .optional(),
 });

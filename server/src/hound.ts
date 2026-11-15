@@ -23,8 +23,13 @@ export interface HoundOptions {
   exclude: string[];
   /** post the verdict on the pull request of the target repo's current branch */
   pr: boolean;
-  /** a shown finding at or above this requests changes; none, and the PR is approved */
+  /** a shown finding at or above this requests changes */
   prBlocking: Severity;
+  /**
+   * let a clean run approve the PR. Off unless the owner ticks it: the verdict comes from a model
+   * that has just read the code under review, and an approval is given under the owner's account.
+   */
+  prApprove: boolean;
 }
 
 export const DEFAULT_OPTIONS: HoundOptions = {
@@ -36,6 +41,7 @@ export const DEFAULT_OPTIONS: HoundOptions = {
   exclude: [],
   pr: false,
   prBlocking: "high",
+  prApprove: false,
 };
 
 const sev = (v: unknown, d: Severity): Severity => (typeof v === "string" && (SEVERITIES as readonly string[]).includes(v.toLowerCase()) ? (v.toLowerCase() as Severity) : d);
@@ -56,6 +62,7 @@ export function houndOptions(raw: Partial<Record<keyof HoundOptions, unknown>> =
     exclude: globs(raw.exclude),
     pr: raw.pr === true,
     prBlocking: sev(raw.prBlocking, DEFAULT_OPTIONS.prBlocking),
+    prApprove: raw.prApprove === true,
   };
 }
 
@@ -96,6 +103,10 @@ export interface Finding {
   fix?: string;
   foundBy: string[];
   status: "confirmed" | "disputed" | "single";
+  /** the lines the finding is about, copied from the file, so BitBull can check they are there */
+  quote?: string;
+  /** what that check found (houndChecks.ts): the quote is in the file, it isn't, or there was nothing to check */
+  evidence?: "verified" | "mismatch" | "none";
   /** shown in the verdict and on the PR, or held back with the reason */
   shown: boolean;
   heldBecause?: string;
@@ -142,6 +153,8 @@ export function parseFindings(text: string, o: HoundOptions): { verdict?: Verdic
       title,
       detail: str(r.detail, 1200) || undefined,
       fix: str(r.fix, 1200) || undefined,
+      // new lines kept: it is compared with the file, white space aside
+      quote: typeof r.quote === "string" ? r.quote.replace(/[\u0000-\u0008\u000b-\u001f]+/g, " ").trim().slice(0, 1500) || undefined : undefined,
       foundBy: (Array.isArray(r.foundBy) ? r.foundBy : []).map((x) => str(x, 80)).filter(Boolean).slice(0, 4),
       status,
       shown: true,
@@ -163,33 +176,49 @@ export function judge(f: Finding, o: HoundOptions): Finding {
 }
 
 /**
- * What the PR gets: request changes for a shown finding at or above the blocking severity;
- * approve only a complete run whose verdict is "use"; anything else only comments.
+ * What the PR gets: request changes for a shown finding at or above the blocking severity.
+ * Approve only when the owner allowed approvals for this run, the run is complete, its verdict is
+ * "use", every check BitBull ran itself passed (houndChecks.ts), and nothing at or above the blocking severity was merely held back, whether for low
+ * confidence or for being outside the scope filters (an approval covers the whole pull request, so
+ * a serious finding that wasn't shown is not a clean bill). Anything else only comments.
  */
-export function prEvent(findings: Finding[], o: HoundOptions, complete: boolean, verdict: Verdict | undefined): "APPROVE" | "REQUEST_CHANGES" | "COMMENT" {
-  if (findings.some((f) => f.shown && rank(f.severity) >= rank(o.prBlocking))) return "REQUEST_CHANGES";
-  return complete && verdict === "use" ? "APPROVE" : "COMMENT";
+export function prEvent(findings: Finding[], o: HoundOptions, complete: boolean, verdict: Verdict | undefined, checksOk: boolean): "APPROVE" | "REQUEST_CHANGES" | "COMMENT" {
+  const serious = findings.filter((f) => rank(f.severity) >= rank(o.prBlocking));
+  if (serious.some((f) => f.shown)) return "REQUEST_CHANGES";
+  return o.prApprove && complete && verdict === "use" && checksOk && !serious.length ? "APPROVE" : "COMMENT";
 }
 
 const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 /** The review body for GitHub: the verdict, the shown findings, how many were held back. */
-export function prBody(input: { target: string; models: string[]; verdict?: Verdict; findings: Finding[]; spentUsd: number; partial?: string }): string {
+export function prBody(input: { target: string; models: string[]; verdict?: Verdict; findings: Finding[]; spentUsd: number; partial?: string; unread?: boolean; checks?: Array<{ ok: boolean; text: string }>; approving?: boolean }): string {
   const shown = input.findings.filter((f) => f.shown);
   const held = input.findings.length - shown.length;
   const verdict = input.verdict
     ? { use: "✅ Use as is", "fix-first": "🛠️ Fix first", "do-not-use": "⛔ Do not use" }[input.verdict]
-    : "❔ No verdict: the findings block couldn't be read";
+    : input.unread
+      ? "❔ No verdict: the findings block couldn't be read"
+      : "❔ No verdict given";
   const lines = [
-    `### 🐶 QA Hound: ${verdict}`,
+    `### 🐶 QA Hound: ${verdict}${input.partial ? " (partial run)" : ""}`,
     `\`${input.target}\` reviewed by ${input.models.join(" and ")}, checked against each other.${input.partial ? ` **Partial run:** ${input.partial}.` : ""}`,
     "",
   ];
   if (shown.length) {
     lines.push("| Severity | Confidence | Where | Finding | Fix |", "| --- | --- | --- | --- | --- |");
     for (const f of shown) lines.push(`| ${f.severity} | ${f.confidence} | \`${cell(f.path)}${f.line ? `:${f.line}` : ""}\` | ${cell(f.title)} | ${cell(f.fix ?? "")} |`);
-  } else lines.push("No findings above the thresholds.");
-  if (held) lines.push("", `<sub>${held} more finding${held === 1 ? "" : "s"} held back (below the severity or confidence threshold, or outside the scope).</sub>`);
+  } else lines.push(input.unread ? "The findings couldn't be read, so none are listed here. See the verdict in BitBull." : "No findings above the thresholds.");
+  if (held) lines.push("", `<sub>${held} more finding${held === 1 ? "" : "s"} held back (below the severity or confidence threshold, outside the scope, or quoting code that isn't in the file).</sub>`);
+  if (input.checks?.length) {
+    const failed = input.checks.some((c) => !c.ok);
+    lines.push(
+      "",
+      `**What BitBull checked itself**${input.approving ? (failed ? " (not all passed, so this is not an approval)" : "") : ""}`,
+      ...input.checks.map((c) => `- ${c.ok ? "✅" : "❌"} ${cell(c.text)}`),
+      "",
+      "<sub>These checks lower the chance of a missed problem; they don't remove it. A review by models is not a review by a person.</sub>",
+    );
+  }
   lines.push("", `<sub>Posted from BitBull · cost $${input.spentUsd.toFixed(2)}</sub>`);
   return lines.join("\n");
 }

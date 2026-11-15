@@ -297,6 +297,19 @@ export function SwarmTheatre({
             {s.prError && <span className="error"> · PR not posted: {s.prError}</span>}
           </div>
         )}
+        {s.checks && s.checks.length > 0 && (
+          <div className="theatre-checks small">
+            <b>What BitBull checked itself</b>
+            <ul>
+              {s.checks.map((c) => (
+                <li key={c.id} className={c.ok ? 'ok' : 'bad'}>
+                  <span aria-hidden="true">{c.ok ? '✓' : '✗'}</span> {c.text.replace(/`/g, '')}
+                </li>
+              ))}
+            </ul>
+            {s.options.pr && s.options.prApprove && s.checks.some((c) => !c.ok) && <span className="muted">Not all passed, so the pull request was not approved.</span>}
+          </div>
+        )}
       </div>
     </div>
   )

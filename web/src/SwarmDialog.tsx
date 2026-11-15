@@ -15,7 +15,7 @@ const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
 
 const SEVERITY: Severity[] = ['low', 'medium', 'high', 'critical']
 const OPTS_KEY = 'bitbull-hound-options'
-const DEFAULTS: HoundOptions = { budgetUsd: 2, maxMinutes: 45, minSeverity: 'low', minConfidence: 70, include: [], exclude: [], pr: false, prBlocking: 'high' }
+const DEFAULTS: HoundOptions = { budgetUsd: 2, maxMinutes: 45, minSeverity: 'low', minConfidence: 70, include: [], exclude: [], pr: false, prBlocking: 'high', prApprove: false }
 /** The last settings used, per browser: a convenience, the server checks them again. */
 function savedOptions(): HoundOptions {
   try {
@@ -269,7 +269,16 @@ export function SwarmDialog({
                     </option>
                   ))}
                 </select>
-                <span className="muted small">, approve when none is, just comment when the run was partial.</span>
+                <span className="muted small">; otherwise comment.</span>
+                <label className="check small hound-approve">
+                  <input type="checkbox" checked={opts.prApprove} onChange={(e) => set({ prApprove: e.target.checked })} />
+                  <span>
+                    Let QA Hound approve the pull request when the run is complete, the verdict is "use", nothing that serious was even held
+                    back, and BitBull's own checks pass: every finding's quote is in the file, every changed file was opened, the copy is the
+                    pull request's commit, and each reviewer found two defects planted in a scratch copy (a short extra test, counted in the
+                    budget). <span className="muted">The approval is given under your GitHub account. These checks lower the chance of a missed problem; they don't remove it.</span>
+                  </span>
+                </label>
               </div>
             )}
           </div>

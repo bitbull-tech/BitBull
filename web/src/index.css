@@ -1460,3 +1460,9 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .link-fallback { margin: 6px 0 0; display: flex; flex-direction: column; gap: 4px; }
 .link-fallback-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .link-fallback code { user-select: all; overflow-wrap: anywhere; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+
+.hound-approve { flex-basis: 100%; align-items: flex-start; margin-top: 4px; }
+.theatre-checks { padding: 0 18px 16px; }
+.theatre-checks ul { list-style: none; margin: 6px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.theatre-checks li.ok > span { color: var(--ok, #2e9e5b); font-weight: 700; }
+.theatre-checks li.bad > span { color: var(--bad, #d64545); font-weight: 700; }

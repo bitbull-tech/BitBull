@@ -68,6 +68,17 @@ export async function openPrFor(r: GhRepo, branch: string): Promise<OpenPr | nul
   return p ? { number: p.number, url: p.html_url, title: p.title, author: p.user?.login ?? "", headSha: p.head.sha } : null;
 }
 
+/** The files a pull request changes (not the ones it removes), or null when there are too many to list. */
+export async function prFiles(r: GhRepo, pr: number): Promise<string[] | null> {
+  const out: string[] = [];
+  for (let page = 1; page <= 4; page++) {
+    const list = await gh<Array<{ filename?: unknown; status?: unknown }>>(`/repos/${r.owner}/${r.repo}/pulls/${pr}/files?per_page=100&page=${page}`);
+    for (const f of list) if (typeof f.filename === "string" && f.status !== "removed") out.push(f.filename);
+    if (list.length < 100) return out;
+  }
+  return null;
+}
+
 /** Where to open a PR for a branch that has none yet. */
 export const compareUrl = (r: GhRepo, branch: string) => `https://github.com/${r.owner}/${r.repo}/compare/${encodeURIComponent(branch)}?expand=1`;
 
