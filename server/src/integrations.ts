@@ -59,12 +59,12 @@ export function integrations(): IntegrationDef[] {
       docs: "https://cathedral.computer",
       env: [
         { key: "CATHEDRAL_API_KEY", label: "API key (cat_sk_…)", secret: true, value: ca.apiKey },
-        { key: "CATHEDRAL_MAX_SPEND_USD", label: "Spend limit per sandbox (USD, .env only)", value: effectiveCathedralCap(ca.maxSpendUsd).toFixed(2) },
       ],
       // The engines talk to BitBull, which holds the key and makes every call (server/src/cathedral.ts)
       mcp: ca.apiKey ? { url: `http://127.0.0.1:${config.port}${CATHEDRAL_MCP_PATH}`, headers: internalMcpHeaders(), timeout: 660000 } : undefined,
       configured: !!ca.apiKey,
       notes:
+        `Spend limit per sandbox: $${effectiveCathedralCap(ca.maxSpendUsd).toFixed(2)} (CATHEDRAL_MAX_SPEND_USD, .env only). ` +
         "Off until you tick it in a project's settings. The agent never holds the key: BitBull makes every call, asks you before each sandbox (size, rate, lifetime, spend cap, internet), sends only files the agent names from the project's workspace and logs each one. Commands and files pass Cathedral's API on the way to the sandbox, so this is isolation, not confidentiality: never send secrets.",
     },
     {

@@ -371,7 +371,7 @@ export async function openReviewRoom(
   if ("error" in snap) return { ...room, error: snap.error };
   try {
     room.snapshot = { ...snap.source, sha256: snap.sha256, bytes: snap.bytes };
-    const what = snap.source.kind === "git" ? `${snap.source.repo} at ${snap.source.commit.slice(0, 12)}` : "a copy of the folder";
+    const what = snap.source.kind === "git" ? `${snap.source.repo} at ${snap.source.commit.slice(0, 12)}` : `a copy of ${input.target}`;
     const made = await deps.createRoom({
       purpose: "qa-hound",
       projectId: input.projectId,
@@ -390,7 +390,7 @@ export async function openReviewRoom(
     room.receiptId = made.receipt_id ?? undefined;
     const put = (await deps.helper(["put", made.sandbox_id, "--task", task, "--op", "putsrc", "--src", snap.file, "--path", "/work/src.tar"])).out;
     if (!put.ok) throw new Error(`upload failed: ${errText(put)}`);
-    deps.log("info", `QA Hound sent ${what} to sealed room ${made.sandbox_id} (${snap.bytes} bytes, sha256 ${snap.sha256})`);
+    deps.log("info", `QA Hound sent ${what} to sealed room ${made.sandbox_id}: ${input.target} → /work/src.tar (${snap.bytes} bytes, sha256 ${snap.sha256})`);
     const x = (await deps.helper(["exec", made.sandbox_id, "--task", task, "--op", "extract", "--cmd", "mkdir -p /work/src && tar -xf /work/src.tar -C /work/src", "--cwd", "/work", "--timeout", "45"])).out;
     if (!x.ok) throw new Error(`unpacking failed: ${errText(x)}`);
     return room;
@@ -423,6 +423,8 @@ export type Step = "install" | "build" | "test";
 export interface CertCommand {
   step: Step;
   command: string;
+  /** sha256 of the shell string as UTF-8: what Cathedral's exec receipt binds as command_sha256 */
+  commandSha256?: string;
   /** exited / failed / timed_out / killed / lost / error / not_run */
   state: string;
   exitCode: number | null;
@@ -675,6 +677,7 @@ export async function runCleanMachine(
     deps.log("info", `Clean-machine test: room ${id} for ${repo.rel} at ${repo.commit.slice(0, 12)}`);
     const put = (await deps.helper(["put", id, "--task", task, "--op", "putsrc", "--src", tar, "--path", "/work/src.tar"])).out;
     if (!put.ok) failure = `upload failed: ${errText(put)}`;
+    else deps.log("info", `Clean-machine test sent git archive of ${repo.rel} at ${repo.commit.slice(0, 12)} to sealed room ${id}: /work/src.tar (${tarBytes} bytes, sha256 ${tarSha})`);
     if (!failure) {
       const x = (await deps.helper(["exec", id, "--task", task, "--op", "extract", "--cmd", "mkdir -p /work/src && tar -xf /work/src.tar -C /work/src && rm /work/src.tar", "--cwd", "/work", "--timeout", "45"])).out;
       if (!x.ok) failure = `unpacking failed: ${errText(x)}`;
@@ -710,11 +713,14 @@ export async function runCleanMachine(
       c.startedAt = typeof w.started_at === "string" ? w.started_at : iso(t0);
       c.finishedAt = typeof w.finished_at === "string" ? w.finished_at : iso(t1);
       c.durationMs = typeof w.duration_ms === "number" ? w.duration_ms : t1 - t0;
+      c.commandSha256 = sha(c.command);
       c.stdoutSha256 = sha(String(w.stdout ?? ""));
       c.stderrSha256 = sha(String(w.stderr ?? ""));
       c.stdoutTruncated = w.stdout_truncated === true;
       c.stderrTruncated = w.stderr_truncated === true;
       c.roomReceiptId = w.room_receipt_id ?? null;
+      // Cathedral may drop a finished command's output; then the hash is of "" and won't match its receipt
+      if (w.output_evicted === true) c.note = "output evicted by Cathedral; the output hashes are of empty text";
       if (!c.ok) {
         c.note = c.state === "failed" ? `exited with ${c.exitCode}` : errText(w);
         failure = `${c.step} ${c.note}`;
@@ -770,7 +776,7 @@ export function renderCertificate(c: Certificate): string {
   }
   for (const x of c.commands) {
     const f = fenceFor(x.command);
-    L.push("", `${x.step}${x.note ? ` (${x.note})` : ""}:`, "", f, x.command, f);
+    L.push("", `${x.step}${x.note ? ` (${x.note})` : ""}${x.commandSha256 ? `, command sha256 ${code(x.commandSha256)}` : ""}:`, "", f, x.command, f);
   }
   L.push("", "Output hashes are sha256 of the output text as returned (UTF-8), the scope Cathedral's exec receipts bind (`output_hash_scope: returned-text-utf8`).");
   L.push("", "## Room", "");
@@ -806,7 +812,7 @@ export function renderCertificate(c: Certificate): string {
     "   ```",
     "",
     "   The verdict is PASS, FAIL or NOT PROVEN (NOT PROVEN without the pinned key and ARK). Take the measurement from https://cathedral.computer/approved-measurements.json; without --expected-measurement the build is not checked.",
-    "3. The public create receipt and the host attestation linked above need no account. Compare the command hashes here with the exec receipts in the bundle. The bundle was taken before the room was deleted, so its chain ends one receipt before the head above (the delete).",
+    `3. The public create receipt and the host attestation linked above need no account. Compare the command and output hashes here with the exec receipts in the bundle.${c.receiptHead.from === "delete" ? " The bundle was taken before the room was deleted, so its chain ends one receipt before the head above (the delete)." : ""}`,
   );
   L.push("", "## What this shows", "");
   L.push(

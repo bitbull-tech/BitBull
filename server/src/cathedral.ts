@@ -301,9 +301,17 @@ export async function createRoom(input: CreateInput): Promise<Record<string, any
   if (input.internet) argv.push("--internet");
   else if (input.allowHosts?.length) argv.push("--allow", input.allowHosts.join(","));
   const out = (await helper(argv)).out;
-  if (out.ok && typeof out.sandbox_id === "string") {
+  // a create that answered not-ready or failed can still name a room: track it so it can be deleted
+  if (typeof out.sandbox_id === "string" && ID_RE.test(out.sandbox_id)) {
     rooms.set(out.sandbox_id, { id: out.sandbox_id, projectId: project.id, sessionId: input.sessionId ?? "", task, size: input.size, internet: input.internet, purpose: input.purpose, createdAt: new Date().toISOString() });
-    record({ level: "info", source: "cathedral", message: `Cathedral sandbox ${out.sandbox_id} created (${input.size}, internet ${input.internet ? "on" : "off"})`, ...(session ? { sessionId: session.id, sessionTitle: session.title } : {}) });
+    record({
+      level: out.ok ? "info" : "warn",
+      source: "cathedral",
+      message: out.ok ? `Cathedral sandbox ${out.sandbox_id} created (${input.size}, internet ${input.internet ? "on" : "off"})` : `Cathedral sandbox ${out.sandbox_id} did not come up (${out.error})`,
+      ...(session ? { sessionId: session.id, sessionTitle: session.title } : {}),
+    });
+    // a QA Hound run gives up on a room that didn't come up: delete it rather than leave it to its lifetime
+    if (!out.ok && input.purpose !== "chat") await deleteRoom(rooms.get(out.sandbox_id)!).catch(() => undefined);
   }
   return out;
 }

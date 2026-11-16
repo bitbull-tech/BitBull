@@ -596,7 +596,7 @@ async function cmdExecWait(ctx, { id, flags }) {
     if (x.state !== "running") break;
     if (typeof x.poll_after_s === "number") await ctx.sleep(x.poll_after_s * 1000);
   }
-  const base = { exec_id: flags.exec, state: x.state ?? "unknown", exit_code: x.exit_code ?? null, stdout: x.stdout ?? "", stderr: x.stderr ?? "", duration_ms: x.duration_ms ?? null, stdout_truncated: x.stdout_truncated ?? false, stderr_truncated: x.stderr_truncated ?? false, started_at: x.started_at ?? null, finished_at: x.finished_at ?? null, room_receipt_id: x.room_receipt_id ?? null };
+  const base = { exec_id: flags.exec, state: x.state ?? "unknown", exit_code: x.exit_code ?? null, stdout: x.stdout ?? "", stderr: x.stderr ?? "", duration_ms: x.duration_ms ?? null, stdout_truncated: x.stdout_truncated ?? false, stderr_truncated: x.stderr_truncated ?? false, started_at: x.started_at ?? null, finished_at: x.finished_at ?? null, room_receipt_id: x.room_receipt_id ?? null, ...(x.output_evicted === true ? { output_evicted: true } : {}) };
   switch (x.state) {
     case "exited":
       return x.exit_code === 0 ? { ok: true, ...base } : { ok: false, ...base, error: "command_failed", message: `The command exited with ${x.exit_code}` };
