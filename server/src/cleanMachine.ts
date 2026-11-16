@@ -332,6 +332,14 @@ export async function snapshotTarget(ws: string, target: string): Promise<Snapsh
         rmSync(file, { force: true });
       }
     }
+    let realAbs = "";
+    try {
+      realAbs = realpathSync(abs);
+    } catch {
+      /* missing: tarFolder says so */
+    }
+    const realWs = realpathSync(ws);
+    if (realAbs && !(realAbs === realWs || realAbs.startsWith(realWs + path.sep))) throw new Error("The target leads outside this workspace through a link; it is not copied.");
     const t = tarFolder(abs, file);
     return { file, bytes: t.bytes, sha256: fileSha(file), source: { kind: "folder", skipped: t.skipped }, cleanup };
   } catch (e) {
@@ -610,6 +618,11 @@ export async function runCleanMachine(
         if (!d.ok) deleteError = errText(d);
         // the chain head after the delete includes the delete receipt
         if (d.receipts && typeof d.receipts === "object") head = { count: d.receipts.count ?? null, n: d.receipts.head_n ?? null, sha256: d.receipts.head_sha256 ?? null, from: "delete" };
+        if (d.ok) {
+          const after = (await deps.helper(["status", sandboxId])).out;
+          const r = after.ok && after.receipts && typeof after.receipts === "object" ? after.receipts : null;
+          if (r && typeof r.head_sha256 === "string" && /^[0-9a-f]{64}$/.test(r.head_sha256)) head = { count: r.count ?? head.count, n: r.head_n ?? head.n, sha256: r.head_sha256, from: "delete" };
+        }
       } catch (e) {
         deleteError = e instanceof Error ? e.message : String(e);
       }

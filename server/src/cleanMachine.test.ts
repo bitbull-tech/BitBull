@@ -78,8 +78,11 @@ function fake(opts: { deny?: boolean; exits?: Record<string, number>; putFails?:
             out: { ok: code === 0, state: "exited", exit_code: code, stdout: `out of ${op}\n`, stderr: code ? "it broke\n" : "", started_at: "2026-11-16T10:00:00Z", finished_at: "2026-11-16T10:01:00Z", duration_ms: 60000, stdout_truncated: false, stderr_truncated: false, room_receipt_id: `rr-${op}` },
           };
         }
-        case "status":
-          return { code: 0, out: { ok: true, image: "python:3.12-slim", image_digest: DIGEST, receipt_id: "rc-create", receipt_url: "/v1/receipts/rc-create", receipts: { count: 6, head_n: 6, head_sha256: "1".repeat(64) } } };
+        case "status": {
+          // after the delete Cathedral reports the head that includes the delete receipt
+          const head = f.deletes.length ? { count: 7, head_n: 7, head_sha256: "2".repeat(64) } : { count: 6, head_n: 6, head_sha256: "1".repeat(64) };
+          return { code: 0, out: { ok: true, image: "python:3.12-slim", image_digest: DIGEST, receipt_id: "rc-create", receipt_url: "/v1/receipts/rc-create", receipts: head } };
+        }
         case "verify":
           return { code: 0, out: { ok: true, checked: ["chain links"], not_checked: ["the AMD SEV-SNP report and AMD's certificate chain (needs the offline verifier)", "that no receipts were cut from the end of the chain"] } };
         case "evidence":
@@ -144,7 +147,7 @@ test("happy path: a certificate with the commit, commands, hashes, room, receipt
   assert.equal(JSON.parse(readFileSync(path.join(ws, c.files!.json), "utf8")).repo.commit, COMMIT);
   // the order: upload, unpack, the commands in order, then status, verify, evidence; delete last
   const cmds = f.calls.map((a) => a[0]);
-  assert.deepEqual(cmds, ["put", "exec", "exec-bg", "exec-wait", "exec-bg", "exec-wait", "exec-bg", "exec-wait", "status", "verify", "evidence"]);
+  assert.deepEqual(cmds, ["put", "exec", "exec-bg", "exec-wait", "exec-bg", "exec-wait", "exec-bg", "exec-wait", "status", "verify", "evidence", "status"]);
   const bg = f.calls.filter((a) => a[0] === "exec-bg");
   assert.deepEqual(bg.map((a) => a[a.indexOf("--cmd") + 1]), [opts().install, opts().build, opts().test]);
   assert.ok(bg.every((a) => a[a.indexOf("--cwd") + 1] === "/work/src" && Number(a[a.indexOf("--timeout") + 1]) <= 1800));

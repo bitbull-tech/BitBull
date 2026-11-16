@@ -806,11 +806,13 @@ async function postToPr(s: Swarm, ws: string) {
     const c = s.certificate;
     checks.push({
       id: "cleanMachine",
-      ok: c?.result === "pass" && c.repo.commit === pr.headSha,
+      ok: c?.result === "pass" && c.repo.commit === pr.headSha && c.verify.ok !== false,
       text: !c
         ? `The clean-machine test gave no certificate: ${s.cleanMachineError ?? "unknown error"}.`
         : c.repo.commit !== pr.headSha
           ? `The clean-machine test ran at ${c.repo.commit.slice(0, 12)}, not at the pull request's head ${pr.headSha.slice(0, 12)}.`
+          : c.result === "pass" && c.verify.ok === false
+            ? `Install, build and test passed at ${c.repo.commit.slice(0, 12)}, but Cathedral's verify of the room's receipts failed.`
           : c.result === "pass"
             ? `Install, build and test passed in a fresh sealed room at ${c.repo.commit.slice(0, 12)} (clean-machine certificate).`
             : `The clean-machine test did not pass at ${c.repo.commit.slice(0, 12)}: ${c.commands.filter((x) => !x.ok && x.state !== "not_run").map((x) => `${x.step} ${x.exitCode != null ? `exit ${x.exitCode}` : x.state}`).join(", ") || "not every command ran"}.`,
