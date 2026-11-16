@@ -102,7 +102,7 @@ export async function* runTurn(
   prompt: string,
   model: string,
   attachments: string[] = [],
-  opts: { plan?: boolean; unattended?: boolean } = {},
+  opts: { plan?: boolean; unattended?: boolean; reviewSandbox?: boolean } = {},
 ): AsyncGenerator<AgentEvent & { messageId?: string }> {
   if (running.has(session.id)) {
     yield { type: "error", message: "This session is already running a turn." };
@@ -178,6 +178,7 @@ export async function* runTurn(
       mcp,
       bitbullSessionId: session.id,
       plan: opts.plan,
+      reviewSandbox: opts.reviewSandbox,
     })) {
       // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
       if (ev.type === "text" || ev.type === "thinking") ev.delta = redact(ev.delta);

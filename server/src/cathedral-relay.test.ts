@@ -315,3 +315,14 @@ test("no key: every tool says Cathedral is not set up, and nothing is sent", asy
   config.integrations.cathedral.apiKey = saved;
   assert.equal(reqs.length, 0);
 });
+
+test("review_exec from OpenCode (no session header): allowed while one of the run's reviewers is running, even beside other chats", async () => {
+  const reviewer = sessions.create({ engine: "opencode", model: "m", projectId: on.id });
+  C.grantRoom(ID, "thound2", [reviewer.id], 60_000);
+  setRunningSessions(() => [chatOn.id, reviewer.id]);
+  const ok = await call("review_exec", { sandbox_id: ID, command: "pytest", op: "r3" });
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  setRunningSessions(() => [chatOn.id]);
+  assert.match(String(await call("review_exec", { sandbox_id: ID, command: "pytest", op: "r4" })), /Only the reviewers/);
+  C.revokeRoom(ID);
+});

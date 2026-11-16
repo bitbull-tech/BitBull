@@ -943,3 +943,34 @@ async function readEvents(
   }
   return { ended, seq }
 }
+
+/** QA Hound's sealed-room options (server/src/hound.ts, cleanMachine.ts), next to HoundOptions */
+export interface HoundRoomOptions {
+  sandbox: boolean
+  sandboxSize?: string
+  cleanMachine: { enabled: boolean; install: string; build: string; test: string; allowHosts: string[]; size?: string }
+}
+/** The clean-machine certificate saved with a QA Hound verdict (server/src/cleanMachine.ts) */
+export interface CleanMachineCertificate {
+  id: string
+  result: 'pass' | 'fail' | 'incomplete'
+  repo: { path: string; remote?: string; commit: string; uncommittedChanges: number }
+  commands: Array<{ step: 'install' | 'build' | 'test'; command: string; state: string; exitCode: number | null; ok: boolean; durationMs?: number | null; note?: string; stdoutSha256?: string; stderrSha256?: string }>
+  room: { sandboxId: string; size: string; image: string | null; imageDigest: string | null; network: 'closed' | 'allowlist'; allowHosts: string[]; createReceiptUrl: string | null; maxSpendUsd: string | null }
+  startedAt: string
+  finishedAt: string
+  receiptHead: { count: number | null; n: number | null; sha256: string | null; from: string }
+  verify: { ok: boolean | null; notChecked: string[]; error?: string }
+  evidence: { path?: string; error?: string }
+  deleted: boolean
+  failure?: string
+  files?: { json: string; md: string }
+}
+/** What a QA Hound run did in Cathedral rooms */
+export interface SwarmRooms {
+  sandbox?: { sandboxId?: string; image?: string; imageDigest?: string; receiptHead?: { n: number | null; sha256: string | null }; deleted?: boolean; error?: string }
+  sandboxError?: string
+  cleanMachine?: 'running' | 'done'
+  certificate?: CleanMachineCertificate
+  cleanMachineError?: string
+}

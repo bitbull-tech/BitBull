@@ -23,7 +23,7 @@ import path from "node:path";
 import type { Finding, Verdict } from "./hound.js";
 
 export interface Check {
-  id: "quotes" | "coverage" | "planted" | "commit" | "secrets" | "ci" | "people" | "agreement" | "benchmark";
+  id: "quotes" | "coverage" | "planted" | "commit" | "secrets" | "ci" | "people" | "agreement" | "benchmark" | "cleanMachine";
   ok: boolean;
   /** one sentence, shown in BitBull and in the review */
   text: string;

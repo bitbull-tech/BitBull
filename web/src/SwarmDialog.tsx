@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type HoundOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm, type HoundBench } from './api'
+import { api, type HoundOptions, type HoundRoomOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm, type HoundBench } from './api'
 import { IconX } from './icons'
 import { priceLabel } from './ModelPicker'
 import { TargetPicker } from './TargetPicker'
@@ -25,6 +25,17 @@ function savedOptions(): HoundOptions {
   }
 }
 const lines = (t: string) => t.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
+const ROOMS_KEY = 'bitbull-hound-rooms'
+const ROOM_DEFAULTS: HoundRoomOptions = { sandbox: false, cleanMachine: { enabled: false, install: '', build: '', test: '', allowHosts: [] } }
+/** The sealed-room settings last used, per browser (the commands are the project's, so worth keeping). */
+function savedRooms(): HoundRoomOptions {
+  try {
+    const r = JSON.parse(localStorage.getItem(ROOMS_KEY) ?? '{}') as Partial<HoundRoomOptions>
+    return { ...ROOM_DEFAULTS, ...r, cleanMachine: { ...ROOM_DEFAULTS.cleanMachine, ...(r.cleanMachine ?? {}) } }
+  } catch {
+    return ROOM_DEFAULTS
+  }
+}
 
 /**
  * QA swarm: pick a repo, folder or file in the workspace and up to two other models. Each
@@ -58,6 +69,25 @@ export function SwarmDialog({
   const [include, setInclude] = useState(opts.include.join('\n'))
   const [exclude, setExclude] = useState(opts.exclude.join('\n'))
   const set = (patch: Partial<HoundOptions>) => setOpts((o) => ({ ...o, ...patch }))
+  const [rooms, setRooms] = useState<HoundRoomOptions>(savedRooms)
+  const [hosts, setHosts] = useState(rooms.cleanMachine.allowHosts.join('\n'))
+  const setClean = (patch: Partial<HoundRoomOptions['cleanMachine']>) => setRooms((r) => ({ ...r, cleanMachine: { ...r.cleanMachine, ...patch } }))
+  // Cathedral rooms need a key (Settings) and Cathedral ticked for this project
+  const [cathedralKey, setCathedralKey] = useState<boolean | null>(null)
+  useEffect(() => {
+    void api
+      .integrations()
+      .then((r) => setCathedralKey(!!r.integrations.find((i) => i.id === 'cathedral')?.configured))
+      .catch(() => setCathedralKey(false))
+  }, [])
+  const roomsWhyNot =
+    cathedralKey === null
+      ? 'Checking Cathedral…'
+      : !cathedralKey
+        ? 'Needs Cathedral: add a key in Settings, Integrations, Cathedral.'
+        : !project?.integrations?.includes('cathedral')
+          ? 'Needs Cathedral switched on for this project (project settings, Integrations).'
+          : null
 
   useEffect(() => {
     void api
@@ -153,12 +183,16 @@ export function SwarmDialog({
     if (!focus.length) return setErr('Tick at least one thing to look at.')
     setBusy(true)
     try {
-      const options: HoundOptions = { ...opts, include: lines(include), exclude: lines(exclude) }
+      const base: HoundOptions = { ...opts, include: lines(include), exclude: lines(exclude) }
+      const roomOpts: HoundRoomOptions = { ...rooms, cleanMachine: { ...rooms.cleanMachine, allowHosts: hosts.split(/[\s,]+/).map((h) => h.trim()).filter(Boolean) } }
       try {
-        localStorage.setItem(OPTS_KEY, JSON.stringify(options))
+        localStorage.setItem(OPTS_KEY, JSON.stringify(base))
+        localStorage.setItem(ROOMS_KEY, JSON.stringify(roomOpts))
       } catch {
         /* private window */
       }
+      // rooms only when Cathedral is ready here; the server checks again
+      const options = roomsWhyNot ? { ...base, sandbox: false, cleanMachine: { ...roomOpts.cleanMachine, enabled: false } } : { ...base, ...roomOpts }
       const r = await api.startSwarm({ sessionId: session.id, target: target.trim(), models: chosen, focus, options })
       onStarted(r.swarm)
     } catch (e) {
@@ -347,6 +381,53 @@ export function SwarmDialog({
                   </div>
                 )}
               </div>
+            )}
+          </div>
+          <div className="hound-opts">
+            <div className="hound-opts-title">Sealed room (Cathedral)</div>
+            {roomsWhyNot && <p className="muted small">{roomsWhyNot}</p>}
+            <label className="check">
+              <input type="checkbox" disabled={!!roomsWhyNot} checked={!roomsWhyNot && rooms.sandbox} onChange={(e) => setRooms((r) => ({ ...r, sandbox: e.target.checked }))} />
+              <span>
+                Run it in a sealed sandbox{' '}
+                <span className="muted small">Reviewers may run the code in a sealed Cathedral room, network closed. You approve the room first.</span>
+              </span>
+            </label>
+            <label className="check">
+              <input type="checkbox" disabled={!!roomsWhyNot} checked={!roomsWhyNot && rooms.cleanMachine.enabled} onChange={(e) => setClean({ enabled: e.target.checked })} />
+              <span>
+                Clean-machine test{' '}
+                <span className="muted small">
+                  BitBull runs your install, build and test commands on the repo's exact commit in a fresh sealed room and saves a certificate with
+                  the verdict. Needs a git repo and Cathedral on for this project; you approve the room first.
+                </span>
+              </span>
+            </label>
+            {!roomsWhyNot && rooms.cleanMachine.enabled && (
+              <>
+                <div className="row3">
+                  <label className="field">
+                    <span>Install</span>
+                    <input value={rooms.cleanMachine.install} maxLength={2000} onChange={(e) => setClean({ install: e.target.value })} placeholder="pip install -r requirements.txt" />
+                  </label>
+                  <label className="field">
+                    <span>Build</span>
+                    <input value={rooms.cleanMachine.build} maxLength={2000} onChange={(e) => setClean({ build: e.target.value })} placeholder="(optional)" />
+                  </label>
+                  <label className="field">
+                    <span>Test</span>
+                    <input value={rooms.cleanMachine.test} maxLength={2000} onChange={(e) => setClean({ test: e.target.value })} placeholder="python -m pytest -q" />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Hosts install may reach (one a line; empty keeps the network closed)</span>
+                  <textarea rows={2} value={hosts} onChange={(e) => setHosts(e.target.value)} placeholder={'pypi.org\nfiles.pythonhosted.org'} />
+                  <span className="muted small">
+                    Commands run in order in the repo's root, one line each; the first that fails stops the rest. The room's time counts against the
+                    time limit, and its cost (the room hold) is separate from model spend.
+                  </span>
+                </label>
+              </>
             )}
           </div>
           <p className="muted small">

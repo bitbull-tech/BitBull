@@ -117,3 +117,29 @@ test("GitHub remotes", () => {
   assert.deepEqual(parseGithubRemote("git@github.com:tommyhgunz14/BitBull"), { owner: "tommyhgunz14", repo: "BitBull" });
   assert.equal(parseGithubRemote("https://gitlab.com/a/b.git"), null);
 });
+
+test("sealed-room options: off by default, commands checked, hosts validated", () => {
+  const d = houndOptions();
+  assert.equal(d.sandbox, false);
+  assert.equal(d.sandboxSize, "sealed-1x2");
+  assert.equal(d.cleanMachine.enabled, false);
+  assert.equal(houndOptions({ sandbox: "yes" }).sandbox, false);
+  assert.equal(houndOptions({ sandbox: true, sandboxSize: "huge; rm -rf" }).sandboxSize, "sealed-1x2");
+  const o = houndOptions({ cleanMachine: { enabled: true, install: "  npm ci ", test: "npm test", allowHosts: "registry.npmjs.org, Registry.npmjs.org\nfiles.pythonhosted.org", size: "sealed-4x8" } });
+  assert.deepEqual(o.cleanMachine, { enabled: true, install: "npm ci", build: "", test: "npm test", allowHosts: ["registry.npmjs.org", "files.pythonhosted.org"], size: "sealed-4x8" });
+  // disabled: whatever else came is dropped
+  assert.deepEqual(houndOptions({ cleanMachine: { enabled: false, install: "x\ny" } }).cleanMachine.install, "");
+  assert.throws(() => houndOptions({ cleanMachine: { enabled: true, test: "a\nb" } }), /one line/);
+  assert.throws(() => houndOptions({ cleanMachine: { enabled: true, test: "x".repeat(2001) } }), /2000/);
+  assert.throws(() => houndOptions({ cleanMachine: { enabled: true } }), /at least one command/);
+  assert.throws(() => houndOptions({ cleanMachine: { enabled: true, test: "t", allowHosts: ["https://evil.com/x"] } }), /Not a host name/);
+  assert.throws(() => houndOptions({ cleanMachine: { enabled: true, test: "t", allowHosts: ["*.npmjs.org"] } }), /Not a host name/);
+  assert.throws(() => houndOptions({ cleanMachine: { enabled: true, test: "t", allowHosts: Array.from({ length: 33 }, (_, i) => `h${i}.example.com`) } }), /32/);
+});
+
+test("the PR body carries the clean-machine summary when there is one", () => {
+  const body = prBody({ target: "app", models: ["a"], verdict: "use", findings: [], spentUsd: 0.1, cleanMachine: ["Clean-machine test: **PASS** at `abc`"] });
+  assert.match(body, /Clean-machine test: \*\*PASS\*\*/);
+  assert.match(body, /does not show that the code is safe/);
+  assert.ok(!/Clean-machine/.test(prBody({ target: "app", models: ["a"], findings: [], spentUsd: 0 })));
+});

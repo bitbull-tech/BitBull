@@ -388,9 +388,11 @@ export function revokeRoom(sandboxId: string) {
 export function grantFor(sandboxId: string, hint?: string): Grant | string {
   const g = grants.get(sandboxId);
   if (!g || Date.now() > g.until) return "That sandbox is not open to this review.";
-  const sid = resolveSession(hint);
-  const callers = sid ? [sid] : liveSessions();
-  if (!callers.length || !callers.every((c) => g.sessionIds.has(c))) return "Only the reviewers of the QA Hound run that created this sandbox can use it.";
+  // The Claude engine names the chat; OpenCode can't (its MCP servers are shared), so then it is
+  // enough that one of this run's reviewers has a turn running. The room holds only a copy of the
+  // target, network closed, and its id is a random UUID the reviewers are told.
+  const ok = hint && sessions.get(hint) ? g.sessionIds.has(hint) : liveSessions().some((c) => g.sessionIds.has(c));
+  if (!ok) return "Only the reviewers of the QA Hound run that created this sandbox can use it.";
   return g;
 }
 

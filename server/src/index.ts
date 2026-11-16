@@ -1105,6 +1105,19 @@ const SwarmSchema = z.object({
       pr: z.boolean().optional(),
       prBlocking: z.string().max(20).optional(),
       prApprove: z.boolean().optional(),
+      // Cathedral sealed rooms (cleanMachine.ts); commands and hosts are checked in hound.ts
+      sandbox: z.boolean().optional(),
+      sandboxSize: z.string().max(20).optional(),
+      cleanMachine: z
+        .object({
+          enabled: z.boolean().optional(),
+          install: z.string().max(2000).optional(),
+          build: z.string().max(2000).optional(),
+          test: z.string().max(2000).optional(),
+          allowHosts: z.union([z.array(z.string().max(253)).max(32), z.string().max(9000)]).optional(),
+          size: z.string().max(20).optional(),
+        })
+        .optional(),
     })
     .optional(),
 });
