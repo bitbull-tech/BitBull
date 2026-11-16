@@ -1502,5 +1502,14 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .res-pending { border-style: dashed; }
 .res-spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: res-spin 0.9s linear infinite; flex: none; }
 @keyframes res-spin { to { transform: rotate(360deg); } }
-@media (max-width: 1100px) { .resources { position: absolute; right: 0; top: 0; bottom: 0; z-index: 15; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25); } .chat-row { position: relative; } }
+.res-rail { flex: none; width: 34px; border: none; border-left: 1px solid var(--line); background: var(--panel); color: var(--text-2); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 0; font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.res-rail span { writing-mode: vertical-rl; }
+.res-rail:hover { color: var(--text); background: var(--panel-2); }
+@media (max-width: 1400px) { .resources { width: 260px; } }
+/* too narrow to sit beside the chat: it lies over the right edge of it, still under the top row */
+@media (max-width: 900px) { .resources { position: absolute; right: 0; top: 0; bottom: 0; z-index: 15; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25); } .chat-row { position: relative; } }
+.retry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 2px; }
+.retry-pick { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; max-width: 260px; }
+.models-note { margin: 0; padding: 8px 18px; border-bottom: 1px solid var(--line); background: var(--panel-2); color: var(--text-2); }
+
 .net-prompt.fc-done { border-color: var(--line); border-left-color: var(--ok); }

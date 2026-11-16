@@ -863,9 +863,6 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             </button>
           )}
           <ModelPicker models={models} value={model} onChange={setModel} />
-          <button className={`btn files-btn ${resOpen ? 'on' : ''}`} title="Resources: the folders, repos, uploads, integrations and skills this project is working with" aria-pressed={resOpen} onClick={() => toggleRes(!resOpen)}>
-            <IconFolder size={14} /> Resources
-          </button>
         </header>
         <div className="chat-row">
           <Chat
@@ -882,8 +879,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               setResVersion((v) => v + 1)
             }}
             onPickModel={setModel}
+            models={models}
           />
-          {resOpen && (
+          {resOpen ? (
             <ResourcesPanel
               project={currentProject}
               version={resVersion}
@@ -892,6 +890,12 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               onOpenFiles={() => setFilesFor(currentProject ?? 'general')}
               onOpenSettings={() => setSettingsOpen(true)}
             />
+          ) : (
+            // folded away: a slim tab in the right margin, under the top row
+            <button className="res-rail" title="Resources: the folders, repos, uploads, integrations and skills this project is working with" aria-label="Show resources" onClick={() => toggleRes(true)}>
+              <IconFolder size={14} />
+              <span>Resources</span>
+            </button>
           )}
         </div>
         <ActivityDock sessionId={active?.id} onOpenFull={() => (clearToasts(), setActivityOpen(true))} />

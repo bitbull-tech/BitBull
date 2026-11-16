@@ -201,8 +201,11 @@ export const claudeEngine: AgentEngine = {
           }
           case "result": {
             if (msg.subtype !== "success" || msg.is_error) {
-              const detail = "errors" in msg && Array.isArray(msg.errors) ? msg.errors.join("; ") : msg.subtype;
-              yield { type: "error", message: `Agent ended with ${detail}` };
+              const errors = "errors" in msg && Array.isArray(msg.errors) ? msg.errors.join("; ") : "";
+              // a result marked as an error can still carry the subtype "success" (the model's API
+              // refused, say): "ended with success" under a failure told nobody anything
+              const detail = errors || (msg.subtype === "success" ? "" : msg.subtype.replace(/_/g, " "));
+              yield { type: "error", message: detail ? `The agent stopped: ${detail}` : "The model didn't answer (its error is above). Try again, or pick another model." };
             }
             yield {
               type: "done",

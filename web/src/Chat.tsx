@@ -103,6 +103,7 @@ export function Chat({
   onCreate,
   onTurnDone,
   onPickModel,
+  models,
 }: {
   session: Session | null
   project: Project | null
@@ -114,6 +115,8 @@ export function Chat({
   onTurnDone: () => void
   /** "Use this model" from the home screen's advisor */
   onPickModel?: (id: string) => void
+  /** every model on offer, for "try again on another model" */
+  models?: Model[]
 }) {
   houndProject.id = project?.id ?? 'general'
   const [msgs, setMsgs] = useState<ViewMessage[]>([])
@@ -338,9 +341,12 @@ export function Chat({
     }
   }
 
-  const send = async (override?: string, opts?: { voice?: boolean }) => {
+  const send = async (override?: string, opts?: { voice?: boolean; model?: string; attachments?: string[] }) => {
     const text = (override ?? input).trim()
     if (!text || busy) return
+    // a retry runs the same request again, on this model or another one
+    const useModel = opts?.model ?? model
+    const retry = opts?.attachments !== undefined
     setNotice(null)
     let s = session
     if (!s) {
@@ -351,8 +357,8 @@ export function Chat({
     setBusy(true)
     let uploaded: Uploaded[] = []
     // a window is being shown: this message carries a picture of it as it is now
-    const toSend = [...pending]
-    if (shareRef.current?.active && !pending.some((f) => f.type === 'image/png' && Date.now() - f.lastModified < 5000)) {
+    const toSend = retry ? [] : [...pending]
+    if (!retry && shareRef.current?.active && !pending.some((f) => f.type === 'image/png' && Date.now() - f.lastModified < 5000)) {
       const frame = await shareRef.current.frame().catch(() => null)
       if (frame) toSend.push(frame)
     }
@@ -365,19 +371,21 @@ export function Chat({
         return
       }
     }
-    setInput('')
-    setPending([])
+    if (!retry) {
+      setInput('')
+      setPending([])
+    }
     stickRef.current = true
-    const paths = [...uploaded.map((u) => u.path), ...folders]
-    setFolders([])
+    const paths = retry ? opts!.attachments! : [...uploaded.map((u) => u.path), ...folders]
+    if (!retry) setFolders([])
     setMsgs((all) => [
       ...all,
       { id: `u-${Date.now()}`, role: 'user', content: text, tools: [], attachments: paths },
-      { id: `a-${Date.now()}`, role: 'assistant', content: '', tools: [], model, streaming: true, plan },
+      { id: `a-${Date.now()}`, role: 'assistant', content: '', tools: [], model: useModel, streaming: true, plan },
     ])
     voice.beginTurn(!!opts?.voice)
     try {
-      await guard(api.run(s.id, { message: text, model, attachments: paths, plan }, onEvent, {
+      await guard(api.run(s.id, { message: text, model: useModel, attachments: paths, plan }, onEvent, {
         onTurn: (turnId) => (followingRef.current = turnId),
       }))
     } finally {
@@ -489,6 +497,17 @@ export function Chat({
                 files={filesByMsg.get(m.id)}
                 filesAt={outputs}
                 onOpenPasted={openSent}
+                models={models}
+                onRetry={
+                  // the last reply only, and not while something is running
+                  m.role === 'assistant' && i === msgs.length - 1 && !busy && prevUserMsg(msgs, i)
+                    ? (id) => {
+                        const q = prevUserMsg(msgs, i)!
+                        if (id && id !== model) onPickModel?.(id)
+                        void send(q.content, { model: id ?? m.model ?? model, attachments: q.attachments ?? [] })
+                      }
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -771,6 +790,9 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 }
 
 /** Nearest user message before index i — the prompt this reply answers. */
+/** A reply that is only an error: nothing useful came back, so offer to run the request again. */
+const failed = (m: ViewMessage) => m.role === 'assistant' && (!!m.error || /^\s*(API Error|Error)\b/.test(m.content) || (!m.content.trim() && !m.tools.length))
+
 function prevUserMsg(msgs: ViewMessage[], i: number): ViewMessage | undefined {
   for (let j = i - 1; j >= 0; j--) if (msgs[j].role === 'user') return msgs[j]
   return undefined
@@ -792,8 +814,13 @@ function MessageView({
   files,
   filesAt,
   onOpenPasted,
+  models,
+  onRetry,
 }: {
   m: ViewMessage
+  /** run the request behind this reply again: on the same model (no id) or on the one given */
+  onRetry?: (model?: string) => void
+  models?: Model[]
   /** open a pasted-text attachment of a sent message */
   onOpenPasted?: (path: string) => void
   sessionId?: string
@@ -895,6 +922,34 @@ function MessageView({
           ) : null}
         </div>
         {m.error && <div className="error">{m.error}</div>}
+        {!m.streaming && onRetry && failed(m) && (
+          <div className="retry">
+            <span className="muted small">That didn't get an answer{/\b429\b|cooling|rate.?limit|overloaded|temporarily/i.test(`${m.content} ${m.error ?? ''}`) ? ': the model is busy or rate-limited right now' : ''}.</span>
+            <button className="btn sm primary" onClick={() => onRetry()}>
+              Try again{m.model ? ` on ${m.model}` : ''}
+            </button>
+            {models && models.length > 1 && (
+              <select
+                className="retry-pick"
+                value=""
+                aria-label="Try again on another model"
+                onChange={(e) => {
+                  if (e.target.value) onRetry(e.target.value)
+                }}
+              >
+                <option value="">or on another model…</option>
+                {models
+                  .filter((x) => x.id !== m.model)
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name || x.id}
+                      {x.gateway === 'ditto-router' ? ' · Ditto Router' : ''}
+                    </option>
+                  ))}
+              </select>
+            )}
+          </div>
+        )}
         {!m.streaming && files && filesAt && <ReplyFiles files={files} projectId={filesAt.projectId} host={filesAt.host} />}
         {!m.streaming && (
           <div className="msg-foot">

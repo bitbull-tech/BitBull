@@ -584,7 +584,7 @@ export interface VoiceInfo {
 
 export const api = {
   config: () => req<AppConfig>('/api/config'),
-  models: (refresh = false) => req<{ models: Model[] }>(`/api/models${refresh ? '?refresh=1' : ''}`),
+  models: (refresh = false) => req<{ models: Model[]; router?: { configured: boolean; count: number; error: string | null } }>(`/api/models${refresh ? '?refresh=1' : ''}`),
   model: (id: string) => req<{ model: ModelDetail }>(`/api/models/${encodeURIComponent(id)}`),
   sessions: () => req<{ sessions: Session[] }>('/api/sessions'),
   session: (id: string) =>

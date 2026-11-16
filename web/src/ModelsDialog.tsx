@@ -53,6 +53,14 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
   const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: 'name', dir: 1 })
   const [only, setOnly] = useState<{ tools: boolean; vision: boolean; tee: boolean }>({ tools: false, vision: false, tee: false })
   const [viaPick, setViaPick] = useState<Via>(savedVia)
+  // Ditto Router: on offer, or why not. With none of its models in the list the filter is not shown, which said nothing.
+  const [router, setRouter] = useState<{ configured: boolean; count: number; error: string | null } | null>(null)
+  useEffect(() => {
+    void api
+      .models()
+      .then((r) => setRouter(r.router ?? null))
+      .catch(() => {})
+  }, [])
   const via: Via = viaPick !== 'all' && !models.some((m) => viaOf(m) === viaPick) ? 'all' : viaPick
   const dittoCount = models.filter((m) => viaOf(m) === 'ditto').length
   const [sel, setSel] = useState<string | null>(current ?? null)
@@ -143,6 +151,16 @@ export function ModelsDialog({ models, current, onPick, onClose }: { models: Mod
             <IconX />
           </button>
         </header>
+        {router && dittoCount === 0 && (
+          <p className="models-note small">
+            <b>Ditto Router:</b>{' '}
+            {!router.configured
+              ? 'not connected, so only SayGM models are listed. Settings → Integrations → Ditto → Connect Ditto adds its models here (a Ditto key pasted by hand gives memory only, not the Router).'
+              : router.error
+                ? `connected, but its model list couldn't be loaded: ${router.error}`
+                : 'connected, but its endpoint lists no models. Check the endpoint on developer.heyditto.ai, or Connect Ditto again.'}
+          </p>
+        )}
         <div className="models-bar">
           <label className="models-search">
             <IconSearch size={15} />

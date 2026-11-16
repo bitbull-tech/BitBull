@@ -137,8 +137,8 @@ linked folder is still mounted in the one sandbox, so it is not a wall between p
 
 ### The Resources panel
 
-**Resources** (top bar) opens a panel down the right of the chat showing what this project is
-working with: its linked folders (with **Link a folder…**, live progress while one is being
+**Resources** sits in the right margin, under the top row: a panel showing what this project is
+working with (fold it to a slim tab with its ×, and click the tab to bring it back): its linked folders (with **Link a folder…**, live progress while one is being
 linked, and **Allow changes**), the repositories and uploads in its workspace, its integrations,
 the installed skills and the web addresses you have allowed. It is open by default on a wide
 screen and remembers whether you closed it.

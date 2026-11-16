@@ -43,7 +43,7 @@ import { logTranscription, speak, transcribe, voiceStatus } from "./voice.js";
 import { atlasWorkflows, integrations, probeIntegrations } from "./integrations.js";
 import { dittoEnabled, listDittoTools, probeDitto, resetDitto } from "./ditto.js";
 import { reloadOpencode, stopOpencode } from "./engines/opencode.js";
-import { listModels, modelDetail, publicModels } from "./models.js";
+import { listModels, modelDetail, publicModels, routerState } from "./models.js";
 import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
@@ -150,7 +150,10 @@ app.get("/api/config", async (c) =>
   }),
 );
 
-app.get("/api/models", async (c) => c.json({ models: await publicModels(c.req.query("refresh") === "1") }));
+app.get("/api/models", async (c) => {
+  const models = await publicModels(c.req.query("refresh") === "1");
+  return c.json({ models, router: routerState() });
+});
 
 /** One model in full, including the gateway's raw record (the Models view). */
 // ---------- voice (docs/VOICE.md) ----------

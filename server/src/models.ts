@@ -153,16 +153,29 @@ export function fromRouter(m: RouterModel, prices = new Map<string, NonNullable<
 }
 
 /** Every chat model: SayGM's, then the Router endpoint's when a Router key is set. */
+let routerError: string | null = null;
+let routerCount = 0;
+/** Whether Ditto Router's models are on offer, and if not, why: for the Models view, which otherwise just shows none. */
+export const routerState = () => ({ configured: !!config.router.key, count: config.router.key ? routerCount : 0, error: config.router.key ? routerError : null });
+
 export async function chatModels(force = false): Promise<ModelInfo[]> {
   const saygm = await listModels(force);
   if (!config.router.key) return saygm;
   const [router, prices] = await Promise.all([
-    routerModels(force).catch((err) => {
-      console.error("[router] Couldn't load the Ditto Router model list:", errText(err));
-      return cachedRouterModels();
-    }),
+    routerModels(force).then(
+      (list) => {
+        routerError = null;
+        return list;
+      },
+      (err) => {
+        routerError = errText(err).slice(0, 240);
+        console.error("[router] Couldn't load the Ditto Router model list:", errText(err));
+        return cachedRouterModels();
+      },
+    ),
     routerPrices(),
   ]);
+  routerCount = router.length;
   return [...saygm, ...router.map((m) => fromRouter(m, prices))];
 }
 

@@ -16,7 +16,7 @@ const KEY = 'bitbull.resources.open'
 export const resourcesDefaultOpen = () => {
   try {
     const v = localStorage.getItem(KEY)
-    return v === null ? window.innerWidth >= 1500 : v === '1'
+    return v === null ? window.innerWidth >= 1200 : v === '1'
   } catch {
     return false
   }
@@ -317,11 +317,12 @@ export function ResourcesPanel({
               ))}
             </div>
           ) : (
-            <p className="muted small">None switched on for this project. Tick them in the project's settings.</p>
+            <p className="muted small">None switched on for this project. Tick the ones it needs in the project's settings.</p>
           )
         ) : (
-          <p className="muted small">Chats outside a project use the integrations switched on in Settings.</p>
+          <p className="muted small">None: integrations are switched on per project, and chats outside a project have none.</p>
         )}
+        <p className="muted small">SayGM (models) and Ditto (memory, and Ditto Router's models when connected) are the only ones on everywhere.</p>
       </Section>
 
       <Section title="Skills" count={skills.length}>
@@ -342,7 +343,7 @@ export function ResourcesPanel({
       </Section>
 
       <Section
-        title="Web addresses you allowed"
+        title="Allowed web addresses"
         count={approved.length}
         action={
           <button className="link small" onClick={onOpenSettings}>
