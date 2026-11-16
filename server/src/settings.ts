@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { VAULT_ONLY } from "./config.js";
 import { config, effectiveCathedralCap, githubTokenKind, paths, readFileOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
 import { record } from "./activity.js";
 import { resetDitto } from "./ditto.js";
@@ -47,6 +48,8 @@ export async function updateSettings(values: Record<string, string | null>, opts
     const opts = EDITABLE[k].options;
     if (v && opts && !opts.includes(v)) throw new Error(`${k} must be one of: ${opts.join(", ")}`);
     if (v && /[\r\n]/.test(v)) throw new Error(`${k} can't contain line breaks`);
+    if (VAULT_ONLY.has(k) && v && !vaultUnlocked())
+      throw new Error(`${k} is kept only in the vault, and the vault is locked. Unlock it first (Settings, top), or put the key in .env.`);
     if (k === "UPLOAD_MAX_MB" && v && !(Number(v) > 0)) throw new Error("UPLOAD_MAX_MB must be a positive number");
     if (k === "TELEGRAM_BOT_TOKEN" && v && !/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(v.trim())) throw new Error("That doesn't look like a Telegram bot token (it should look like 123456789:AA…). Copy it again from @BotFather.");
     // Reject a bad encryption key here rather than at the first upload, when it is too late

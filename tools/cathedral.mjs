@@ -14,7 +14,7 @@
 // The logic is run(argv, {env, fetch, sleep}); the command line at the bottom calls it with the
 // real fetch. Tests call run() with a fake fetch, so the https rule is never relaxed for them.
 import { createHash, randomInt } from "node:crypto";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { effectiveCathedralCap } from "./cathedral-cap.mjs";
 
@@ -678,7 +678,10 @@ async function cmdGet(ctx, { id, flags }) {
   if (max === null) throw new Refusal("invalid_max_bytes", "--max-bytes must be 1 to 209715200 (200 MiB)");
   const r = await api(ctx, "GET", `/v1/sandboxes/${id}/files?path=${encodeURIComponent(flags.path)}&max_bytes=${max}`);
   if (!r.ok) return r.error;
-  writeFileSync(flags.out, r.buf);
+  // a new file next to the target, then a rename: a link planted at --out is replaced, never followed
+  const tmpOut = `${flags.out}.part-${randomInt(1e9)}`;
+  writeFileSync(tmpOut, r.buf, { flag: "wx" });
+  renameSync(tmpOut, flags.out);
   return { ok: true, path: flags.path, out: flags.out, bytes: r.buf.length, sha256: hex(r.buf) };
 }
 

@@ -44,6 +44,8 @@ const root = path.resolve(import.meta.dirname, "../..");
 // loaded by path so the server typecheck does not need to resolve files outside src
 const loadOutside = (rel: string): Promise<any> => import(pathToFileURL(path.join(root, rel)).href);
 const capMod = await loadOutside("tools/cathedral-cap.mjs");
+// The key is vault-only (config.ts VAULT_ONLY): these tests run with the vault unlocked
+unlockVault("c".repeat(64));
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 
@@ -110,16 +112,23 @@ test("the sandbox guard masks the key in tool output", async () => {
 
 // ---- 3. vault ----
 
-test("vault: CATHEDRAL_API_KEY is a vault key; encrypted when unlocked, in settings.local.json when locked (existing behaviour)", async () => {
+test("vault: CATHEDRAL_API_KEY is vault-only: refused while the vault is locked, ignored in settings.local.json, encrypted when unlocked", async () => {
   assert.ok(VAULT_KEYS.has("CATHEDRAL_API_KEY"));
   assert.ok(!VAULT_KEYS.has("CATHEDRAL_MAX_SPEND_USD"));
 
-  // locked: lands in settings.local.json like every other vault key today
+  // locked: never written where the agent's shell can read it
+  lockVault();
   assert.equal(vaultUnlocked(), false);
-  await updateSettings({ CATHEDRAL_API_KEY: KEY });
-  const overrides = JSON.parse(readFileSync(path.join(dir, "settings.local.json"), "utf8"));
-  assert.equal(overrides.CATHEDRAL_API_KEY, KEY);
-  assert.ok(!existsSync(path.join(dir, "vault.json")) || !readFileSync(path.join(dir, "vault.json"), "utf8").includes(KEY));
+  await assert.rejects(updateSettings({ CATHEDRAL_API_KEY: KEY }), /vault is locked/);
+  assert.ok(!existsSync(path.join(dir, "settings.local.json")) || !readFileSync(path.join(dir, "settings.local.json"), "utf8").includes(KEY));
+  // planted there by hand (or by the agent): not read
+  const { writeOverrides } = await import("./config.js");
+  writeOverrides({ CATHEDRAL_API_KEY: KEY });
+  reloadConfig();
+  assert.equal(config.integrations.cathedral.apiKey, "");
+  writeOverrides({});
+  // removing it works locked
+  await updateSettings({ CATHEDRAL_API_KEY: null });
 
   // unlocked: encrypted at rest, gone from settings.local.json
   unlockVault("c".repeat(64));
@@ -131,7 +140,6 @@ test("vault: CATHEDRAL_API_KEY is a vault key; encrypted when unlocked, in setti
   assert.ok(!("CATHEDRAL_API_KEY" in after));
 
   await updateSettings({ CATHEDRAL_API_KEY: null });
-  lockVault();
 });
 
 // ---- 4. cap rule ----

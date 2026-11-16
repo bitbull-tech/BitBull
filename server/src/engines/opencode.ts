@@ -462,7 +462,8 @@ export function promptTools(o: { plan?: boolean; reviewSandbox?: boolean; enable
     // there, and only there (cathedral.ts grants the room to the run's reviewer chats). OpenCode
     // matches these keys as wildcards and the longer, more specific key wins, so this beats
     // "cathedral_*": false above. Only when the project has Cathedral switched on.
-    ...(o.plan && o.reviewSandbox && enabled.has("cathedral") ? { cathedral_review_exec: true } : {}),
+    // Everywhere else it is off, including ordinary chats in a Cathedral project.
+    cathedral_review_exec: !!(o.plan && o.reviewSandbox && enabled.has("cathedral")),
   };
 }
 

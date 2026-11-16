@@ -87,6 +87,13 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   ENABLE_LSP: { options: ["true", "false"] },
 };
 
+/**
+ * Secrets that live only in the vault (or .env), never in settings.local.json: the agent's shell
+ * can read that file. Cathedral's key would let an agent call the API directly, past the approval
+ * card and the per-project switch, so a locked vault means it can't be saved from the UI.
+ */
+export const VAULT_ONLY = new Set(["CATHEDRAL_API_KEY"]);
+
 export const overridesFile = path.join(DATA_DIR, "settings.local.json");
 configureVault(path.join(DATA_DIR, "vault.json"));
 /** process.env as it came from .env / the container, before any UI overrides */
@@ -103,7 +110,7 @@ export function readFileOverrides(): Record<string, string> {
     const ignored: string[] = [];
     for (const [k, v] of Object.entries(raw)) {
       if (typeof v !== "string") continue;
-      if (k in EDITABLE) out[k] = v;
+      if (k in EDITABLE && !VAULT_ONLY.has(k)) out[k] = v;
       else ignored.push(k);
     }
     if (ignored.length && !warnedIgnored) {

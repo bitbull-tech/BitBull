@@ -130,6 +130,8 @@ export interface Room {
   task: string;
   size: string;
   internet: boolean;
+  /** QA Hound and clean-machine rooms are the run's alone: the chat tools never reach them */
+  purpose: CreatePurpose;
   createdAt: string;
   deletedAt?: string;
 }
@@ -139,6 +141,7 @@ const rooms = new Map<string, Room>();
 export function ownRoom(projectId: string, id: string): Room | string {
   const r = rooms.get(id);
   if (!r || r.projectId !== projectId) return `Sandbox ${id} was not created from this project in this run of BitBull, so it can't be used from here.`;
+  if (r.purpose !== "chat") return `Sandbox ${id} belongs to a QA Hound run; only that run uses it.`;
   if (r.deletedAt) return `Sandbox ${id} has been deleted.`;
   return r;
 }
@@ -299,7 +302,7 @@ export async function createRoom(input: CreateInput): Promise<Record<string, any
   else if (input.allowHosts?.length) argv.push("--allow", input.allowHosts.join(","));
   const out = (await helper(argv)).out;
   if (out.ok && typeof out.sandbox_id === "string") {
-    rooms.set(out.sandbox_id, { id: out.sandbox_id, projectId: project.id, sessionId: input.sessionId ?? "", task, size: input.size, internet: input.internet, createdAt: new Date().toISOString() });
+    rooms.set(out.sandbox_id, { id: out.sandbox_id, projectId: project.id, sessionId: input.sessionId ?? "", task, size: input.size, internet: input.internet, purpose: input.purpose, createdAt: new Date().toISOString() });
     record({ level: "info", source: "cathedral", message: `Cathedral sandbox ${out.sandbox_id} created (${input.size}, internet ${input.internet ? "on" : "off"})`, ...(session ? { sessionId: session.id, sessionTitle: session.title } : {}) });
   }
   return out;
@@ -352,6 +355,11 @@ export function namedFile(workspace: string, rel: string, mustExist: boolean): s
       return { error: `${clean} does not exist in this workspace.` };
     }
     if (!inside(real)) return { error: `${clean} leads outside this workspace.` };
+    // the same rules for the file a link leads to: a cloned repo can ship notes.txt -> ../.env
+    const realParts = path.relative(wsReal, real).split(path.sep);
+    if (realParts.some((p) => p.toLowerCase() === ".git")) return { error: `${clean} leads into .git, which is never sent.` };
+    const realBase = realParts[realParts.length - 1];
+    if (SECRET_NAME.test(realBase) && !ENV_TEMPLATES.has(realBase.toLowerCase())) return { error: `${clean} leads to ${realBase}, which holds secrets and is never sent.` };
     if (!statSync(real).isFile()) return { error: `${clean} is not a file. Name each file to send.` };
     return real;
   }
@@ -585,7 +593,8 @@ function build(hint: string | undefined) {
       async ({ sandbox_id }) => {
         const c = ctx();
         if (typeof c === "string") return text(c);
-        if (!ID_RE.test(sandbox_id) || rooms.get(sandbox_id)?.projectId !== c.project.id) return text(`Sandbox ${sandbox_id} was not created from this project in this run of BitBull.`);
+        const own = rooms.get(sandbox_id);
+        if (!ID_RE.test(sandbox_id) || own?.projectId !== c.project.id || own.purpose !== "chat") return text(`Sandbox ${sandbox_id} was not created from this project's chats in this run of BitBull.`);
         return text((await helper([cmd, sandbox_id])).out);
       },
     );
@@ -597,7 +606,7 @@ function build(hint: string | undefined) {
     async () => {
       const c = ctx();
       if (typeof c === "string") return text(c);
-      const mine = [...rooms.values()].filter((r) => r.projectId === c.project.id);
+      const mine = [...rooms.values()].filter((r) => r.projectId === c.project.id && r.purpose === "chat");
       return text({ ok: true, sandboxes: mine.map((r) => ({ id: r.id, size: r.size, internet: r.internet, created_at: r.createdAt, deleted: !!r.deletedAt })) });
     },
   );

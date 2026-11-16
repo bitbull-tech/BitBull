@@ -216,7 +216,7 @@ test("4. internet on shows on the card; a host list means allowlist and never in
       C.decideCreate(p.id, "approve");
     }
   }, 5);
-  const out = await C.createRoom({ purpose: "clean-machine", projectId: on.id, sessionId: chatOn.id, size: "sealed-1x2", lifetimeSeconds: 300, internet: false, allowHosts: ["pypi.org", "files.pythonhosted.org"], reason: "install", op: "c5" });
+  const out = await C.createRoom({ purpose: "chat", projectId: on.id, sessionId: chatOn.id, size: "sealed-1x2", lifetimeSeconds: 300, internet: false, allowHosts: ["pypi.org", "files.pythonhosted.org"], reason: "install", op: "c5" });
   assert.equal(out.ok, true, JSON.stringify(out));
   assert.deepEqual(seen.allowHosts, ["pypi.org", "files.pythonhosted.org"]);
   assert.equal(posts()[0].json.network, "allowlist");
@@ -325,4 +325,32 @@ test("review_exec from OpenCode (no session header): allowed while one of the ru
   setRunningSessions(() => [chatOn.id]);
   assert.match(String(await call("review_exec", { sandbox_id: ID, command: "pytest", op: "r4" })), /Only the reviewers/);
   C.revokeRoom(ID);
+});
+
+test("rooms made for QA Hound or a clean-machine test are the run's alone: the chat tools can't exec, upload, delete or list them", async () => {
+  C._resetCathedral();
+  answerNext("approve");
+  const made = await C.createRoom({ purpose: "clean-machine", projectId: on.id, sessionId: chatOn.id, size: "sealed-1x2", lifetimeSeconds: 300, internet: false, reason: "x", op: "q1" });
+  assert.equal(made.ok, true);
+  reqs = [];
+  for (const [tool, args] of [
+    ["exec", { sandbox_id: ID, command: "rm -rf /work/src", op: "x1" }],
+    ["upload", { sandbox_id: ID, file: "repo/app.py", path: "/work/src/app.py", op: "x2" }],
+    ["delete", { sandbox_id: ID }],
+    ["status", { sandbox_id: ID }],
+  ] as const) assert.match(String(await call(tool, args, chatOn.id)), /QA Hound run|this project's chats/, tool);
+  assert.deepEqual((await call("list", {}, chatOn.id)).sandboxes, []);
+  assert.equal(reqs.length, 0);
+});
+
+test("upload checks the file a link leads to: a repo's notes.txt -> ../.env is refused", async () => {
+  writeFileSync(path.join(ws, ".env"), "OWNER_TOKEN=secret");
+  symlinkSync(path.join(ws, ".env"), path.join(ws, "repo", "notes.txt"));
+  mkdirSync(path.join(ws, ".git"), { recursive: true });
+  writeFileSync(path.join(ws, ".git", "config"), "[credential]");
+  symlinkSync(path.join(ws, ".git", "config"), path.join(ws, "repo", "readme.txt"));
+  for (const f of ["repo/notes.txt", "repo/readme.txt"]) {
+    const r = C.namedFile(ws, f, true);
+    assert.equal(typeof r, "object", f);
+  }
 });

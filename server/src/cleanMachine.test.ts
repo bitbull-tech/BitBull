@@ -318,11 +318,11 @@ test("OpenCode tools: plan mode turns MCP off; review_exec only for a sandboxed 
   const plain = promptTools({ ...base, plan: true });
   assert.equal(plain["cathedral_*"], false);
   assert.equal(plain["bitbull_*"], false);
-  assert.equal(plain.cathedral_review_exec, undefined);
+  assert.equal(plain.cathedral_review_exec, false, "off outside a sandboxed review, ordinary chats included");
   const sandboxed = promptTools({ ...base, plan: true, reviewSandbox: true });
   assert.equal(sandboxed["cathedral_*"], false, "the rest of Cathedral stays off");
   assert.equal(sandboxed.cathedral_review_exec, true);
   // never outside plan mode (the chat tools already have it), never without Cathedral on for the project
-  assert.equal(promptTools({ ...base, plan: false, reviewSandbox: true }).cathedral_review_exec, undefined);
-  assert.equal(promptTools({ ...base, enabledMcp: [], plan: true, reviewSandbox: true }).cathedral_review_exec, undefined);
+  assert.equal(promptTools({ ...base, plan: false, reviewSandbox: true }).cathedral_review_exec, false, "off outside a sandboxed review, ordinary chats included");
+  assert.equal(promptTools({ ...base, enabledMcp: [], plan: true, reviewSandbox: true }).cathedral_review_exec, false, "off outside a sandboxed review, ordinary chats included");
 });

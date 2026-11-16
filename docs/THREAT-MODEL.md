@@ -190,8 +190,10 @@ as the owner. Unattended runs can neither propose nor apply.
 `server/src/cathedral.ts`, `tools/cathedral.mjs`, `skills/cathedral-sandbox`. For running and checking
 code the owner doesn't trust or was given, away from the owner's keys, workspace and network. It adds
 a key that can spend money and a destination files and commands can be sent to.
-- **The key stays on the server.** It is a vault setting, blanked in the agent's shells and kept out
-  of both engines' environment. The agent has tools on BitBull's local MCP route `/mcp/cathedral`
+- **The key stays on the server.** It is vault-only (refused while the vault is locked, never read
+  from `settings.local.json`; or set in .env), blanked in the agent's shells and kept out of both
+  engines' environment. Within R1's limit: the agent shares the server's uid, so server memory is
+  reachable through /proc by a determined agent. The agent has tools on BitBull's local MCP route `/mcp/cathedral`
   (behind the startup token); BitBull makes every call. The spend limit per sandbox
   (`CATHEDRAL_MAX_SPEND_USD`, up to 25.00, default 0.50) and `CATHEDRAL_ALLOW_UNCAPPED_KEY` are
   .env-only, so nothing the agent can write in the data folder changes them.

@@ -288,13 +288,20 @@ const tempDir = () => mkdtempSync(path.join(tmpdir(), "bitbull-hound-"));
 const fileSha = (f: string) => createHash("sha256").update(readFileSync(f)).digest("hex");
 
 /** `git archive` of HEAD (or of one path at HEAD), written outside the workspace. */
-async function archive(repoDir: string, out: string, sub: string): Promise<void> {
-  // HEAD:<dir> roots the tar at that folder; a file keeps its path (a blob can't be archived alone)
-  let args = ["archive", "--format=tar", "-o", out, "HEAD"];
+async function archive(repoDir: string, out: string, sub: string, rev = "HEAD"): Promise<void> {
+  // <rev>:<dir> roots the tar at that folder; a file keeps its path (a blob can't be archived alone)
+  let args = ["archive", "--format=tar", "-o", out, rev];
   if (sub) {
-    const type = (await git(repoDir, ["cat-file", "-t", `HEAD:${sub}`])).trim();
-    args = type === "tree" ? ["archive", "--format=tar", "-o", out, `HEAD:${sub}`] : ["archive", "--format=tar", "-o", out, "HEAD", "--", sub];
+    const type = (await git(repoDir, ["cat-file", "-t", `${rev}:${sub}`])).trim();
+    args = type === "tree" ? ["archive", "--format=tar", "-o", out, `${rev}:${sub}`] : ["archive", "--format=tar", "-o", out, rev, "--", sub];
   }
+  // a committed .env file would go to the room through Cathedral's API in plaintext: refuse
+  const listed = (await git(repoDir, ["ls-tree", "-r", "--name-only", "-z", rev, ...(sub ? ["--", sub] : [])], 60_000)).split("\0").filter(Boolean);
+  const secret = listed.find((f) => {
+    const base = f.split("/").pop() ?? "";
+    return SECRET_NAME.test(base) && !ENV_TEMPLATES.has(base.toLowerCase());
+  });
+  if (secret) throw new Error(`The commit holds ${secret}, a .env file; it is not sent to a sandbox. Remove it from the repo first.`);
   await git(repoDir, args, 300_000);
   if (statSync(out).size > MAX_SNAPSHOT_BYTES) throw new Error("The snapshot is over 200 MiB, the limit for one upload.");
 }
@@ -318,7 +325,7 @@ export async function snapshotTarget(ws: string, target: string): Promise<Snapsh
       }
       const sub = path.relative(repoDir, realpathSync(abs)).split(path.sep).join("/");
       try {
-        await archive(repoDir, file, sub);
+        await archive(repoDir, file, sub, st.commit);
         return { file, bytes: statSync(file).size, sha256: fileSha(file), source: { kind: "git", repo: st.rel, commit: st.commit, path: sub || ".", dirty: st.dirty }, cleanup };
       } catch {
         // not committed at HEAD (a new folder, say): fall back to the folder as it is
@@ -561,7 +568,8 @@ export async function runCleanMachine(
   let early: string | undefined;
   try {
     try {
-      await archive(repoDir, tar, "");
+      // the commit the certificate names, not whatever HEAD is by now
+      await archive(repoDir, tar, "", st.commit);
       tarSha = fileSha(tar);
       tarBytes = statSync(tar).size;
     } catch (e) {
@@ -798,7 +806,7 @@ export function renderCertificate(c: Certificate): string {
     "   ```",
     "",
     "   The verdict is PASS, FAIL or NOT PROVEN (NOT PROVEN without the pinned key and ARK). Take the measurement from https://cathedral.computer/approved-measurements.json; without --expected-measurement the build is not checked.",
-    "3. The public create receipt and the host attestation linked above need no account. Compare the receipt chain head and the command hashes here with the bundle.",
+    "3. The public create receipt and the host attestation linked above need no account. Compare the command hashes here with the exec receipts in the bundle. The bundle was taken before the room was deleted, so its chain ends one receipt before the head above (the delete).",
   );
   L.push("", "## What this shows", "");
   L.push(
@@ -810,6 +818,9 @@ export function renderCertificate(c: Certificate): string {
     "- That the code is safe or correct. Passing commands show only that they exited 0 here.",
     "- That the image digest above is the image that ran, unless the guest's create receipt carries it (open the public create receipt and compare its image_digest).",
     "- That the receipt chain is complete at its end: the head is not signed, so receipts cut from the tail would not show.",
+    "- That the room had a machine to itself: rooms on one sealed host share one guest and are kept apart by gVisor, not by hardware.",
+    "- That every room receipt was kept: the guest's own receipts are those Cathedral kept, and gaps in their sequence are not checked.",
+    "- Anything for receipts signed before the host last restarted: they can't be checked against its current attestation.",
     "- Anything Cathedral's verify did not check. It lists:",
     ...(c.verify.notChecked.length ? c.verify.notChecked.map((x) => `  - ${cell(x)}`) : ["  - (verify gave no list)"]),
   );
