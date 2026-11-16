@@ -194,13 +194,13 @@ export function describeSettings() {
       rows: [
         row("CATHEDRAL_API_KEY", "API key", config.integrations.cathedral.apiKey, {
           secret: true,
-          hint: "Use a Cathedral key with its own spending cap.",
+          hint: "Use a Cathedral key with its own spending cap. BitBull holds it and makes every call; the agent never gets it. Turn Cathedral on per project in the project's settings.",
         }),
         row("CATHEDRAL_MAX_SPEND_USD", "Spend limit per sandbox (USD)", effectiveCathedralCap(config.integrations.cathedral.maxSpendUsd).toFixed(2), {
-          hint: "A positive amount up to 25.00; anything else means 0.50. The agent's helper refuses to create a sandbox that could hold more, or more than the key has left.",
+          hint: "Set in .env only (the agent's shell can write the data folder, so this can't live there). A positive amount up to 25.00; anything else means 0.50. BitBull refuses a sandbox that could hold more, or more than the key has left.",
         }),
         row("CATHEDRAL_ALLOW_UNCAPPED_KEY", "Allow a key with no spending cap", config.integrations.cathedral.allowUncapped ? "on" : "off", {
-          hint: "off: the helper refuses to create sandboxes with a key that has no cap of its own. on: it creates with such a key, limited only by the amount above. A key's own cap is the real backstop, so leave this off.",
+          hint: "Set in .env only. off: BitBull refuses to create sandboxes with a key that has no cap of its own. A key's own cap is the real backstop, so leave this off.",
         }),
       ],
     },

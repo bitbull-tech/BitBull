@@ -53,12 +53,16 @@ test("registry: unconfigured, then configured; the key is in no value the settin
   const before = integrations().find((i) => i.id === "cathedral");
   assert.ok(before, "cathedral is in the registry");
   assert.equal(before.configured, false);
-  assert.equal(before.global, true);
+  assert.equal(before.global, undefined, "per project: the owner ticks it in a project's settings");
   assert.equal(before.mcp, undefined);
 
-  await updateSettings({ CATHEDRAL_API_KEY: KEY, CATHEDRAL_MAX_SPEND_USD: "1.5" });
+  process.env.CATHEDRAL_MAX_SPEND_USD = "1.5";
+  await updateSettings({ CATHEDRAL_API_KEY: KEY });
   const after = integrations().find((i) => i.id === "cathedral")!;
   assert.equal(after.configured, true);
+  // the engines get BitBull's local relay, never the key
+  assert.match(after.mcp!.url, /^http:\/\/127\.0\.0\.1:\d+\/mcp\/cathedral$/);
+  assert.ok(!JSON.stringify(after.mcp).includes(KEY));
   const keyEnv = after.env.find((e) => e.key === "CATHEDRAL_API_KEY")!;
   assert.equal(keyEnv.secret, true, "index.ts masks every env entry flagged secret");
 
@@ -66,9 +70,11 @@ test("registry: unconfigured, then configured; the key is in no value the settin
   assert.deepEqual(rows.map((r) => r.env), ["CATHEDRAL_API_KEY", "CATHEDRAL_MAX_SPEND_USD", "CATHEDRAL_ALLOW_UNCAPPED_KEY"]);
   const keyRow = rows[0];
   assert.equal(keyRow.secret, true);
-  assert.equal(keyRow.hint, "Use a Cathedral key with its own spending cap.");
-  assert.ok(rows.every((r) => r.editable));
-  assert.deepEqual(rows[2].options, ["off", "on"]);
+  assert.match(keyRow.hint ?? "", /own spending cap/);
+  assert.equal(keyRow.editable, true);
+  // the limit and the switch are .env-only: the agent's shell can write settings.local.json
+  assert.ok(!rows[1].editable && !rows[2].editable);
+  assert.equal(rows[1].value, "1.50");
   assert.match(rows[2].hint ?? "", /no cap of its own/i);
   assert.ok(!JSON.stringify(describeSettings()).includes(KEY));
 
@@ -76,7 +82,8 @@ test("registry: unconfigured, then configured; the key is in no value the settin
   const shown = after.env.map((e) => ({ key: e.key, value: e.secret ? (e.value ? `${e.value.slice(0, 4)}…${e.value.slice(-4)}` : "") : e.value }));
   assert.ok(!JSON.stringify(shown).includes(KEY));
 
-  await updateSettings({ CATHEDRAL_API_KEY: null, CATHEDRAL_MAX_SPEND_USD: null });
+  delete process.env.CATHEDRAL_MAX_SPEND_USD;
+  await updateSettings({ CATHEDRAL_API_KEY: null });
   assert.equal(integrations().find((i) => i.id === "cathedral")!.configured, false);
 });
 
@@ -97,7 +104,7 @@ test("the sandbox guard masks the key in tool output", async () => {
   assert.equal(out.output, "curl said [REDACTED]");
   const env: Record<string, string> = {};
   await hooks["shell.env"]({}, { env });
-  assert.equal(env.CATHEDRAL_API_KEY, undefined, "given to the agent on purpose: not blanked");
+  assert.equal(env.CATHEDRAL_API_KEY, "", "held by BitBull, never the agent's: blanked in every shell");
   delete process.env.CATHEDRAL_API_KEY;
 });
 
@@ -145,10 +152,13 @@ test("cap rule: server and helper agree and give the expected number", () => {
 
 // ---- 5. engine environment ----
 
-test("the Claude engine's cleanEnv() has the key after a save and loses it when removed", async () => {
+test("the Claude engine's cleanEnv() never has the key, set or not", async () => {
   assert.equal(cleanEnv().CATHEDRAL_API_KEY, undefined);
   await updateSettings({ CATHEDRAL_API_KEY: KEY });
-  assert.equal(cleanEnv().CATHEDRAL_API_KEY, KEY);
+  process.env.CATHEDRAL_MAX_SPEND_USD = "2";
+  assert.equal(cleanEnv().CATHEDRAL_API_KEY, undefined);
+  assert.equal(cleanEnv().CATHEDRAL_MAX_SPEND_USD, undefined);
+  delete process.env.CATHEDRAL_MAX_SPEND_USD;
   await updateSettings({ CATHEDRAL_API_KEY: null });
   assert.equal(cleanEnv().CATHEDRAL_API_KEY, undefined);
 });
@@ -247,14 +257,16 @@ test("probe: no api_key block or a null budget is red unless the uncapped switch
     assert.equal((r as any).level, "red");
     assert.match(r.detail, /this key has no spending cap; the integration will not create sandboxes/i);
   }
-  await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" });
+  process.env.CATHEDRAL_ALLOW_UNCAPPED_KEY = "on";
+  reloadConfig();
   serve(() => json(200, uncapped), () => json(200, catalogReady));
   const r = await probeCathedral();
   assert.equal(r.ok, true);
   assert.equal((r as any).level, "amber");
   assert.match(r.detail, /no spending cap/i);
   assert.match(r.detail, /switch/i);
-  await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: null });
+  delete process.env.CATHEDRAL_ALLOW_UNCAPPED_KEY;
+  reloadConfig();
 });
 
 test("probe: sealed unavailable gives its reason as given; sold out for Cathedral's sold-out reasons", async () => {
@@ -309,19 +321,39 @@ test("probe: refuses a non-https CATHEDRAL_API_URL without sending the key", asy
   await updateSettings({ CATHEDRAL_API_KEY: null });
 });
 
-test("config: URL is env-only, defaults to cathedral.computer, uncapped switch defaults off", async () => {
-  const { EDITABLE } = await import("./config.js");
-  assert.ok("CATHEDRAL_API_KEY" in EDITABLE && "CATHEDRAL_MAX_SPEND_USD" in EDITABLE && "CATHEDRAL_ALLOW_UNCAPPED_KEY" in EDITABLE);
-  assert.ok(!("CATHEDRAL_API_URL" in EDITABLE));
+test("config: URL, spend limit and uncapped switch are env-only; the UI and settings.local.json can't set them", async () => {
+  const { EDITABLE, readFileOverrides, writeOverrides } = await import("./config.js");
+  assert.ok("CATHEDRAL_API_KEY" in EDITABLE);
+  for (const k of ["CATHEDRAL_API_URL", "CATHEDRAL_MAX_SPEND_USD", "CATHEDRAL_ALLOW_UNCAPPED_KEY"]) assert.ok(!(k in EDITABLE), k);
+  await assert.rejects(updateSettings({ CATHEDRAL_MAX_SPEND_USD: "25" }), /Not editable/);
+  await assert.rejects(updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" }), /Not editable/);
+  // what an agent could plant in the data folder is ignored
+  writeOverrides({ CATHEDRAL_MAX_SPEND_USD: "25", CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" });
+  assert.deepEqual(readFileOverrides(), {});
+  reloadConfig();
+  assert.equal(effectiveCathedralCap(config.integrations.cathedral.maxSpendUsd), 0.5);
+  assert.equal(config.integrations.cathedral.allowUncapped, false);
+  writeOverrides({});
+  reloadConfig();
   assert.equal(config.integrations.cathedral.apiUrl, "https://cathedral.computer");
   assert.equal(config.integrations.cathedral.allowUncapped, false);
 });
 
 // ---- 9. allowlist ----
 
-test("allowlist: egress/allowlist.txt has the exact host cathedral.computer", () => {
+test("egress: cathedral.computer is not on the static list; open only while a key is set", async () => {
   const lines = readFileSync(path.join(root, "egress/allowlist.txt"), "utf8").split("\n").map((l) => l.trim());
-  assert.ok(lines.includes("cathedral.computer"));
+  assert.ok(!lines.some((l) => l.includes("cathedral")));
+  await import("./cathedral.js"); // registers its addBuiltIn
+  const { builtIn, proxyCheck } = await import("./egress.js");
+  assert.equal(builtIn("cathedral.computer"), false);
+  assert.equal(proxyCheck("cathedral.computer"), false);
+  await updateSettings({ CATHEDRAL_API_KEY: KEY });
+  assert.equal(builtIn("cathedral.computer"), true);
+  assert.equal(proxyCheck("cathedral.computer"), true);
+  assert.equal(builtIn("evil.cathedral.computer"), false);
+  await updateSettings({ CATHEDRAL_API_KEY: null });
+  assert.equal(builtIn("cathedral.computer"), false, "no key, no route");
 });
 
 // ---- 10. skill ----
@@ -333,7 +365,8 @@ test("skill: valid front matter, helper named, mirrored into a workspace by the 
   assert.match(m[1], /^name: cathedral-sandbox$/m);
   assert.match(m[1], /^description: .{20,}$/m);
   assert.ok(listSkills().some((s) => s.dir === "cathedral-sandbox" && s.name === "cathedral-sandbox"));
-  assert.match(md, /cathedral\.mjs/);
+  assert.match(md, /cathedral_create/);
+  assert.doesNotMatch(md, /cathedral\.mjs|CATHEDRAL_API_KEY/, "the agent has tools, not the helper or the key");
   assert.doesNotMatch(md, /\u2014/);
 
   const ws = path.join(dir, "ws");
@@ -410,8 +443,10 @@ test("probe: a malformed budget or remaining amount is red, never a cap", async 
     assert.match(r.detail, /malformed/i);
   }
   // the uncapped switch does not excuse a malformed budget
-  await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: "on" });
+  process.env.CATHEDRAL_ALLOW_UNCAPPED_KEY = "on";
+  reloadConfig();
   serve(() => json(200, account({ api_key: { id: "k", expires_at: null, budget_usd: "garbage", committed_usd: "0", remaining_usd: null } })), () => json(200, catalogReady));
   assert.equal((await probeCathedral()).ok, false);
-  await updateSettings({ CATHEDRAL_ALLOW_UNCAPPED_KEY: null, CATHEDRAL_API_KEY: null });
+  delete process.env.CATHEDRAL_ALLOW_UNCAPPED_KEY;
+  await updateSettings({ CATHEDRAL_API_KEY: null });
 });

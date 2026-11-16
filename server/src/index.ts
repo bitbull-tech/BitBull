@@ -48,7 +48,8 @@ import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
 import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused, normalizeHost, staticAllowlist } from "./egress.js";
-import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, LEADPOET_MCP_PATH, mcpTokenOk } from "./mcp.js";
+import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, CATHEDRAL_MCP_PATH, LEADPOET_MCP_PATH, mcpTokenOk } from "./mcp.js";
+import { decideCreate, handleCathedralMcp, listCreateRequests } from "./cathedral.js";
 import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, finishFromUrl as leadpoetFinishFromUrl, leadpoetState, proxyMcp as leadpoetMcp, startConnect as leadpoetConnect } from "./leadpoet.js";
 import { linksAvailable, listLinks } from "./links.js";
 import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote, findRepos } from "./repos.js";
@@ -475,6 +476,12 @@ app.all(LEADPOET_MCP_PATH, async (c) => {
   return leadpoetMcp(c.req.raw);
 });
 
+// Cathedral sealed sandboxes, for the engines: BitBull holds the key and makes every call (cathedral.ts)
+app.all(CATHEDRAL_MCP_PATH, async (c) => {
+  if (!mcpTokenOk(c.req.header(BITBULL_MCP_HEADER))) return c.json({ error: "unauthorized" }, 401);
+  return handleCathedralMcp(c.req.raw);
+});
+
 /**
  * Where Leadpoet sends the owner's browser back after they approve. Not under /api: a browser
  * arriving from another site carries no app token. What makes it safe is the one-time `state`
@@ -559,6 +566,15 @@ app.post("/api/folder-changes/:id", async (c) => {
   if (!body.success) return c.json({ error: "status must be applied, branch, declined, failed or undone" }, 400);
   const s = decideChange(c.req.param("id"), body.data.status, body.data.message, { backup: body.data.backup, auto: body.data.auto });
   return s ? c.json({ change: s, changes: listChanges() }) : c.json({ error: "not found" }, 404);
+});
+/** Sandboxes waiting for the owner's approval (cathedral.ts): the card shows them. */
+app.get("/api/cathedral/requests", (c) => c.json({ requests: listCreateRequests() }));
+app.post("/api/cathedral/requests/:id", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { decision?: string };
+  if (body.decision !== "approve" && body.decision !== "deny") return c.json({ error: "decision must be approve or deny" }, 400);
+  const r = decideCreate(c.req.param("id"), body.decision);
+  if (!r) return c.json({ error: "not found" }, 404);
+  return c.json({ request: r, requests: listCreateRequests() });
 });
 app.post("/api/network/requests/:id", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { decision?: string };
@@ -720,7 +736,7 @@ const ProjectSchema = z.object({
   description: z.string().max(2000).optional(),
   instructions: z.string().max(20000).optional(),
   color: z.string().max(20).optional(),
-  integrations: z.array(z.enum(["atlas", "four04", "leadpoet"])).optional(),
+  integrations: z.array(z.enum(["atlas", "four04", "leadpoet", "cathedral"])).optional(),
   dittoSync: z.boolean().optional(),
 });
 const projectOut = (p: ReturnType<typeof projects.get>) =>

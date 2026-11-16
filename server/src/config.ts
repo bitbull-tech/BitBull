@@ -64,11 +64,10 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   FOUR04_MODEL_URL: {},
   FOUR04_MODEL_KEY: {},
   TAOSTATS_API_KEY: {},
-  // Cathedral sealed sandboxes (skills/cathedral-sandbox). The URL stays .env-only: it is where the
-  // key is sent. The agent gets the key on purpose, so the key's own spending cap is the backstop.
+  // Cathedral sealed sandboxes (server/src/cathedral.ts). Only the key: BitBull holds it and makes
+  // every call. The URL (where the key is sent), the spend limit per sandbox and the uncapped-key
+  // switch stay .env-only, so nothing the agent's shell can write changes them.
   CATHEDRAL_API_KEY: {},
-  CATHEDRAL_MAX_SPEND_USD: {},
-  CATHEDRAL_ALLOW_UNCAPPED_KEY: { options: ["off", "on"] },
   // Telegram bot (docs/TELEGRAM.md). Only the token is a setting: who may talk to the bot is set
   // by pairing, and where the token is sent (TELEGRAM_API_URL) stays .env-only.
   TELEGRAM_BOT_TOKEN: {},
@@ -263,13 +262,13 @@ function buildConfig() {
       oauth: env("LEADPOET_OAUTH", ""),
     },
     cathedral: {
-      /** A Cathedral key (cat_sk_…) with its own spending cap. Given to the agent on purpose (tools/cathedral.mjs reads it). */
+      /** A Cathedral key (cat_sk_…) with its own spending cap. Held by BitBull; never given to the agent (cathedral.ts). */
       apiKey: env("CATHEDRAL_API_KEY", ""),
       /** Env-only: where the key is sent. Must be https. */
       apiUrl: env("CATHEDRAL_API_URL", "https://cathedral.computer").replace(/\/+$/, ""),
-      /** Raw setting; the number actually used is effectiveCathedralCap(maxSpendUsd) */
+      /** .env-only. Raw setting; the number actually used is effectiveCathedralCap(maxSpendUsd) */
       maxSpendUsd: env("CATHEDRAL_MAX_SPEND_USD", ""),
-      /** Lets the helper create with a key that has no cap of its own. Off by default. */
+      /** .env-only. Lets BitBull create with a key that has no cap of its own. Off by default. */
       allowUncapped: env("CATHEDRAL_ALLOW_UNCAPPED_KEY", "off") === "on",
     },
     telegram: {

@@ -113,6 +113,8 @@ export async function* runTurn(
   const project = projects.get(session.project_id);
   const cwd = workspaceFor(project);
   const mcp = mcpServersFor(projects.integrations(project) as IntegrationId[]);
+  // Cathedral's tools need to know which chat asks (per-project rules, approvals); the Claude engine passes this header
+  if (mcp.cathedral) mcp.cathedral = { ...mcp.cathedral, headers: { ...mcp.cathedral.headers, "x-bitbull-session": session.id } };
   // No engine session to resume but history exists → give the model the transcript
   const restore = !session.engine_session_id ? recap(session.id) : "";
   const isFirst = messages.list(session.id).length === 0;

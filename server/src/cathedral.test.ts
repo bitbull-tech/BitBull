@@ -1117,3 +1117,40 @@ test("a request that carries the key value is refused before anything is sent: e
   writeFileSync(clean, "nothing secret");
   assert.equal((await go(putArgs(clean, "sec2"), [filesRoute("PUT", once(() => empty(204)))])).r.code, 0);
 });
+
+// ---------- network closed apart from named hosts (clean-machine installs), image and evidence ----------
+
+test("create --allow: network allowlist with exactly the hosts given; never with --internet; bad hosts refused before any request", async () => {
+  const allowCatalog: Route = ["GET", /^\/v1\/sandboxes\/catalog$/, once(() => j(200, catalogBody({ network_modes: ["deny_all", "internet", "allowlist"] })))];
+  const x = await go(CREATE("sealed-1x2", ["--allow", "pypi.org, Files.PythonHosted.org"]), [allowCatalog, createRoute(() => j(200, sandbox("running", { receipt_id: "r1", receipt_url: "/v1/receipts/r1", image: "python@sha256:aa", image_digest: "sha256:aa" })))]);
+  assert.equal(x.r.code, 0, JSON.stringify(x.r.out));
+  const body = posts(x.reqs, /^\/v1\/sandboxes$/)[0].json;
+  assert.equal(body.network, "allowlist");
+  assert.deepEqual(body.egress_allowlist, ["pypi.org", "files.pythonhosted.org"]);
+  assert.equal(x.r.out.network, "allowlist");
+  assert.equal(x.r.out.image_digest, "sha256:aa");
+  assert.equal(x.r.out.receipt_url, "/v1/receipts/r1");
+
+  for (const bad of [["--allow", "pypi.org", "--internet"], ["--allow", "1.2.3.4"], ["--allow", ""], ["--allow", "a b"], ["--allow", Array.from({ length: 33 }, (_, i) => `h${i}.example.com`).join(",")]]) {
+    const y = await go(CREATE("sealed-1x2", bad), [allowCatalog]);
+    assert.equal(y.r.code, 1, bad.join(" "));
+    assert.equal(posts(y.reqs, /^\/v1\/sandboxes$/).length, 0);
+  }
+  // a catalog without allowlist: refused, never widened to internet
+  const z = await go(CREATE("sealed-1x2", ["--allow", "pypi.org"]));
+  assert.equal(z.r.out.error, "network_mode_not_offered");
+  assert.equal(posts(z.reqs, /^\/v1\/sandboxes$/).length, 0);
+});
+
+test("evidence: writes the bundle for the offline verifier and reports its size and SHA-256", async () => {
+  const out = path.join(tmp, "evidence.json");
+  const bundle = { schema: "cathedral_sandbox_evidence_v1", receipts: [] };
+  const x = await go(["evidence", ID, "--out", out], [["GET", new RegExp(`^/v1/sandboxes/${ID}/evidence$`), once(() => j(200, bundle))]]);
+  assert.equal(x.r.code, 0);
+  const bytes = readFileSync(out);
+  assert.equal(x.r.out.sha256, createHash("sha256").update(bytes).digest("hex"));
+  assert.equal(x.r.out.schema, "cathedral_sandbox_evidence_v1");
+  const none = await go(["evidence", ID]);
+  assert.equal(none.r.code, 1);
+  assert.equal(none.reqs.length, 0);
+});

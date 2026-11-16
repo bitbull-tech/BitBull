@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Cathedral sealed sandboxes, for the agent's shell (see skills/cathedral-sandbox/SKILL.md).
+// Cathedral sealed sandboxes. Run by BitBull's server only (server/src/cathedral.ts), which holds the
+// key and gives the agent tools on its own MCP route; the agent never runs this with a key.
 //
 // Every command prints exactly one JSON object on stdout and exits 0 on success, 1 on a refusal or
 // an error. The spend limit, the closed network, the retries and the error shapes are enforced
 // here, in code, so they can be tested; instructions alone cannot be.
 //
-// The key comes from CATHEDRAL_API_KEY in the environment. It is never printed, never written to
+// The key comes from CATHEDRAL_API_KEY in the env object the server passes. It is never printed, never written to
 // disk and never put in an error message: everything the helper prints is passed through a
 // redaction of the key as the last step. Nothing else is stored anywhere: the agent holds the
 // task tag and the operation names, and the same names always send the same idempotency key.
@@ -27,6 +28,7 @@ const POLL_LIMIT_MS = 5 * 60 * 1000;
 const RETRIES = 3;
 const BACKOFF_MS = [1000, 2000, 4000];
 const MAX_WAIT_S = 60;
+const HOST_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 // answers that say the same key cannot recover the operation
 const NO_SAME_KEY = new Set(["exec_outcome_unknown", "process_start_unknown", "idempotency_key_reused_with_different_request"]);
 
@@ -71,7 +73,7 @@ function canonical(v) {
 
 // ---------- command line ----------
 
-const VALUE_FLAGS = new Set(["task", "op", "size", "lifetime", "max-spend", "timeout", "cmd", "cwd", "src", "path", "out", "mode", "max-bytes", "exec"]);
+const VALUE_FLAGS = new Set(["task", "op", "size", "lifetime", "max-spend", "timeout", "cmd", "cwd", "src", "path", "out", "mode", "max-bytes", "exec", "allow"]);
 const BOOL_FLAGS = new Set(["internet", "resume", "check"]);
 
 const COMMANDS = {
@@ -79,7 +81,7 @@ const COMMANDS = {
   catalog: { pos: 0, flags: [] },
   account: { pos: 0, flags: [] },
   quote: { pos: 0, flags: ["size", "lifetime"] },
-  create: { pos: 0, flags: ["task", "op", "size", "lifetime", "max-spend", "internet", "resume"], mutating: true },
+  create: { pos: 0, flags: ["task", "op", "size", "lifetime", "max-spend", "internet", "allow", "resume"], mutating: true },
   status: { pos: 1, flags: [] },
   exec: { pos: 1, flags: ["task", "op", "timeout", "cmd", "cwd"], mutating: true, rest: true },
   "exec-bg": { pos: 1, flags: ["task", "op", "timeout", "cmd", "cwd"], mutating: true, rest: true },
@@ -87,6 +89,7 @@ const COMMANDS = {
   put: { pos: 1, flags: ["task", "op", "src", "path", "mode", "check"], mutating: true },
   get: { pos: 1, flags: ["path", "out", "max-bytes"] },
   receipts: { pos: 1, flags: [] },
+  evidence: { pos: 1, flags: ["out"] },
   verify: { pos: 1, flags: [] },
   delete: { pos: 1, flags: ["task", "op"], mutating: true },
   list: { pos: 0, flags: ["task"] },
@@ -181,7 +184,7 @@ const publicError = ({ _doNotPoll, ...rest }) => rest;
 
 function makeContext({ env, fetch, sleep }) {
   const key = env.CATHEDRAL_API_KEY;
-  if (!key) throw new Refusal("no_key", "CATHEDRAL_API_KEY is not set. Ask the user to add a Cathedral key in Settings.");
+  if (!key) throw new Refusal("no_key", "CATHEDRAL_API_KEY is not set. The owner adds a Cathedral key in Settings.");
   const base = (env.CATHEDRAL_API_URL || "https://cathedral.computer").replace(/\/+$/, "");
   let url;
   try {
@@ -420,7 +423,7 @@ async function cmdCreate(ctx, parsed) {
   if (spend === null || spend <= 0) throw new Refusal("invalid_max_spend", "--max-spend must be a positive amount in USD (run quote first and pass its hold_usd)");
   // never skipped, and needs no live balance: the amount is held to the effective cap
   const capMicros = Math.round(effectiveCathedralCap(ctx.env.CATHEDRAL_MAX_SPEND_USD) * 1e6);
-  if (spend > capMicros) throw new Refusal("max_spend_above_cap", `--max-spend ${usd(spend)} is above the spend cap of ${usd(capMicros)} (Settings, Cathedral)`);
+  if (spend > capMicros) throw new Refusal("max_spend_above_cap", `--max-spend ${usd(spend)} is above the spend cap of ${usd(capMicros)} (CATHEDRAL_MAX_SPEND_USD in BitBull's .env)`);
 
   const account = await readAccount(ctx);
   const block = account.api_key;
@@ -434,7 +437,7 @@ async function cmdCreate(ctx, parsed) {
     throw new Refusal("account_malformed", "Cathedral's account answer has a budget that is not a plain non-negative amount, so the key's cap cannot be trusted. Nothing was created.");
   }
   if (block.budget_usd === null) {
-    if (ctx.env.CATHEDRAL_ALLOW_UNCAPPED_KEY !== "on") throw new Refusal("uncapped_key_refused", "This key has no spending cap of its own, so the helper will not create sandboxes with it. Use a capped key, or the user can turn on Allow a key with no spending cap in Settings.");
+    if (ctx.env.CATHEDRAL_ALLOW_UNCAPPED_KEY !== "on") throw new Refusal("uncapped_key_refused", "This key has no spending cap of its own, so the helper will not create sandboxes with it. Use a capped key (the owner can set CATHEDRAL_ALLOW_UNCAPPED_KEY=on in BitBull's .env).");
   } else {
     remaining = toMicros(block.remaining_usd);
     if (remaining === null) throw new Refusal("account_malformed", "Cathedral's account answer has a cap but its remaining amount is missing or not a plain non-negative amount. Nothing was created.");
@@ -444,7 +447,14 @@ async function cmdCreate(ctx, parsed) {
   const sealed = sealedOf(await readCatalog(ctx));
   if (sealed.available !== true && !resume) throw new Refusal("sealed_unavailable", `Sealed sandboxes are unavailable: ${sealed.reason ?? "no reason given"}`);
   const { rate } = findSize(sealed, flags.size);
-  const wanted = flags.internet === true ? "internet" : "deny_all";
+  // --allow host,host: closed apart from the hosts named (enforced inside the guest); never with --internet
+  let allow = null;
+  if (flags.allow !== undefined) {
+    if (flags.internet === true) throw new Refusal("usage", "Give --internet or --allow, not both");
+    allow = String(flags.allow).split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+    if (!allow.length || allow.length > 32 || allow.some((h) => !HOST_RE.test(h))) throw new Refusal("invalid_allow", "--allow takes 1 to 32 host names separated by commas, e.g. pypi.org,files.pythonhosted.org");
+  }
+  const wanted = flags.internet === true ? "internet" : allow ? "allowlist" : "deny_all";
   const modes = Array.isArray(sealed.network_modes) ? sealed.network_modes : [];
   // never falls back to a more open mode
   if (!modes.includes(wanted)) throw new Refusal("network_mode_not_offered", `The catalog does not offer network mode ${wanted} for sealed sandboxes (offered: ${modes.join(", ") || "none listed"}). Nothing was created.`);
@@ -464,6 +474,7 @@ async function cmdCreate(ctx, parsed) {
     max_spend_usd: usd(spend),
     labels: { bitbull: "1", bitbull_task: task },
   };
+  if (allow) body.egress_allowlist = allow;
   const r = await api(ctx, "POST", "/v1/sandboxes", { headers: { "Idempotency-Key": key, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) return r.error;
   let sb = r.json ?? {};
@@ -495,7 +506,12 @@ async function cmdCreate(ctx, parsed) {
     max_spend_usd: usd(spend),
     spend_limit_usd: usd(limit),
     labels: body.labels,
+    ...(allow ? { egress_allowlist: allow } : {}),
     receipt_id: sb.receipt_id ?? null,
+    receipt_url: sb.receipt_url ?? null,
+    image: sb.image ?? null,
+    image_digest: sb.image_digest ?? null,
+    created_at: sb.created_at ?? null,
     hotel: sb.hotel ?? null,
     lifetime_deadline_at: sb.lifetime_deadline_at ?? null,
     task,
@@ -506,7 +522,7 @@ async function cmdCreate(ctx, parsed) {
 async function cmdStatus(ctx, { id }) {
   const s = must(await api(ctx, "GET", `/v1/sandboxes/${id}`)).json ?? {};
   const pick = {};
-  for (const k of ["id", "state", "template", "resources", "network", "labels", "failed_by", "billed", "lifetime_deadline_at", "cleanup_state", "max_spend_usd", "receipts", "error", "hotel", "sealed"]) if (k in s) pick[k] = s[k];
+  for (const k of ["id", "state", "template", "resources", "network", "egress_allowlist", "labels", "image", "image_digest", "receipt_id", "receipt_url", "created_at", "failed_by", "billed", "lifetime_deadline_at", "cleanup_state", "max_spend_usd", "receipts", "error", "hotel", "sealed"]) if (k in s) pick[k] = s[k];
   return { ok: true, ...pick };
 }
 
@@ -543,6 +559,8 @@ async function cmdExec(ctx, parsed) {
     stdout_truncated: x.stdout_truncated ?? false,
     stderr_truncated: x.stderr_truncated ?? false,
     room_receipt_id: x.room_receipt_id ?? null,
+    room_receipt_url: x.room_receipt_url ?? null,
+    native_receipt_sha256: x.native_receipt_sha256 ?? null,
   };
   if (x.room_alive === false) out.room_alive = false;
   if (x.oom_killed === true) out.oom_killed = true;
@@ -578,7 +596,7 @@ async function cmdExecWait(ctx, { id, flags }) {
     if (x.state !== "running") break;
     if (typeof x.poll_after_s === "number") await ctx.sleep(x.poll_after_s * 1000);
   }
-  const base = { exec_id: flags.exec, state: x.state ?? "unknown", exit_code: x.exit_code ?? null, stdout: x.stdout ?? "", stderr: x.stderr ?? "", duration_ms: x.duration_ms ?? null };
+  const base = { exec_id: flags.exec, state: x.state ?? "unknown", exit_code: x.exit_code ?? null, stdout: x.stdout ?? "", stderr: x.stderr ?? "", duration_ms: x.duration_ms ?? null, stdout_truncated: x.stdout_truncated ?? false, stderr_truncated: x.stderr_truncated ?? false, started_at: x.started_at ?? null, finished_at: x.finished_at ?? null, room_receipt_id: x.room_receipt_id ?? null };
   switch (x.state) {
     case "exited":
       return x.exit_code === 0 ? { ok: true, ...base } : { ok: false, ...base, error: "command_failed", message: `The command exited with ${x.exit_code}` };
@@ -664,6 +682,15 @@ async function cmdGet(ctx, { id, flags }) {
   return { ok: true, path: flags.path, out: flags.out, bytes: r.buf.length, sha256: hex(r.buf) };
 }
 
+/** The evidence bundle (receipts, guest receipts, attestation, AMD certificates) for ctcli receipt verify, offline. */
+async function cmdEvidence(ctx, { id, flags }) {
+  if (!flags.out) throw new Refusal("usage", "evidence needs --out <local file>");
+  const r = await api(ctx, "GET", `/v1/sandboxes/${id}/evidence`);
+  if (!r.ok) return r.error;
+  writeFileSync(flags.out, r.buf);
+  return { ok: true, out: flags.out, bytes: r.buf.length, sha256: hex(r.buf), schema: r.json?.schema ?? null };
+}
+
 async function cmdDelete(ctx, parsed) {
   const { id } = parsed;
   const { task, key } = operationKey(parsed);
@@ -728,6 +755,7 @@ const HANDLERS = {
   get: cmdGet,
   receipts: async (ctx, { id }) => ({ ok: true, ...(await fetchChain(ctx, id)) }),
   verify: async (ctx, { id }) => verifyAll(ctx, id),
+  evidence: cmdEvidence,
   delete: cmdDelete,
   list: cmdList,
 };

@@ -15,7 +15,7 @@ export interface Session {
   updated_at: number
 }
 
-export type IntegrationId = 'atlas' | 'four04' | 'github' | 'leadpoet'
+export type IntegrationId = 'atlas' | 'four04' | 'github' | 'leadpoet' | 'cathedral'
 
 export interface Project {
   id: string
@@ -389,6 +389,28 @@ export interface NetworkRequest {
   decidedAt?: string
   scope?: 'host' | 'domain'
 }
+/** A sealed sandbox the agent asked for, waiting on the owner (server/src/cathedral.ts) */
+export interface CathedralRequest {
+  id: string
+  purpose: 'chat' | 'qa-hound' | 'clean-machine'
+  sessionId?: string
+  sessionTitle?: string
+  projectId: string
+  projectName: string
+  size: string
+  resources?: { cpu?: number; memory_gib?: number; disk_gib?: number } | null
+  hourlyRateUsd: string
+  lifetimeSeconds: number
+  spendCapUsd: string
+  limitUsd: string
+  internet: boolean
+  /** with internet off: the only hosts the sandbox may reach (package registries, say) */
+  allowHosts: string[]
+  reason: string
+  status: 'pending' | 'approved' | 'denied' | 'expired'
+  createdAt: string
+  decidedAt?: string
+}
 export interface LinkedFolder {
   name: string
   path: string
@@ -741,6 +763,9 @@ export const api = {
     req<{ stat: string }>(`/api/projects/${projectId}/repos/diff?repo=${encodeURIComponent(repo)}${base ? `&base=${encodeURIComponent(base)}` : ''}`),
   decideNetwork: (id: string, decision: 'host' | 'domain' | 'deny') =>
     req<NetworkState>(`/api/network/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  cathedralRequests: () => req<{ requests: CathedralRequest[] }>('/api/cathedral/requests'),
+  decideCathedral: (id: string, decision: 'approve' | 'deny') =>
+    req<{ request: CathedralRequest; requests: CathedralRequest[] }>(`/api/cathedral/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
   allowNetwork: (host: string, scope: 'host' | 'domain') =>
     req<NetworkState>('/api/network/approved', { method: 'POST', body: JSON.stringify({ host, scope }) }),
   revokeNetwork: (host: string, scope: 'host' | 'domain') =>

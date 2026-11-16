@@ -186,25 +186,38 @@ refuses protected paths, links out of the folder and unpermitted deletes on its 
 program on the PC can call the helper as the page does; it could already write to those folders
 as the owner. Unattended runs can neither propose nor apply.
 
-### R13: Remote execution (Cathedral, only while a key is set)
-`skills/cathedral-sandbox`, `tools/cathedral.mjs`. This adds a new upload destination: with the key
-set, the agent can send files and commands to `cathedral.computer` (allowlisted in
-`egress/allowlist.txt`), where they run on a sealed AMD SEV-SNP machine, and can read results back.
-It also adds a key that can spend money.
-- **Guards, in code** (the helper, tested): the spend limit (`CATHEDRAL_MAX_SPEND_USD`, up to 25.00, default
-  0.50, also bounded by what the key has left); a key with no cap of its own is refused unless
-  `CATHEDRAL_ALLOW_UNCAPPED_KEY=on`; the sandbox network is `deny_all` unless the user asked for
-  internet in the task; the key is never printed, written to disk or put in an error; delete takes one
-  id, never "delete all"; every mutating call carries an idempotency key derived from the agent's task
-  and op names, so a retry never runs a command twice.
-- **Honest limit:** the agent holds the key (like `GITHUB_TOKEN`), so a misbehaving agent could call the
-  API itself and skip the helper. The backstop is the key's own spending cap, which Cathedral enforces
-  on every create. That is why the helper will not work with an uncapped key by default: use a key with
-  its own cap, and a small one.
-- The helper cannot stop the agent from sending the user's files into a sandbox; the skill tells it not to
-  without being asked, and the egress allowlist only controls where, not what.
-- Receipts prove what Cathedral recorded and what the sealed host signed. They do not check the AMD
-  report or the approved build; `verify` says so.
+### R13: Cathedral sealed sandboxes (only while a key is set, only in projects that tick it)
+`server/src/cathedral.ts`, `tools/cathedral.mjs`, `skills/cathedral-sandbox`. For running and checking
+code the owner doesn't trust or was given, away from the owner's keys, workspace and network. It adds
+a key that can spend money and a destination files and commands can be sent to.
+- **The key stays on the server.** It is a vault setting, blanked in the agent's shells and kept out
+  of both engines' environment. The agent has tools on BitBull's local MCP route `/mcp/cathedral`
+  (behind the startup token); BitBull makes every call. The spend limit per sandbox
+  (`CATHEDRAL_MAX_SPEND_USD`, up to 25.00, default 0.50) and `CATHEDRAL_ALLOW_UNCAPPED_KEY` are
+  .env-only, so nothing the agent can write in the data folder changes them.
+- **Closed until set.** `cathedral.computer` is not on `egress/allowlist.txt`; it is open in the proxy
+  only while a key is set (`addBuiltIn`, like Telegram and Leadpoet). As with those, while it is
+  open the proxy can't tell BitBull's calls from the agent's shell: an injected agent that already
+  holds someone else's Cathedral key could reach the API with it. It can't use the owner's key, which
+  it never sees.
+- **Per project.** The tools answer only in chats of a project with Cathedral ticked; a call that
+  can't be tied to one chat (several running at once, no session header) is refused.
+- **Approval.** Every create raises a card (size, rate, lifetime, spend cap, internet on, off or a
+  host list) and waits; scheduled runs and Telegram messages are refused. The network is closed
+  unless the owner approves internet, or a named list of hosts (clean-machine installs).
+- **Uploads.** Only a file the call names, resolved inside the project's workspace (no `..`, no links
+  out, no folders, never `.env` or `.git/`), each logged to Activity with path, size and SHA-256.
+  exec, upload, download and delete only reach rooms this project created in this run of BitBull.
+- **Isolation, not confidentiality.** Commands and files pass Cathedral's API in plaintext on the way
+  to the room. Cathedral's code has a sealed path (secrets and commands encrypted to a key held inside
+  the guest, named in its attestation), switched off on cathedral.computer today and not used by
+  BitBull; files have no such path. The agent is told
+  never to send secrets.
+- **QA Hound.** With "Run it in a sealed sandbox", reviewers (plan mode, otherwise no MCP tools) get
+  one tool, `cathedral_review_exec`, for the one room their run created, holding only a copy of the
+  target, network closed; BitBull checks the caller is one of that run's reviewers.
+- **Receipts.** `verify` reports Cathedral's own checks. The AMD SEV-SNP report, AMD's certificate
+  chain and the approved build are checked only by the offline verifier (`ctcli receipt verify`).
 
 ## If you fork or change `.env` / `allowlist.txt`
 

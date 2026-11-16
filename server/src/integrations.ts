@@ -3,7 +3,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { config, effectiveCathedralCap, githubTokenKind } from "./config.js";
-import { internalMcpHeaders, LEADPOET_MCP_PATH } from "./mcp.js";
+import { CATHEDRAL_MCP_PATH, internalMcpHeaders, LEADPOET_MCP_PATH } from "./mcp.js";
 import { redact } from "./activity.js";
 
 /**
@@ -55,17 +55,17 @@ export function integrations(): IntegrationDef[] {
     {
       id: "cathedral",
       name: "Cathedral sandboxes",
-      blurb: "Run code in an isolated sealed sandbox (AMD SEV-SNP) away from your computer, with signed receipts. The agent asks before it spends.",
+      blurb: "Run and check code, repos and files you don't trust or were given, in a sealed sandbox (AMD SEV-SNP) away from your keys, workspace and network, with receipts. You approve every sandbox.",
       docs: "https://cathedral.computer",
       env: [
         { key: "CATHEDRAL_API_KEY", label: "API key (cat_sk_…)", secret: true, value: ca.apiKey },
-        { key: "CATHEDRAL_MAX_SPEND_USD", label: "Spend limit per sandbox (USD)", value: effectiveCathedralCap(ca.maxSpendUsd).toFixed(2) },
-        { key: "CATHEDRAL_ALLOW_UNCAPPED_KEY", label: "Allow a key with no spending cap", value: ca.allowUncapped ? "on" : "off" },
+        { key: "CATHEDRAL_MAX_SPEND_USD", label: "Spend limit per sandbox (USD, .env only)", value: effectiveCathedralCap(ca.maxSpendUsd).toFixed(2) },
       ],
+      // The engines talk to BitBull, which holds the key and makes every call (server/src/cathedral.ts)
+      mcp: ca.apiKey ? { url: `http://127.0.0.1:${config.port}${CATHEDRAL_MCP_PATH}`, headers: internalMcpHeaders(), timeout: 660000 } : undefined,
       configured: !!ca.apiKey,
-      global: true,
       notes:
-        "Use a key with its own spending cap: Cathedral enforces it on every create, and it is the backstop if the agent misbehaves. The agent runs everything through tools/cathedral.mjs (see the cathedral-sandbox skill), which keeps the network closed unless you ask for internet, holds to the spend limit above and deletes what it creates. Files and commands sent to a sandbox leave your computer.",
+        "Off until you tick it in a project's settings. The agent never holds the key: BitBull makes every call, asks you before each sandbox (size, rate, lifetime, spend cap, internet), sends only files the agent names from the project's workspace and logs each one. Commands and files pass Cathedral's API on the way to the sandbox, so this is isolation, not confidentiality: never send secrets.",
     },
     {
       id: "atlas",
