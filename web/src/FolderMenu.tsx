@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus, IconRefresh } from './icons'
-import { HELPER_CMD, helperStatus, inDesktopApp, isMac, linkFolder, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
+import { HELPER_CMD, helperStatus, inDesktopApp, isMac, linkFolderFor, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
 
 /**
  * The composer's folder button: upload a copy (the agent may change it), attach a folder you
  * linked read-only (the agent may only read it), or link a new one. Linking opens a Windows
  * folder picker on this PC through the link helper; this page never names a path.
  */
-export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink: (name: string) => void }) {
+export function FolderMenu({ onUpload, onLink, projectId }: { onUpload: () => void; onLink: (name: string) => void; projectId: string | null }) {
+  const scopeKey = projectId ?? 'general'
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<{ available: boolean; links: LinkedFolder[] } | null>(null)
   const [helper, setHelper] = useState<{ links: HelperLink[] } | null | 'checking'>('checking')
@@ -71,7 +72,8 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
     setMsg(null)
     setBusy('Opening the folder picker on this PC…')
     try {
-      const r = await linkFolder((s) => setBusy(s))
+      setBusy('Linking… (it can take a minute for a big folder: BitBull restarts to see it)')
+      const r = await linkFolderFor(projectId)
       if (r.ok) {
         setMsg({ ok: true, text: `Linked ${r.path ?? r.name}. It's attached to this message.` })
         if (r.name) onLink(r.name)
@@ -107,14 +109,35 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
               <small>Copied into the workspace. The agent can change the copy; your folder isn't touched.</small>
             </span>
           </button>
-          <div className="fm-sep">Linked folders · read-only</div>
+          <div className="fm-sep">Folders linked for this {projectId ? 'project' : 'workspace'}</div>
           {!state ? (
             <p className="fm-note">Loading…</p>
           ) : !state.available ? (
             <p className="fm-note">Links work in the sandboxed BitBull (Docker) only.</p>
           ) : (
             <>
-              {state.links.map((l) =>
+              {state.links
+                .filter((l) => !l.projects?.includes(scopeKey))
+                .map((l) => (
+                  <div className="fm-row" key={l.name}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="fm-item"
+                      disabled={!!busy}
+                      onClick={() => void api.setLinkProject(l.name, projectId, true).then(load)}
+                    >
+                      <IconPlus size={15} />
+                      <span>
+                        <b>Add {l.name} to this {projectId ? 'project' : 'workspace'}</b>
+                        <small>{winPath(l.name) ? `${winPath(l.name)} · ` : ''}already linked on this PC, for another project.</small>
+                      </span>
+                    </button>
+                  </div>
+                ))}
+              {state.links
+                .filter((l) => l.projects?.includes(scopeKey))
+                .map((l) =>
                 l.readOnly ? (
                   <div className="fm-row" key={l.name}>
                     <button
@@ -133,8 +156,12 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                         <small>
                           {winPath(l.name) ? `${winPath(l.name)} · ` : ''}
                           {info(l.name)?.mode === 'filtered'
-                            ? 'a read-only copy without its secrets (.env, keys, wallets). Refresh it after changing the folder.'
-                            : 'read in place: the agent can read and analyse, never change.'}{' '}
+                            ? info(l.name)?.write
+                              ? 'read as a copy without its secrets (.env, keys, wallets). Changes allowed: written to your real folder, then the copy is refreshed.'
+                              : 'read as a copy without its secrets (.env, keys, wallets). Refresh it after changing the folder.'
+                            : info(l.name)?.write
+                              ? 'read in place. Changes allowed: the agent proposes them and you approve each one before it is written.'
+                              : 'read in place. Read-only until you allow changes: you are asked once, the first time the agent has a change for it.'}{' '}
                           {l.entries ?? '?'} items.
                         </small>
                       </span>
@@ -182,7 +209,7 @@ export function FolderMenu({ onUpload, onLink }: { onUpload: () => void; onLink:
                       ? 'Starting the link helper… The BitBull app does this by itself; this menu switches on as soon as it answers.'
                       : isMac
                         ? 'Linking needs the BitBull app running (it holds the link helper on a Mac). This menu switches on by itself once it is.'
-                        : 'Linking needs the link helper on this PC. Open the BitBull app and it starts by itself, or run start.ps1 once; this menu switches on by itself as soon as it answers.'}
+                        : 'The link helper on this PC is not answering. It is what links a folder and writes the changes you approve into one, so both are off until it is back (folders already linked stay readable). Open the BitBull app and it starts by itself, or run start.ps1 once, which now says whether the helper came up and why not; this menu switches on by itself as soon as it answers.'}
                   </p>
                   {!inDesktopApp && (
                   <div className="fm-cmd">

@@ -646,43 +646,61 @@ wsl -d bitbull --exec docker exec bitbull-agent python3 -c "import socket; socke
 
 ### Changing files in a linked folder
 
-A linked folder is your real folder, so the agent never writes to it: the mount is read-only and
-stays that way. What it can do, when you ask it to change files there, is **propose** the change.
-BitBull shows you a card with the files and a diff for each, and nothing happens until you choose:
+The agent only ever reads a linked folder. A change reaches it one way: the agent writes the new
+files in its workspace and hands them over, and the link helper on your PC writes them in.
 
-- **Put it on a branch** (offered first when the files are in a git repo): the helper on your PC
-  makes a new branch `bitbull/<name>` from the repo's current commit, holding the change. Your
-  working files, your uncommitted edits and your checked-out branch are not touched. Review it
-  with `git diff HEAD...bitbull/<name>` and merge it yourself. This is the safer choice and needs
-  no standing permission: a box on the PC asks each time.
-- **Apply to the folder**: the helper copies the files in. This needs **Allow changes** for that
-  folder first (Settings → Folders; a box on the PC asks you to confirm). What gets replaced is
-  backed up first under `%LOCALAPPDATA%\BitBull\folder-backups`.
-- **Decline**: nothing changes, and the agent is told.
+- **You are asked once per folder.** The first time the agent has a change for a folder, the card
+  offers **Allow changes in this folder and write** (a box on the PC asks you to confirm). You can
+  also allow it beforehand from the **Resources** panel or Settings → Folders.
+- **After that, changes are written straight away.** Each one appears in the chat corner with its
+  files and diffs, an **Undo**, and, when the files are in a git repo, the commands to review and
+  publish it (`git status`, `git diff`, `git add`, `git commit`, `git push`) with a Copy button.
+  The agent gives the same commands in its reply. BitBull never runs git in your folder.
+- **Undo** puts back what was replaced or deleted and removes what was created. A file you have
+  changed since is left alone and named. What a change replaces is also kept under
+  `%LOCALAPPDATA%\BitBull\folder-backups`.
+- **Put it on a branch instead** (for files in a git repo, while the folder is still read-only):
+  the helper creates `bitbull/<name>` from the repo's current commit and leaves your working
+  files alone. **Decline** changes nothing.
+- **Folders with secrets work too.** A folder holding `.env` files, keys or wallets is read as a
+  copy without them. Changes are written to your real folder and the copy is refreshed. A file
+  BitBull was never shown (hidden, or added since the last refresh) is not overwritten.
 
 What keeps this safe:
 
-- **You approve every change, on screen.** Allowing changes in a folder only makes the Apply
-  button available; it never lets the agent write by itself.
-- **What is applied is what you were shown.** Each file's hash goes to the helper with your
-  approval; a file that changed since is refused and nothing is written.
-- **Some files are never written, whoever approves**, because they run on your PC without you
-  choosing to run them, or hold secrets: `.git` (hooks, config), `.gitconfig`, `.githooks`,
-  `.husky`, `.vscode`, `.idea`, `.devcontainer`, `.github/workflows`, shell start-up files,
-  `.envrc`, `.env` and `.env.*` (templates like `.env.example` are fine), and programs and
-  shortcuts (`.exe`, `.dll`, `.lnk` and the like). Nothing is written through a junction or
-  symbolic link either, so a change can't leave the folder.
+- **What is written is what was shown.** Each file's hash goes to the helper; a file that
+  changed since it was staged is refused and nothing is written.
+- **Some files are never written**, because they run on your PC without you choosing to run
+  them, or hold secrets: `.git` (hooks, config), `.gitconfig`, `.githooks`, `.husky`, `.vscode`,
+  `.idea`, `.devcontainer`, `.github/workflows`, shell start-up files, `.envrc`, `.env` and
+  `.env.*` (templates like `.env.example` are fine), and programs and shortcuts (`.exe`, `.dll`,
+  `.lnk` and the like). Nothing is written through a junction or symbolic link either, so a
+  change can't leave the folder.
 - **Deleting is a separate permission** (Allow deleting, per folder). Deleted files go to the
   Recycle Bin, with a copy in the backup folder.
-- **Read-only when nobody is watching.** Scheduled runs and Telegram messages can't propose
-  changes, and nothing could approve them if they did.
-- **Listed and removable.** Settings → Folders shows every folder with changes allowed, since
-  when, **Make read-only** and **Stop deleting** to take it away (no question asked), and what
-  was proposed lately and what became of it. Removing a link removes its permissions.
+- **Read-only when nobody is watching.** Scheduled runs and Telegram messages can't change a
+  linked folder, and a change is only written while BitBull is open on the PC.
+- **Listed and removable.** The Resources panel and Settings → Folders show every folder with
+  changes allowed, with **Make read-only** to take it away (no question asked). Removing a link
+  removes its permissions.
 
-Link the folder that holds your repos (`D:\github`, say) and the agent can read all of them
-side by side, so related projects are aware of each other; each change still lands only where
-you approve it. Changes work on Windows for now; on a Mac, links are read-only copies.
+Changes work on Windows for now; on a Mac, links are read-only copies.
+
+### Folders belong to a project
+
+A folder is linked for the project you link it from (or for the general workspace, outside a
+project). Only that project's chats are offered it, can attach it, or can change it; add it to
+another project from that project's Resources panel. Settings → Folders lists every folder
+linked on the PC and which projects use it. This is about what BitBull offers and accepts: every
+linked folder is still mounted in the one sandbox, so it is not a wall between projects.
+
+### The Resources panel
+
+**Resources** (top bar) opens a panel down the right of the chat showing what this project is
+working with: its linked folders (with **Link a folder…**, live progress while one is being
+linked, and **Allow changes**), the repositories and uploads in its workspace, its integrations,
+the installed skills and the web addresses you have allowed. It is open by default on a wide
+screen and remembers whether you closed it.
 
 The rules live in `scripts/bitbull-wsl/folder-apply.ps1` (tests beside it) and
 `server/src/folderChanges.ts`; a test keeps the two lists of protected paths the same.

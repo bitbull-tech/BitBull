@@ -377,6 +377,8 @@ export interface LinkedFolder {
   entries: number | null
   readOnly: boolean
   noExec: boolean
+  /** the projects it is linked for ("general": chats outside a project) */
+  projects?: string[]
 }
 /** A change the agent proposed to a linked folder (server/src/folderChanges.ts) */
 export interface FolderChangeFile {
@@ -399,10 +401,15 @@ export interface FolderChange {
   repo: string | null
   branch: string
   hostStaging: string | null
-  status: 'pending' | 'applied' | 'branch' | 'declined' | 'failed' | 'expired'
+  status: 'pending' | 'applied' | 'branch' | 'declined' | 'failed' | 'expired' | 'undone'
   message?: string
   createdAt: string
   decidedAt?: string
+  project?: string
+  /** written without a click: changes are allowed in that folder */
+  auto?: boolean
+  /** the helper's backup of what it replaced, for Undo */
+  backup?: string
 }
 export type FolderChangeDetail = Omit<FolderChange, 'files'> & { files: Array<FolderChangeFile & { diff?: string }> }
 export interface RepoBranch {
@@ -617,8 +624,11 @@ export const api = {
   links: () => req<{ available: boolean; links: LinkedFolder[] }>('/api/links'),
   folderChanges: () => req<{ changes: FolderChange[] }>('/api/folder-changes'),
   folderChange: (id: string) => req<FolderChangeDetail>(`/api/folder-changes/${id}`),
-  decideFolderChange: (id: string, status: 'applied' | 'branch' | 'declined' | 'failed', message?: string) =>
-    req<{ change: FolderChange; changes: FolderChange[] }>(`/api/folder-changes/${id}`, { method: 'POST', body: JSON.stringify({ status, message }) }),
+  decideFolderChange: (id: string, status: 'applied' | 'branch' | 'declined' | 'failed' | 'undone', message?: string, extra: { backup?: string; auto?: boolean } = {}) =>
+    req<{ change: FolderChange; changes: FolderChange[] }>(`/api/folder-changes/${id}`, { method: 'POST', body: JSON.stringify({ status, message, ...extra }) }),
+  claimFolderChange: (id: string) => req<{ ok: boolean }>(`/api/folder-changes/${id}/claim`, { method: 'POST' }),
+  setLinkProject: (name: string, project: string | null, on: boolean) =>
+    req<{ projects: string[] }>(`/api/links/${encodeURIComponent(name)}/projects`, { method: 'POST', body: JSON.stringify({ project, on }) }),
   vault: () => req<{ unlocked: boolean; exists: boolean; keys: string[]; file: string }>('/api/vault'),
   vaultUnlock: (key: string) => req<{ unlocked: boolean; keys: string[]; moved: string[] }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ key }) }),
   vaultLock: () => req<{ unlocked: boolean }>('/api/vault/lock', { method: 'POST' }),

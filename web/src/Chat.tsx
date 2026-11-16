@@ -522,8 +522,8 @@ export function Chat({
                 </span>
               )}
               {folders.map((f) => (
-                <span className={`chip ${f.startsWith('links/') ? 'linked' : ''}`} key={f} title={f.startsWith('links/') ? 'Your folder, read-only: the agent can read it but not change it' : 'A copy, uploaded to the workspace'}>
-                  {f.startsWith('links/') ? <IconLock size={13} /> : <IconFolder size={13} />} {f.startsWith('links/') ? `${f.slice(6)} (read-only)` : f}
+                <span className={`chip ${f.startsWith('links/') ? 'linked' : ''}`} key={f} title={f.startsWith('links/') ? 'Your linked folder. The agent reads it; changes are written by this PC only where you have allowed them' : 'A copy, uploaded to the workspace'}>
+                  {f.startsWith('links/') ? <IconLock size={13} /> : <IconFolder size={13} />} {f.startsWith('links/') ? `${f.slice(6)} (linked)` : f}
                   <button type="button" onClick={() => setFolders((x) => x.filter((y) => y !== f))} aria-label={`Remove ${f}`}>
                     <IconX size={12} />
                   </button>
@@ -594,6 +594,7 @@ export function Chat({
             <FolderMenu
               onUpload={() => folderRef.current?.click()}
               onLink={(name) => setFolders((f) => (f.includes(`links/${name}`) ? f : [...f, `links/${name}`]))}
+              projectId={project?.id ?? null}
             />
             <input
               ref={folderRef}
@@ -831,7 +832,7 @@ function MessageView({
                 ) : (
                   <span className={`chip ${a.startsWith('links/') ? 'linked' : ''}`} key={a}>
                     {a.startsWith('links/') ? <IconLock size={13} /> : <IconFile size={13} />} {a.split('/').pop()}
-                    {a.startsWith('links/') ? ' (read-only)' : ''}
+                    {a.startsWith('links/') ? ' (linked)' : ''}
                   </span>
                 ),
               )}

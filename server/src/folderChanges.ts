@@ -134,7 +134,7 @@ export interface ChangeFile {
   /** text files only, and not too long */
   diff?: string;
 }
-export type ChangeStatus = "pending" | "applied" | "branch" | "declined" | "failed" | "expired";
+export type ChangeStatus = "pending" | "applied" | "branch" | "declined" | "failed" | "expired" | "undone";
 export interface ChangeSet {
   id: string;
   link: string;
@@ -153,6 +153,14 @@ export interface ChangeSet {
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** the project (or "general") of the chat it came from */
+  project?: string;
+  /** written without a click, because the owner has allowed changes in this folder */
+  auto?: boolean;
+  /** the helper's name for the backup of what this apply replaced, for Undo */
+  backup?: string;
+  /** a page has taken it to apply by itself: no second page does the same */
+  claimedAt?: number;
 }
 
 const MAX_FILES = 200;
@@ -219,6 +227,7 @@ export interface Proposal {
   workspace: string;
   sessionId?: string;
   sessionTitle?: string;
+  project?: string;
 }
 
 /** Check a proposal and stage it. The text is what the agent is told. */
@@ -318,13 +327,14 @@ export function propose(p: Proposal): { ok: boolean; text: string; set?: ChangeS
       hostStaging: hostPath(staging),
       status: "pending",
       createdAt: new Date().toISOString(),
+      project: p.project,
     };
     sets.push(set);
     if (sets.length > KEEP) for (const old of sets.splice(0, sets.length - KEEP)) rmSync(stagingOf(old.id), { recursive: true, force: true });
     record({
       level: "warn",
       source: "integration",
-      message: `Changes proposed to the linked folder ${link.name}: ${files.length} file(s)${deletes.length ? `, ${deletes.length} to delete` : ""}. Waiting for you.`,
+      message: `Changes for the linked folder ${link.name}: ${files.length} file(s)${deletes.length ? `, ${deletes.length} to delete` : ""}. Written straight away if you have allowed changes there, otherwise waiting for you.`,
       detail: [...files.map((f) => `${f.status === "new" ? "new" : "changed"}  ${f.path}`), ...deletes.map((d) => `delete   ${d}`), ...refused.map((r) => `refused  ${r}`)].join("\n"),
       sessionId: p.sessionId,
       sessionTitle: p.sessionTitle,
@@ -359,21 +369,46 @@ export function waitForDecision(id: string, ms = WAIT_MS): Promise<ChangeSet | u
 }
 
 /** What the owner's browser reports after the helper ran (or the owner declined). */
-export function decide(id: string, status: Exclude<ChangeStatus, "pending" | "expired">, message?: string): ChangeSet | null {
+export function decide(id: string, status: Exclude<ChangeStatus, "pending" | "expired">, message?: string, extra: { backup?: string; auto?: boolean } = {}): ChangeSet | null {
   const s = sets.find((x) => x.id === id);
   if (!s) return null;
+  // an applied change can be undone, once; nothing else moves after it is settled
+  if (status === "undone") {
+    if (s.status !== "applied") return s;
+    s.status = "undone";
+    s.message = message?.replace(/\s+/g, " ").slice(0, 400);
+    record({ level: "info", source: "integration", message: `Changes to the linked folder ${s.link} were undone${s.message ? `: ${s.message}` : ""}`, sessionId: s.sessionId, sessionTitle: s.sessionTitle });
+    changed();
+    return s;
+  }
   if (s.status !== "pending" && !(s.status === "failed" && status !== "failed")) return s;
   s.status = status;
   s.message = message?.replace(/\s+/g, " ").slice(0, 400);
   s.decidedAt = new Date().toISOString();
+  if (status === "applied") {
+    s.auto = extra.auto === true;
+    if (extra.backup && /^\d{8}-\d{6}-[a-z0-9][a-z0-9-]{0,39}$/.test(extra.backup)) s.backup = extra.backup;
+  }
   // a failed apply can be tried again; anything else is finished with
   if (status !== "failed") rmSync(stagingOf(id), { recursive: true, force: true });
-  const what = { applied: "applied to", branch: `put on the branch ${s.branch} in`, declined: "declined for", failed: "could not be applied to" }[status];
+  const what = { applied: s.auto ? "written to" : "applied to", branch: `put on the branch ${s.branch} in`, declined: "declined for", failed: "could not be applied to" }[status];
   record({ level: status === "failed" ? "error" : "info", source: "integration", message: `Changes ${what} the linked folder ${s.link}${s.message ? `: ${s.message}` : ""}`, sessionId: s.sessionId, sessionTitle: s.sessionTitle });
   for (const w of waiters.get(id) ?? []) w(s);
   waiters.delete(id);
   changed();
   return s;
+}
+
+/**
+ * A page asks to be the one that writes a change by itself (the folder allows changes). Only the
+ * first asker gets it, so two open tabs don't both write; a claim that came to nothing lapses.
+ */
+export function claim(id: string): boolean {
+  const s = sets.find((x) => x.id === id);
+  if (!s || s.status !== "pending") return false;
+  if (s.claimedAt && Date.now() - s.claimedAt < 60_000) return false;
+  s.claimedAt = Date.now();
+  return true;
 }
 
 const brief = (s: ChangeSet) => ({ ...s, files: s.files.map(({ diff: _diff, ...f }) => f) });
@@ -387,7 +422,16 @@ export function outcomeText(s: ChangeSet | undefined, extra = ""): string {
   const tail = extra ? `\n\n${extra}` : "";
   switch (s.status) {
     case "applied":
-      return `Applied: the owner approved and the files are now in the linked folder ${s.link}.${tail}`;
+      return (
+        `${s.auto ? "Written: the owner has allowed changes in this folder, so the files" : "Applied: the owner approved and the files"} are now in the linked folder ${s.link} (${s.files.length} written${s.deletes.length ? `, ${s.deletes.length} deleted` : ""}). ` +
+        `The owner sees each file's diff and an Undo in their chat. Tell them in a sentence what changed.` +
+        (s.repo !== null
+          ? ` The files are in a git repo${s.repo ? ` (${s.repo})` : ""}: you can't run git there, so end your reply with a code block of the commands for them to run in that folder on their PC: \`git status\`, \`git diff\`, then \`git add\` for exactly the files you changed, \`git commit -m "…"\` with a message you write for this change, and \`git push\`.`
+          : "") +
+        tail
+      );
+    case "undone":
+      return `The owner undid this change: the folder ${s.link} is as it was before. Ask what they would like instead; don't make the same change again.${tail}`;
     case "branch":
       return `The owner put the change on a new branch, ${s.branch}, in their repo instead of changing their working files. Their files are as before; the change is theirs to review and merge. Don't propose the same change again.${tail}`;
     case "declined":
@@ -395,7 +439,7 @@ export function outcomeText(s: ChangeSet | undefined, extra = ""): string {
     case "failed":
       return `The owner approved, but it could not be applied: ${s.message ?? "no reason given"}. Tell them; they can try again from the card.${tail}`;
     default:
-      return `Proposed and waiting: the owner hasn't answered yet (the card stays in their chat until they do, or until BitBull restarts). Nothing has changed in the folder. Carry on with what doesn't depend on it, and say it is waiting.${tail}`;
+      return `Waiting: the owner hasn't allowed changes in this folder yet, or isn't at BitBull's screen (the card stays in their chat until they do, or until BitBull restarts). Nothing has changed in the folder. Carry on with what doesn't depend on it, and say it is waiting.${tail}`;
   }
 }
 

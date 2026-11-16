@@ -31,7 +31,8 @@ import { routerBackground, routerMcpServers, routerModels, routerReview } from "
 import { connectState, CONNECTIONS_URL, startConnect } from "./dittoConnect.js";
 import { balances } from "./balances.js";
 import { isPastedName, pastedContent, rememberPasted, searchChats } from "./pasted.js";
-import { decide as decideChange, getChange, listChanges } from "./folderChanges.js";
+import { claim as claimChange, decide as decideChange, getChange, listChanges } from "./folderChanges.js";
+import { allScopes, pruneScopes, setScope } from "./linkScopes.js";
 import { compatState, runCompat, scheduleCompat } from "./compat.js";
 import { MAX_SCHEDULES, runSchedule, ScheduleInput, schedules, startScheduler } from "./schedules.js";
 import { cancelPairing, notifyOwner, startPairing, startTelegram, syncTelegram, telegramState, unpair } from "./telegram.js";
@@ -466,7 +467,23 @@ app.get("/oauth/leadpoet/callback", async (c) => {
 app.get("/api/network", (c) => c.json(networkState()));
 
 // ---------- read-only folder links (added from Windows with link.ps1; listed only) ----------
-app.get("/api/links", (c) => c.json({ available: linksAvailable(), links: listLinks() }));
+/** Linked folders, each with the projects it is linked for ("general": chats outside a project). */
+app.get("/api/links", (c) => {
+  const links = listLinks();
+  if (linksAvailable() && links.length) pruneScopes(links.map((l) => l.name));
+  const scopes = allScopes();
+  return c.json({ available: linksAvailable(), links: links.map((l) => ({ ...l, projects: scopes[l.name] ?? [] })) });
+});
+/** Add a linked folder to a project, or take it out. It stays linked; this is only who is offered it. */
+app.post("/api/links/:name/projects", async (c) => {
+  const name = c.req.param("name");
+  const body = z.object({ project: z.string().max(80).nullable(), on: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "project and on required" }, 400);
+  if (body.data.on && !listLinks().some((l) => l.name === name)) return c.json({ error: "no such linked folder" }, 404);
+  if (body.data.project && body.data.project !== "general" && !projects.get(body.data.project)) return c.json({ error: "project not found" }, 404);
+  return c.json({ projects: setScope(name, body.data.project, body.data.on) });
+});
+app.post("/api/folder-changes/:id/claim", (c) => c.json({ ok: claimChange(c.req.param("id")) }));
 /**
  * Changes the agent proposed to a linked folder (server/src/folderChanges.ts). The owner's
  * browser shows them, asks the link helper on the PC to apply one, and reports the outcome here.
@@ -478,9 +495,11 @@ app.get("/api/folder-changes/:id", (c) => {
   return s ? c.json(s) : c.json({ error: "not found" }, 404);
 });
 app.post("/api/folder-changes/:id", async (c) => {
-  const body = z.object({ status: z.enum(["applied", "branch", "declined", "failed"]), message: z.string().max(600).optional() }).safeParse(await c.req.json().catch(() => null));
-  if (!body.success) return c.json({ error: "status must be applied, branch, declined or failed" }, 400);
-  const s = decideChange(c.req.param("id"), body.data.status, body.data.message);
+  const body = z
+    .object({ status: z.enum(["applied", "branch", "declined", "failed", "undone"]), message: z.string().max(600).optional(), backup: z.string().max(80).optional(), auto: z.boolean().optional() })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "status must be applied, branch, declined, failed or undone" }, 400);
+  const s = decideChange(c.req.param("id"), body.data.status, body.data.message, { backup: body.data.backup, auto: body.data.auto });
   return s ? c.json({ change: s, changes: listChanges() }) : c.json({ error: "not found" }, 404);
 });
 app.post("/api/network/requests/:id", async (c) => {

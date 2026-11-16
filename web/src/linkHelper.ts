@@ -110,9 +110,15 @@ export const revokeFolder = (name: string, what: 'write' | 'delete') => post('/r
  * "files") or makes a new git branch holding them (mode "branch"). It checks every file against
  * the hash given here, which is the one you were shown.
  */
-export async function applyChange(body: { name: string; staging: string; manifest: { path: string; sha256: string }[]; deletes: string[]; mode: 'files' | 'branch'; branch: string; message: string }) {
+export async function applyChange(body: { name: string; staging: string; manifest: { path: string; sha256: string; new?: boolean }[]; deletes: string[]; mode: 'files' | 'branch'; branch: string; message: string }) {
   const r = await fetch(`${HELPER}/apply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  return (await r.json()) as { ok: boolean; cancelled?: boolean; message?: string; branch?: string; repo?: string; written?: number; deleted?: number; backup?: string }
+  return (await r.json()) as { ok: boolean; cancelled?: boolean; message?: string; branch?: string; repo?: string; written?: number; deleted?: number; backup?: string; backupId?: string }
+}
+
+/** Undo one apply: what it replaced or deleted is put back, what it created is removed; files changed since are left alone. */
+export async function undoChange(name: string, backup: string) {
+  const r = await fetch(`${HELPER}/undo`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, backup }) })
+  return (await r.json()) as { ok: boolean; message?: string; restored?: number; removed?: number; skipped?: string[] }
 }
 
 /** Open a folder of BitBull's data in Explorer (the helper maps the distro path to \\wsl.localhost\…) or Finder. */
@@ -140,5 +146,39 @@ export async function vaultKeyFromThisPc(): Promise<string | null> {
     return j.ok && j.key && /^[0-9a-f]{64}$/.test(j.key) ? j.key : null
   } catch {
     return null
+  }
+}
+
+// ---------- linking for a project, with progress anyone on the page can show ----------
+
+let progress: string | null = null
+const progressSubs = new Set<() => void>()
+const setProgress = (p: string | null) => {
+  progress = p
+  progressSubs.forEach((f) => f())
+}
+/** What a link in progress is doing right now (null: nothing is being linked). For the menu and the Resources panel. */
+export const linkProgress = {
+  get: () => progress,
+  subscribe: (f: () => void) => {
+    progressSubs.add(f)
+    return () => {
+      progressSubs.delete(f)
+    }
+  },
+}
+
+/** Link a folder (the picker opens on this PC) for one project: only that project's chats are offered it. */
+export async function linkFolderFor(project: string | null) {
+  setProgress('Choose the folder in the window that opened on this PC…')
+  try {
+    const r = await linkFolder((s) => setProgress(s))
+    if (r.ok && r.name) {
+      setProgress(`Adding ${r.name} to this ${project ? 'project' : 'workspace'}…`)
+      await api.setLinkProject(r.name, project, true).catch(() => {})
+    }
+    return r
+  } finally {
+    setProgress(null)
   }
 }

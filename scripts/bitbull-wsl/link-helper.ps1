@@ -42,6 +42,25 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $env:WSL_UTF8 = "1"
+
+# This runs with no window, so a helper that fails to start used to fail without a word and
+# BitBull's page could only say "the helper isn't answering". It now keeps a short log
+# (%LOCALAPPDATA%\BitBull\link-helper.log: when it started, and why it stopped), which start.ps1
+# shows when the helper doesn't come up. Messages only, never request bodies or the vault key.
+$helperLog = Join-Path (Join-Path $env:LOCALAPPDATA "BitBull") "link-helper.log"
+function Write-HelperLog([string]$m) {
+  try {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $helperLog) | Out-Null
+    $old = @()
+    if (Test-Path -LiteralPath $helperLog) { $old = @(Get-Content -LiteralPath $helperLog -Tail 200) }
+    $line = "{0}  {1}" -f (Get-Date).ToString("yyyy-MM-dd HH:mm:ss"), $m
+    Set-Content -LiteralPath $helperLog -Value ($old + $line) -Encoding UTF8
+  } catch {}
+}
+trap {
+  Write-HelperLog ("stopped with an error: " + $_.Exception.Message + " (line " + $_.InvocationInfo.ScriptLineNumber + ")")
+  break
+}
 $linkScript = Join-Path $PSScriptRoot "link.ps1"
 . (Join-Path $PSScriptRoot "folder-apply.ps1")
 $bitbullLocal = Join-Path $env:LOCALAPPDATA "BitBull"
@@ -56,8 +75,10 @@ $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$Port/")
 try { $listener.Start() } catch {
   # already running (or the port is taken): nothing to do
+  Write-HelperLog ("not started: port $Port is in use (another helper is already running, or another program has the port). " + $_.Exception.Message)
   exit 0
 }
+Write-HelperLog ("started on port $Port (PowerShell " + $PSVersionTable.PSVersion.ToString() + ", distro $Distro)")
 
 function Send($ctx, [int]$status, $obj) {
   $res = $ctx.Response
@@ -113,7 +134,6 @@ function Get-Links {
 # The permission you gave for a link, if it still names the same folder (a link name reused for
 # another folder starts with none) and the link is the live folder, not a filtered copy.
 function Get-Grant($link) {
-  if ($link.mode -ne "live") { return $null }
   $all = Get-BitBullGrants $grantFile
   if (-not $all.ContainsKey($link.name)) { return $null }
   $g = $all[$link.name]
@@ -130,7 +150,6 @@ function Find-Link([string]$name) {
 function Do-Grant([string]$name, [string]$what) {
   $link = Find-Link $name
   if (-not $link) { return @{ ok = $false; message = "No such link." } }
-  if ($link.mode -ne "live") { return @{ ok = $false; message = "This link is a filtered copy, so there is nothing of yours to change through it. Link the folder itself to allow changes." } }
   if ($what -ne "write" -and $what -ne "delete") { return @{ ok = $false; message = "bad request" } }
   $all = Get-BitBullGrants $grantFile
   $cur = Get-Grant $link
@@ -140,7 +159,7 @@ function Do-Grant([string]$name, [string]$what) {
     if ($what -eq "write") {
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
         "Allow BitBull to change files in this folder?`n`n$($link.path)`n`n" +
-        "The agent still can't write here by itself. When it proposes a change, BitBull shows you the files and the diff, and only what you approve there is copied in.`n`n" +
+        "From now on, changes the agent makes for this folder in a chat on this PC are written here straight away. Each one is listed in the chat with its diff and an Undo, and what it replaces is backed up first.`n`n" +
         "Never written, whatever is approved: .git (hooks, config), .vscode, .idea, .github\workflows, shell start-up files, .env files, programs and shortcuts.`n" +
         "Deleting files stays off unless you allow it separately. Scheduled runs and Telegram can't change anything here.`n`n" +
         "You can take this away again in BitBull: Settings > Folders.",
@@ -183,7 +202,7 @@ function Resolve-Staging([string]$p) {
 function Do-Apply($body) {
   $link = Find-Link ([string]$body.name)
   if (-not $link) { return @{ ok = $false; message = "No such link." } }
-  if ($link.mode -ne "live" -or $link.state -ne "mounted") { return @{ ok = $false; message = "That folder isn't linked as a live folder right now." } }
+  if ($link.state -ne "mounted") { return @{ ok = $false; message = "That folder isn't linked right now." } }
   if (-not (Test-Path -LiteralPath $link.path -PathType Container)) { return @{ ok = $false; message = "The folder is not there: $($link.path)" } }
   $staging = Resolve-Staging ([string]$body.staging)
   if (-not $staging) { return @{ ok = $false; message = "The staged files can't be read from this PC. Run start.ps1 once after updating (it makes BitBull's data folder readable from here), then try again." } }
@@ -207,12 +226,38 @@ function Do-Apply($body) {
   }
 
   if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder. Allow them in Settings > Folders first (or put the change on a branch)." } }
+  # BitBull reads a copy of this folder without its secrets. A file it believes is new but that is
+  # in your folder is one it was never shown (a hidden key or .env, or something added since the
+  # last refresh): it is not overwritten blind.
+  if ($link.mode -eq "filtered") {
+    foreach ($m in $manifest) {
+      if ($m.new -and (Test-Path -LiteralPath ([System.IO.Path]::Combine($link.path, ([string]$m.path).Replace('/', '\'))))) {
+        return @{ ok = $false; message = "$([string]$m.path) is already in your folder, but BitBull's copy doesn't have it (it is hidden as a secret, or was added since the last refresh), so it was not overwritten. Refresh the folder in BitBull and ask again." }
+      }
+    }
+  }
   $backup = Join-Path $backupRoot ((Get-Date).ToString("yyyyMMdd-HHmmss") + "-" + $link.name)
   $r = Invoke-BitBullApply -Root $link.path -Staging $staging -Manifest $manifest -Deletes $deletes -AllowDelete ([bool]$grant.delete) -BackupDir $backup
   # keep the thirty most recent backups
+  if ($r.backup) { $r.backupId = (Split-Path -Leaf $r.backup) }
+  # a copy without its secrets is what BitBull reads: copy it again so it shows what was written
+  if ($r.ok -and $link.mode -eq "filtered") { $r.refreshed = [bool](Do-Refresh $link.name).ok }
   try {
+    @(Get-ChildItem -LiteralPath $backupRoot -File -Filter "*.json*" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -Skip 60) | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
     @(Get-ChildItem -LiteralPath $backupRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -Skip 30) | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
   } catch {}
+  return $r
+}
+
+# Undo one apply, by the name of its backup folder (which the page was given when it applied).
+function Do-Undo([string]$name, [string]$backupId) {
+  $link = Find-Link $name
+  if (-not $link) { return @{ ok = $false; message = "No such link." } }
+  if ($backupId -notmatch '^\d{8}-\d{6}-[a-z0-9][a-z0-9-]{0,39}$' -or -not $backupId.EndsWith("-" + $link.name)) { return @{ ok = $false; message = "bad request" } }
+  $grant = Get-Grant $link
+  if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder any more, so BitBull won't write to it, not even to undo. The old files are in $backupRoot\$backupId." } }
+  $r = Invoke-BitBullUndo -Root $link.path -BackupDir (Join-Path $backupRoot $backupId)
+  if ($r.ok -and $link.mode -eq "filtered") { $r.refreshed = [bool](Do-Refresh $link.name).ok }
   return $r
 }
 
@@ -376,7 +421,7 @@ while ($listener.IsListening) {
     if ($origin -and -not ($origins -contains $origin)) { Send $ctx 403 @{ ok = $false; message = "origin not allowed" }; continue }
     if ($req.HttpMethod -eq "OPTIONS") { Send $ctx 204 @{}; continue }
     $path = $req.Url.AbsolutePath
-    if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links); caps = @("changes") }; continue }
+    if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links); caps = @("changes", "undo", "copies") }; continue }
     if ($req.HttpMethod -eq "GET" -and $path -eq "/vault-key") {
       if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBull's page only" }; continue }
       Send $ctx 200 (Do-VaultKey); continue
@@ -391,10 +436,11 @@ while ($listener.IsListening) {
       $body = (New-Object System.IO.StreamReader($req.InputStream)).ReadToEnd() | ConvertFrom-Json
       Send $ctx 200 (Do-Open ([string]$body.path)); continue
     }
-    if ($path -eq "/grant" -or $path -eq "/revoke" -or $path -eq "/apply") {
+    if ($path -eq "/grant" -or $path -eq "/revoke" -or $path -eq "/apply" -or $path -eq "/undo") {
       $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
       if ($path -eq "/grant") { Send $ctx 200 (Do-Grant ([string]$body.name) ([string]$body.what)); continue }
       if ($path -eq "/revoke") { Send $ctx 200 (Do-Revoke ([string]$body.name) ([string]$body.what)); continue }
+      if ($path -eq "/undo") { Send $ctx 200 (Do-Undo ([string]$body.name) ([string]$body.backup)); continue }
       Send $ctx 200 (Do-Apply $body); continue
     }
     if ($path -eq "/unlink") {

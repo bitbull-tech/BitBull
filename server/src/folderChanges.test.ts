@@ -138,12 +138,32 @@ test("the agent waits for the owner's answer and is told which it was", async ()
   assert.equal(F.decide(s.id, "declined")!.status, "branch", "a decision isn't overturned");
 
   const t = proposal([{ to: "myrepo/b.md", from: "work/a.md" }], [], "Add b").set!;
-  assert.match(F.outcomeText(await F.waitForDecision(t.id, 30)), /waiting: the owner hasn't answered yet/);
+  assert.match(F.outcomeText(await F.waitForDecision(t.id, 30)), /Waiting: the owner hasn't allowed changes in this folder yet/);
   F.decide(t.id, "failed", "git is not installed");
   assert.match(F.outcomeText(F.getChange(t.id)), /could not be applied: git is not installed/);
   assert.ok(existsSync(path.join(config.dataDir, "folder-changes", t.id)), "a failed apply keeps its files to try again");
   assert.equal(F.decide(t.id, "applied")!.status, "applied");
   assert.match(F.outcomeText(undefined), /no longer exists/);
+
+  // written without a click (the owner allowed changes in the folder): said so, with the git commands asked for
+  const u = proposal([{ to: "myrepo/c.md", from: "work/a.md" }], [], "Add c").set!;
+  assert.equal(F.claim(u.id), true, "the first page to ask writes it");
+  assert.equal(F.claim(u.id), false, "a second page doesn't");
+  F.decide(u.id, "applied", "Wrote 1 file(s)", { auto: true, backup: "20261116-101500-github" });
+  const told = F.outcomeText(F.getChange(u.id));
+  assert.match(told, /^Written: the owner has allowed changes in this folder/);
+  assert.match(told, /git status.*git add.*git commit -m.*git push/s);
+  assert.equal(F.getChange(u.id)!.backup, "20261116-101500-github");
+  assert.equal(F.claim(u.id), false, "nothing to claim once it is settled");
+  // a backup name that isn't one the helper makes is not kept
+  const v = proposal([{ to: "myrepo/d.md", from: "work/a.md" }], [], "Add d").set!;
+  F.decide(v.id, "applied", "ok", { backup: "..\\..\\somewhere" });
+  assert.equal(F.getChange(v.id)!.backup, undefined);
+  // undone, once; and only something that was written can be
+  assert.equal(F.decide(u.id, "undone", "Undone: 0 put back, 1 removed.")!.status, "undone");
+  assert.match(F.outcomeText(F.getChange(u.id)), /owner undid this change/);
+  assert.equal(F.decide(s.id, "undone")!.status, "branch");
+  assert.equal(F.decide(u.id, "applied")!.status, "undone");
 });
 
 test("a scheduled or Telegram turn is marked unattended while it runs, and only then", async () => {
@@ -198,6 +218,20 @@ test("the tool itself: refused in an unattended run, and otherwise waits for the
   assert.equal(F.listChanges().length, before, "nothing is even proposed from an unattended run");
 
   setUnattendedCheck(() => false);
+  // a folder belongs to the project it was linked for: not this chat's yet
+  assert.match(await call(args), /"github" isn't part of this chat's workspace.*No folder is linked here/s);
+  assert.equal(F.listChanges().length, before);
+  const { inProject, projectsOf, pruneScopes, setScope } = await import("./linkScopes.js");
+  assert.deepEqual(setScope("github", null, true), ["general"]);
+  assert.equal(inProject("github", null), true);
+  assert.equal(inProject("github", "some-project-id"), false);
+  setScope("github", "p1", true);
+  setScope("github", "p1", false);
+  assert.deepEqual(projectsOf("github"), ["general"]);
+  assert.deepEqual(setScope("../x", null, true), []);
+  setScope("gone", null, true);
+  pruneScopes(["github"]);
+  assert.deepEqual(projectsOf("gone"), []);
   const answer = call(args);
   // the owner sees it and puts it on a branch
   let pending;

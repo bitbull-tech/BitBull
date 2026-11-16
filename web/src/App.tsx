@@ -15,6 +15,7 @@ import { UsageDialog } from './UsageDialog'
 import { CompatBanner } from './CompatBanner'
 import { FirstRun } from './FirstRun'
 import { ReposDialog } from './ReposDialog'
+import { ResourcesPanel, rememberResources, resourcesDefaultOpen } from './ResourcesPanel'
 import { ExportMenu } from './ExportMenu'
 import { ActivityDock, ActivityView, clearToasts, composeInChat, ErrorToasts, latestError, markErrorsSeen, reportLocal, SelectionAsk, useActivity } from './activity'
 import { ModelPicker } from './ModelPicker'
@@ -223,6 +224,13 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   })
   const [navOpen, setNavOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // the Resources panel beside the chat: what this project is linked to and working with
+  const [resOpen, setResOpen] = useState(resourcesDefaultOpen)
+  const [resVersion, setResVersion] = useState(0)
+  const toggleRes = (open: boolean) => {
+    setResOpen(open)
+    rememberResources(open)
+  }
   const [helpOpen, setHelpOpen] = useState(false)
   const [schedulesOpen, setSchedulesOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
@@ -855,19 +863,37 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             </button>
           )}
           <ModelPicker models={models} value={model} onChange={setModel} />
+          <button className={`btn files-btn ${resOpen ? 'on' : ''}`} title="Resources: the folders, repos, uploads, integrations and skills this project is working with" aria-pressed={resOpen} onClick={() => toggleRes(!resOpen)}>
+            <IconFolder size={14} /> Resources
+          </button>
         </header>
-        <Chat
-          key={viewKey}
-          session={active}
-          project={currentProject}
-          cfg={cfg}
-          model={model}
-          modelInfo={modelInfo}
-          guard={guard}
-          onCreate={createSession}
-          onTurnDone={refreshSessions}
-          onPickModel={setModel}
-        />
+        <div className="chat-row">
+          <Chat
+            key={viewKey}
+            session={active}
+            project={currentProject}
+            cfg={cfg}
+            model={model}
+            modelInfo={modelInfo}
+            guard={guard}
+            onCreate={createSession}
+            onTurnDone={() => {
+              refreshSessions()
+              setResVersion((v) => v + 1)
+            }}
+            onPickModel={setModel}
+          />
+          {resOpen && (
+            <ResourcesPanel
+              project={currentProject}
+              version={resVersion}
+              onClose={() => toggleRes(false)}
+              onOpenRepos={() => setReposFor(currentProject ?? 'general')}
+              onOpenFiles={() => setFilesFor(currentProject ?? 'general')}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          )}
+        </div>
         <ActivityDock sessionId={active?.id} onOpenFull={() => (clearToasts(), setActivityOpen(true))} />
       </main>
       {!activityOpen && <ErrorToasts onOpen={() => (clearToasts(), setActivityOpen(true))} />}

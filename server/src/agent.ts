@@ -12,6 +12,7 @@ import { estimateCost } from "./models.js";
 import { subagentGuide } from "./subagents.js";
 import { setRunningSessions, setUnattendedCheck } from "./mcp.js";
 import { listLinks, resolveLink, type LinkedFolder } from "./links.js";
+import { inProject } from "./linkScopes.js";
 import { record, redact } from "./activity.js";
 
 export const engines: Record<EngineId, AgentEngine> = {
@@ -118,7 +119,8 @@ export async function* runTurn(
   // Attachments live in the workspace; tell the agent where, and keep a record in history.
   const files = attachments.filter((a) => /^uploads\/[^\0\n]+$/.test(a) && !a.split("/").includes(".."));
   // Linked folders: the user's real files, read-only (only ones that really are read-only)
-  const linked = [...new Map(attachments.map((a) => resolveLink(a)).filter((l): l is LinkedFolder => !!l).map((l) => [l.name, l])).values()];
+  // and only ones linked for this chat's project (linkScopes.ts)
+  const linked = [...new Map(attachments.map((a) => resolveLink(a)).filter((l): l is LinkedFolder => !!l && inProject(l.name, session.project_id)).map((l) => [l.name, l])).values()];
   const attachNote =
     // long text the user pasted travels as an attachment; the model still gets the words here
     pastedNote(session.id, files) +

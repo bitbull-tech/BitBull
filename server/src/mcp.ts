@@ -12,6 +12,8 @@ import { execCapableConfig } from "./repos.js";
 import { record } from "./activity.js";
 import { cli, dittoCliEnv } from "./providerKeys.js";
 import { outcomeText, propose, waitForDecision } from "./folderChanges.js";
+import { listLinks } from "./links.js";
+import { inProject, projectKey } from "./linkScopes.js";
 
 /**
  * BitBull's own MCP server, attached to both engines as "bitbull": tools that need the user or the
@@ -94,11 +96,11 @@ function build(sessionHint: string | undefined) {
       description:
         "Linked folders (/links/<name>) are the user's real folders, read-only to you. Use this when the user asks you to change files there. " +
         "First write the complete new version of each file somewhere in your workspace; then call this with where each one goes. " +
-        "The user is shown the list and the diff and decides on their own computer: apply the files, put them on a new git branch instead, or decline. " +
-        "The call waits for the answer (up to a few minutes) and tells you which it was. Nothing is written unless they approve. " +
+        "If the user has allowed changes in that folder (they are asked once), the files are written straight away and they see the diff and an Undo in the chat; otherwise they are asked first, and can put the change on a new git branch instead, or decline. " +
+        "The call waits (up to a few minutes) and tells you what happened. Only folders linked for this chat's project can be changed. " +
         "Never written, whoever approves: .git (hooks, config), .vscode, .idea, .github/workflows, .husky, shell start-up files, .env files, programs and shortcuts. " +
         "Deleting only happens if the user has allowed deleting in that folder. Not available in scheduled runs or from Telegram: say what you would change instead. " +
-        "One proposal per piece of work, with every file in it; don't propose the same change twice.",
+        "One call per piece of work, with every file in it; don't send the same change twice. You can't run git in a linked folder: when the files are in a repo, give the user the status / add / commit / push commands to run themselves.",
       inputSchema: {
         folder: z.string().describe("The linked folder's name: the <name> in /links/<name>"),
         summary: z.string().describe("One line the user can judge: what this change does"),
@@ -120,7 +122,13 @@ function build(sessionHint: string | undefined) {
         );
       const session = sid ? sessions.get(sid) : undefined;
       const project = session?.project_id ? projects.get(session.project_id) : null;
-      const r = propose({ link: folder.replace(/^\/?links\//, "").replace(/\/+$/, ""), summary, files, deletes, workspace: project ? workspaceFor(project) : paths.workspace, sessionId: sid, sessionTitle: session?.title });
+      const name = folder.replace(/^\/?links\//, "").replace(/\/+$/, "");
+      // a folder belongs to the project it was linked for (linkScopes.ts)
+      if (/^[a-z0-9][a-z0-9-]{0,39}$/.test(name) && !inProject(name, session?.project_id)) {
+        const mine = listLinks().filter((l) => inProject(l.name, session?.project_id)).map((l) => l.name);
+        return text(`The linked folder "${name}" isn't part of this ${session?.project_id ? "project" : "chat's workspace"}, so it can't be changed from here. ${mine.length ? `Linked here: ${mine.join(", ")}.` : "No folder is linked here."} The owner can add a folder to this project from the Resources panel beside the chat.`);
+      }
+      const r = propose({ link: name, summary, files, deletes, workspace: project ? workspaceFor(project) : paths.workspace, sessionId: sid, sessionTitle: session?.title, project: projectKey(session?.project_id) });
       if (!r.set) return text(r.text);
       return text(outcomeText(await waitForDecision(r.set.id), r.text));
     },

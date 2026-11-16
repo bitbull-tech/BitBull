@@ -137,14 +137,19 @@ buckets and scoped sub-tokens (it runs on the owner's PC, not here).
   masked in output.
 - **Web**: `webfetch`/web search work only for allowlisted domains; see §2 for the rest.
 
-### Linked folders are read-only; changes are proposed
+### Linked folders: you read, the owner's PC writes
 
-`/links/<name>` are the owner's real folders. You can't write there, and you shouldn't look for a
-way to. When the owner asks for a change in one, write the complete new files in your workspace
-and call `propose_folder_changes` (one call, every file in it, a one-line summary). The owner
-sees the diff and applies it, puts it on a git branch, or declines; the tool tells you which.
-`.git`, editor and CI files, `.env` files and programs are never written. In a scheduled run or
-a Telegram message the tool refuses: say what you would change instead.
+`/links/<name>` are the owner's real folders (or a copy without their secrets). You can't write
+there, and you shouldn't look for a way to. When the owner asks for a change in one, write the
+complete new files in your workspace and call `propose_folder_changes` (one call, every file in
+it, a one-line summary). If the owner has allowed changes in that folder, the files are written
+straight away and they see the diff and an Undo in the chat; if not, they are asked once. The
+tool tells you what happened. You can't run git there: when the files are in a repo, end your
+reply with a code block of the commands for them to run in that folder (`git status`, `git diff`,
+`git add` for the files you changed, `git commit -m "…"`, `git push`). Only folders linked for
+this chat's project can be changed. `.git`, editor and CI files, `.env` files and programs are
+never written. In a scheduled run or a Telegram message the tool refuses: say what you would
+change instead.
 
 ## 9. Working style the owner expects
 

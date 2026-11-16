@@ -128,6 +128,37 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
   Check "no repo across two" ($null -eq (Find-BitBullRepo $proj @("myrepo/a.txt", "other/b.txt")))
 } else { Write-Host "skipped: git is not installed, branch tests not run" -ForegroundColor Yellow }
 
+# ---------- undo ----------
+$ur = New-Tmp; $us = New-Tmp; $ub = Join-Path (New-Tmp) "20261116-101500-demo"
+Put $ur "a.txt" "old a" | Out-Null
+Put $ur "gone.txt" "to be deleted" | Out-Null
+Put $ur "later.txt" "old later" | Out-Null
+$um = @((Entry $us "a.txt" "new a"), (Entry $us "sub/new.txt" "brand new"), (Entry $us "later.txt" "new later"), (Entry $us "made.txt" "made"))
+$r = Invoke-BitBullApply -Root $ur -Staging $us -Manifest $um -Deletes @("gone.txt") -AllowDelete $true -BackupDir $ub
+Check "apply for undo" ($r.ok -and $r.written -eq 4 -and $r.deleted -eq 1)
+Check "undo record written beside the backup" (Test-Path -LiteralPath ($ub + ".json"))
+# the owner edits two of the files afterwards: those are theirs now
+[System.IO.File]::WriteAllText((Join-BitBullPath $ur "later.txt"), "edited by the owner since")
+[System.IO.File]::WriteAllText((Join-BitBullPath $ur "made.txt"), "also edited")
+Check "undo refuses another folder" (-not (Invoke-BitBullUndo -Root $us -BackupDir $ub).ok)
+$u = Invoke-BitBullUndo -Root $ur -BackupDir $ub
+Check "undo ok" ($u.ok -and $u.restored -eq 2 -and $u.removed -eq 1)
+Check "replaced file is back" ([System.IO.File]::ReadAllText((Join-BitBullPath $ur "a.txt")) -eq "old a")
+Check "deleted file is back" ([System.IO.File]::ReadAllText((Join-BitBullPath $ur "gone.txt")) -eq "to be deleted")
+Check "created file is gone" (-not (Test-Path -LiteralPath (Join-BitBullPath $ur "sub/new.txt")))
+Check "a file edited since is left alone" ([System.IO.File]::ReadAllText((Join-BitBullPath $ur "later.txt")) -eq "edited by the owner since")
+Check "a created file edited since is left alone" ([System.IO.File]::ReadAllText((Join-BitBullPath $ur "made.txt")) -eq "also edited")
+Check "and both are reported" ($u.skipped.Count -eq 2 -and $u.message -match "later.txt")
+Check "one undo per apply" (-not (Invoke-BitBullUndo -Root $ur -BackupDir $ub).ok)
+Check "nothing to undo without a record" (-not (Invoke-BitBullUndo -Root $ur -BackupDir (Join-Path (New-Tmp) "none")).ok)
+# a record that names a protected path does nothing to it
+$pr = New-Tmp; $pb = Join-Path (New-Tmp) "20261116-101501-demo"
+Put $pr ".git/config" "real config" | Out-Null
+Put $pb ".git/config" "evil config" | Out-Null
+(@{ root = $pr; created = @(); replaced = @(".git/config"); deleted = @(); hashes = @{ ".git/config" = (Get-BitBullSha256 (Join-BitBullPath $pr ".git/config")) } } | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath ($pb + ".json") -Encoding UTF8
+$u = Invoke-BitBullUndo -Root $pr -BackupDir $pb
+Check "undo never writes a protected path" ([System.IO.File]::ReadAllText((Join-BitBullPath $pr ".git/config")) -eq "real config" -and $u.restored -eq 0)
+
 # ---------- grants ----------
 $gf = Join-Path (New-Tmp) "sub/folder-access.json"
 Check "no file, no grants" ((Get-BitBullGrants $gf).Count -eq 0)

@@ -82,6 +82,29 @@ if ($ok) {
   Write-Host "  wsl -d $Distro --cd ~/BitBull --exec docker compose logs --tail 80" -ForegroundColor DarkGray
 }
 
+# The link helper has no window, so say here whether it came up: without it BitBull's page can't
+# link a folder, open one in Explorer, or apply a change you approved to a linked folder.
+$helperUp = $false
+for ($i = 0; $i -lt 5; $i++) {
+  try {
+    $h = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Uri "http://localhost:8790/status"
+    if ($h.StatusCode -eq 200) { $helperUp = $true; break }
+  } catch {}
+  Start-Sleep -Seconds 1
+}
+if ($helperUp) {
+  Write-Host "Link helper is running (folders: link, open, apply approved changes)." -ForegroundColor Green
+} else {
+  $helperLog = Join-Path (Join-Path $env:LOCALAPPDATA "BitBull") "link-helper.log"
+  Write-Host "The link helper didn't start, so linking folders and applying changes to them won't work." -ForegroundColor Yellow
+  if (Test-Path -LiteralPath $helperLog) {
+    Write-Host "What it logged last ($helperLog):" -ForegroundColor Yellow
+    Get-Content -LiteralPath $helperLog -Tail 5 | ForEach-Object { Write-Host "  $_" }
+  }
+  Write-Host "To see the error itself, run it in this window:" -ForegroundColor DarkGray
+  Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -STA -File `"$helperScript`" -Distro $Distro" -ForegroundColor DarkGray
+}
+
 if ($InstallAtLogin) {
   $startup = [Environment]::GetFolderPath("Startup")
   $lnk = Join-Path $startup "BitBull.lnk"

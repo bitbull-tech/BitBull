@@ -139,15 +139,80 @@ function Remove-BitBullToBin([string]$file) {
   if (-not $done) { Remove-Item -LiteralPath $file -Force }
 }
 
+# The record of one apply sits beside its backup folder, as <backup>.json.
+function Save-BitBullUndo([string]$BackupDir, $undo) {
+  try {
+    New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
+    ($undo | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath ($BackupDir + ".json") -Encoding UTF8
+  } catch {}
+}
+
+# Undo one apply: put back what it replaced or deleted, and remove what it created. A file that
+# was changed again since (its hash is no longer what was written) is left alone and reported:
+# newer work is never thrown away. One undo per apply.
+function Invoke-BitBullUndo {
+  param([string]$Root, [string]$BackupDir)
+  $record = $BackupDir + ".json"
+  if (-not (Test-Path -LiteralPath $record -PathType Leaf)) { return @{ ok = $false; message = "There is nothing to undo for that change (already undone, or its backup was cleared away)." } }
+  try { $u = Get-Content -Raw -LiteralPath $record | ConvertFrom-Json } catch { return @{ ok = $false; message = "The record of that change can't be read." } }
+  if (([string]$u.root).TrimEnd('\', '/').ToLowerInvariant() -ne $Root.TrimEnd('\', '/').ToLowerInvariant()) { return @{ ok = $false; message = "That change was made in a different folder." } }
+  $restored = 0; $removed = 0; $skipped = @()
+  $hashOf = @{}
+  if ($u.hashes) { foreach ($p in $u.hashes.PSObject.Properties) { $hashOf[$p.Name] = [string]$p.Value } }
+  $safe = {
+    param([string]$rel)
+    if (Test-BitBullRelPath $rel) { return $false }
+    if (Test-BitBullNoLinks $Root $rel) { return $false }
+    return $true
+  }
+  try {
+    foreach ($rel in @($u.replaced | Where-Object { $_ })) {
+      $rel = [string]$rel
+      if (-not (& $safe $rel)) { $skipped += $rel; continue }
+      $dest = Join-BitBullPath $Root $rel; $b = Join-BitBullPath $BackupDir $rel
+      if (-not (Test-Path -LiteralPath $b -PathType Leaf)) { $skipped += $rel; continue }
+      if ((Test-Path -LiteralPath $dest -PathType Leaf) -and (Get-BitBullSha256 $dest) -ne $hashOf[$rel]) { $skipped += $rel; continue }
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+      [System.IO.File]::Copy($b, $dest, $true); $restored++
+    }
+    foreach ($rel in @($u.deleted | Where-Object { $_ })) {
+      $rel = [string]$rel
+      if (-not (& $safe $rel)) { $skipped += $rel; continue }
+      $dest = Join-BitBullPath $Root $rel; $b = Join-BitBullPath $BackupDir $rel
+      if ((Test-Path -LiteralPath $dest) -or -not (Test-Path -LiteralPath $b -PathType Leaf)) { $skipped += $rel; continue }
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+      [System.IO.File]::Copy($b, $dest, $false); $restored++
+    }
+    foreach ($rel in @($u.created | Where-Object { $_ })) {
+      $rel = [string]$rel
+      if (-not (& $safe $rel)) { $skipped += $rel; continue }
+      $dest = Join-BitBullPath $Root $rel
+      if (-not (Test-Path -LiteralPath $dest -PathType Leaf)) { continue }
+      if ((Get-BitBullSha256 $dest) -ne $hashOf[$rel]) { $skipped += $rel; continue }
+      Remove-BitBullToBin $dest; $removed++
+    }
+  } catch {
+    return @{ ok = $false; message = "Undo stopped part-way ($restored put back, $removed removed): $($_.Exception.Message)" }
+  }
+  try { Move-Item -LiteralPath $record -Destination ($record + ".undone") -Force } catch {}
+  $msg = "Undone: $restored file(s) put back, $removed removed."
+  if ($skipped.Count) { $msg += " Left alone because they changed since: " + (($skipped | Select-Object -First 5) -join ", ") + $(if ($skipped.Count -gt 5) { ", and more" } else { "" }) + "." }
+  return @{ ok = $true; restored = $restored; removed = $removed; skipped = @($skipped); message = $msg }
+}
+
 # files mode: copy into the folder. Overwritten and deleted files are copied to $BackupDir first.
 function Invoke-BitBullApply {
   param([string]$Root, [string]$Staging, $Manifest, $Deletes, [bool]$AllowDelete, [string]$BackupDir)
   $check = Test-BitBullChangeSet -Root $Root -Staging $Staging -Manifest $Manifest -Deletes $Deletes -AllowDelete $AllowDelete
   if (-not $check.ok) { return $check }
   $written = 0; $deleted = 0; $backedUp = 0
+  # what was done, so it can be undone: which files are new, which replaced one (the old one is in
+  # the backup), which were deleted, and the hash of each file as written
+  $undo = @{ root = $Root; created = @(); replaced = @(); deleted = @(); hashes = @{} }
   try {
     foreach ($f in $check.files) {
-      if ($BackupDir -and (Test-Path -LiteralPath $f.dest -PathType Leaf)) {
+      $had = Test-Path -LiteralPath $f.dest -PathType Leaf
+      if ($BackupDir -and $had) {
         $b = Join-BitBullPath $BackupDir $f.rel
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $b) | Out-Null
         [System.IO.File]::Copy($f.dest, $b, $true); $backedUp++
@@ -155,6 +220,8 @@ function Invoke-BitBullApply {
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $f.dest) | Out-Null
       [System.IO.File]::Copy($f.src, $f.dest, $true)
       $written++
+      if ($had) { $undo.replaced += $f.rel } else { $undo.created += $f.rel }
+      $undo.hashes[$f.rel] = (Get-BitBullSha256 $f.dest)
     }
     foreach ($d in $check.deletes) {
       if (-not (Test-Path -LiteralPath $d.dest -PathType Leaf)) { continue }
@@ -165,10 +232,13 @@ function Invoke-BitBullApply {
       }
       Remove-BitBullToBin $d.dest
       $deleted++
+      $undo.deleted += $d.rel
     }
   } catch {
+    if ($BackupDir) { Save-BitBullUndo $BackupDir $undo }
     return @{ ok = $false; message = "Stopped after $written written, $deleted deleted: $($_.Exception.Message)"; written = $written; deleted = $deleted; backup = $BackupDir }
   }
+  if ($BackupDir) { Save-BitBullUndo $BackupDir $undo }
   return @{ ok = $true; written = $written; deleted = $deleted; backedUp = $backedUp; backup = $BackupDir; message = "Wrote $written file(s)" + $(if ($deleted) { ", deleted $deleted" } else { "" }) }
 }
 

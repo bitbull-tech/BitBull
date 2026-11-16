@@ -11,6 +11,7 @@ export function FoldersPanel() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const [projectNames, setProjectNames] = useState<Record<string, string>>({})
   const load = () => {
     void api
       .links()
@@ -19,6 +20,12 @@ export function FoldersPanel() {
     void helperStatus().then(setHelper)
   }
   useEffect(load, [])
+  useEffect(() => {
+    void api
+      .projects()
+      .then((r) => setProjectNames(Object.fromEntries(r.projects.map((p) => [p.id, p.name]))))
+      .catch(() => {})
+  }, [])
 
   const run = async (fn: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>, done: string) => {
     setMsg(null)
@@ -47,16 +54,15 @@ export function FoldersPanel() {
   return (
     <div className="net-panel">
       <p className="muted small">
-        Linked folders are folders on this PC that the agent can <b>read but never write to</b>: they are mounted read-only, and BitBull
-        restarts (about 10 seconds) whenever one is added or removed. Every chat in this BitBull can read them. A folder holding .env files,
-        keys or wallets (BitBull's own repo, for one) is linked as a read-only copy without them: the agent never sees those files, and
-        Refresh updates the copy.
+        Every folder linked on this PC, whichever project it is for. The agent reads a linked folder and can never write to it itself. A
+        folder holding .env files, keys or wallets is read as a copy without them. Each folder belongs to the project it was linked from;
+        add it to another from the Resources panel beside a chat.
       </p>
       <p className="muted small">
-        <b>Changes.</b> If you allow changes in a folder, the agent can <i>propose</i> them: you are shown the files and the diff, and only
-        what you approve is copied in, by the helper on this PC. For files in a git repo you can put the change on a new branch instead and
-        leave your working files alone: the safer choice, and it needs no standing permission (a box on this PC asks each time). Git hooks and config, editor and CI files, .env
-        files and programs are never written. Deleting is a separate permission. Scheduled runs and Telegram can't change anything here.
+        <b>Changes.</b> Allow them once per folder (a box on this PC asks). After that, changes the agent makes for that folder in a chat are
+        written by this PC straight away, each shown in the chat with its diff, an Undo and the git commands to publish it. Never written: git
+        hooks and config, editor and CI files, .env files and programs. Deleting is a separate permission. Scheduled runs and Telegram can't
+        change anything.
       </p>
       {links && !links.available ? (
         <p className="muted">Links work in the sandboxed BitBull (Docker) only.</p>
@@ -81,18 +87,23 @@ export function FoldersPanel() {
                     </span>
                   )}
                   {r.write && (
-                    <span className="pill warn" title={`You allowed changes here${r.since ? ` on ${r.since}` : ''}. Each change still needs your approval.`}>
+                    <span className="pill warn" title={`You allowed changes here${r.since ? ` on ${r.since}` : ''}. They are written straight away, each shown in the chat with an Undo.`}>
                       changes allowed{r.del ? ' · deleting too' : ''}
                     </span>
                   )}
-                  {canGrant && r.mode === 'live' && r.inBitBull && !r.write && (
+                  {r.inBitBull?.projects && (
+                    <span className="muted small" title="The projects whose chats are offered this folder">
+                      {r.inBitBull.projects.length ? r.inBitBull.projects.map((id) => (id === 'general' ? 'General' : (projectNames[id] ?? 'a project'))).join(', ') : 'in no project yet'}
+                    </span>
+                  )}
+                  {canGrant && (r.mode === 'live' || helper.caps.includes('copies')) && r.inBitBull && !r.write && (
                     <button
                       className="btn sm"
                       disabled={!!busy}
                       title="A box on this PC asks you to confirm"
                       onClick={() => {
                         setBusy(`Confirm in the box that opened on this PC to allow changes in ${r.name}…`)
-                        void run(() => grantFolder(r.name, 'write'), `Changes allowed in ${r.name}. Each one still waits for your approval.`)
+                        void run(() => grantFolder(r.name, 'write'), `Changes allowed in ${r.name}.`)
                       }}
                     >
                       Allow changes…
@@ -160,7 +171,7 @@ export function FoldersPanel() {
                 disabled={!!busy}
                 onClick={() => {
                   setBusy('Opening the folder picker on this PC…')
-                  void run(() => linkFolder(setBusy), 'Linked. Attach it from the folder button in the chat.')
+                  void run(() => linkFolder(setBusy), 'Linked. Add it to a project from the Resources panel beside a chat.')
                 }}
               >
                 <IconPlus size={13} /> Link a folder from this PC…
@@ -176,6 +187,7 @@ export function FoldersPanel() {
           {busy && <p className="small fm-busy">{busy}</p>}
           {msg && <p className={`small ${msg.ok ? 'good' : 'error'}`}>{msg.text}</p>}
           {ready && !canGrant && <p className="muted small">Allowing changes needs the helper that comes with this version on Windows; on a Mac, links are read-only copies for now.</p>}
+          {ready && canGrant && !helper.caps.includes('copies') && <p className="muted small">The helper running on this PC is an older one. Press Start in the launcher (or run start.ps1) to get the one that can write to folders linked as copies.</p>}
           <FolderChangeHistory />
         </>
       )}
