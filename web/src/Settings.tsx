@@ -13,6 +13,7 @@ import { RouterPanel } from './RouterPanel'
 import { DittoConnect } from './DittoConnect'
 import { TelegramConnect } from './TelegramConnect'
 import { LeadpoetConnect } from './LeadpoetConnect'
+import { SaygmConnect } from './SaygmConnect'
 
 type Tab = 'status' | 'integrations' | 'folders' | 'network' | 'config' | 'voice' | 'appearance'
 
@@ -198,6 +199,14 @@ export function Settings({
                       {meta?.notes && <p className="muted small">{meta.notes}</p>}
                       {meta?.hasMcp && (
                         <p className="muted small">Its MCP tools reach a chat only in projects that switch it on (project settings).</p>
+                      )}
+                      {svc.id === 'saygm' && (
+                        <SaygmConnect
+                          onConnected={() => {
+                            void check()
+                            onModelsRefreshed()
+                          }}
+                        />
                       )}
                       {svc.id === 'saygm' && (
                         <div className="row-actions">
@@ -572,7 +581,7 @@ function StatusCard({ title, ok, loading, detail }: { title: string; ok?: boolea
 
 /** The outside services, in the order Status and Integrations show them. Ids match the server's setting groups. */
 const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
-  { id: 'saygm', name: 'SayGM', blurb: 'The model gateway: one key, every model in the picker.', docs: 'https://saygm.com' },
+  { id: 'saygm', name: 'SayGM', blurb: 'The model gateway: one key, every model in the picker.', docs: 'https://saygm.com/r/17swtkpu' },
   { id: 'ditto', name: 'Ditto', blurb: 'Memory shared by every chat and model, your connected apps as tools, and Ditto Router models.', docs: 'https://heyditto.ai' },
   { id: 'github', name: 'GitHub', blurb: 'Clone, pull, push and open PRs from the agent’s shell.', docs: 'https://github.com/settings/personal-access-tokens' },
   { id: 'telegram', name: 'Telegram', blurb: 'Message BitBull from your phone through your own private bot, and get scheduled results there. One account only: yours.', docs: 'https://core.telegram.org/bots/features#botfather' },

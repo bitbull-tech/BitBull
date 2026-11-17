@@ -263,6 +263,22 @@ export interface LeadpoetState {
   manageUrl: string
 }
 
+/** Connect with SayGM (server/src/saygmConnect.ts): the sign-in's state; never a key or token */
+export interface SaygmConnectState {
+  /** this BitBull has a client id, so Connect can be offered */
+  available: boolean
+  connected: boolean
+  email: string
+  scopes: string[]
+  connectedAt: number | null
+  pending: { url: string; redirect: string; expiresAt: number } | null
+  error: string
+  manageUrl: string
+  /** where someone without a SayGM account signs up */
+  signupUrl: string
+  note?: string
+}
+
 /** Telegram (server/src/telegram.ts): your bot, the one account it answers, and a pairing code while one is live */
 export interface TelegramState {
   configured: boolean
@@ -666,6 +682,9 @@ export const api = {
   /** Connect Ditto: start the sign-in, then poll its state (server/src/dittoConnect.ts) */
   dittoConnect: () => req<DittoConnectState>('/api/ditto/connect', { method: 'POST' }),
   dittoConnectState: () => req<DittoConnectState>('/api/ditto/connect'),
+  saygmConnectState: () => req<SaygmConnectState>('/api/saygm/connect'),
+  saygmConnect: (origin: string) => req<SaygmConnectState>('/api/saygm/connect', { method: 'POST', body: JSON.stringify({ origin }) }),
+  saygmDisconnect: () => req<SaygmConnectState>('/api/saygm/disconnect', { method: 'POST' }),
   leadpoet: () => req<LeadpoetState>('/api/leadpoet'),
   leadpoetConnect: (o: { origin: string; access: 'read' | 'edit'; send: boolean }) => req<LeadpoetState>('/api/leadpoet/connect', { method: 'POST', body: JSON.stringify(o) }),
   leadpoetFinish: (url: string) => req<LeadpoetState>('/api/leadpoet/finish', { method: 'POST', body: JSON.stringify({ url }) }),

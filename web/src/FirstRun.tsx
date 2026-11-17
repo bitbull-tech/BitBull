@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { api, type AppConfig } from './api'
+import { api, type AppConfig, type SaygmConnectState } from './api'
 import { DittoConnect } from './DittoConnect'
+import { SaygmConnect } from './SaygmConnect'
 import { LinkFallback } from './LinkFallback'
 import { IconCheck } from './icons'
 
@@ -8,8 +9,8 @@ import { IconCheck } from './icons'
  * "Finish setting up", shown above the chat on a fresh install until both are done. BitBull
  * starts without keys, so installing never asks for one in a terminal or a file:
  *
- *  1. SayGM (models): paste the key here; it is saved like any key in Settings (the vault when
- *     unlocked). This becomes "Sign in with SayGM" when SayGM offers it to self-hosted apps.
+ *  1. SayGM (models): Connect with SayGM, a sign-in (or sign-up) in the browser that gives
+ *     BitBull its own key; or paste a key, saved like any key in Settings (the vault when unlocked).
  *  2. Ditto (memory): Connect Ditto, a sign-in in the browser with no key to copy.
  */
 export function FirstRun({ cfg, onSaygmReady }: { cfg: AppConfig; onSaygmReady: () => void }) {
@@ -19,6 +20,11 @@ export function FirstRun({ cfg, onSaygmReady }: { cfg: AppConfig; onSaygmReady: 
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [later, setLater] = useState(false)
+  const [sg, setSg] = useState<SaygmConnectState | null>(null)
+  const [paste, setPaste] = useState(false)
+  // Connect is offered when this BitBull has a client id; otherwise (or if you prefer) paste a key
+  const canConnect = !!sg?.available
+  const signup = sg?.signupUrl ?? 'https://saygm.com'
 
   if ((saygm && ditto) || later) return null
 
@@ -66,9 +72,24 @@ export function FirstRun({ cfg, onSaygmReady }: { cfg: AppConfig; onSaygmReady: 
             <span className="muted small">Connected.</span>
           ) : (
             <>
+              <SaygmConnect
+                compact
+                onState={setSg}
+                onConnected={() => {
+                  setSaygm(true)
+                  onSaygmReady()
+                }}
+              />
+              {canConnect && !paste && (
+                <button type="button" className="link small" onClick={() => setPaste(true)}>
+                  I already have a key to paste
+                </button>
+              )}
+              {(!canConnect || paste) && (
+                <>
               <span className="muted small">
                 One key for every AI model.{' '}
-                <a href="https://saygm.com" target="_blank" rel="noreferrer">
+                <a href={signup} target="_blank" rel="noreferrer">
                   Get a key at saygm.com
                 </a>
                 , then paste it here.
@@ -94,7 +115,9 @@ export function FirstRun({ cfg, onSaygmReady }: { cfg: AppConfig; onSaygmReady: 
                 </button>
               </form>
               {msg && <span className="small lv-error-text">{msg}</span>}
-              <LinkFallback url="https://saygm.com" what="the SayGM link" />
+              <LinkFallback url={signup} what="the SayGM link" />
+                </>
+              )}
             </>
           )}
         </div>

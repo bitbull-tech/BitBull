@@ -53,6 +53,7 @@ const secrets = () =>
     config.integrations.taostats.apiKey,
     config.integrations.telegram.botToken,
     ...oauthTokens(config.integrations.leadpoet.oauth),
+    ...oauthTokens(config.saygm.oauth),
     config.storage.accessKey,
     config.storage.secretKey,
     config.storage.encryptionKey,

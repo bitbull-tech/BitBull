@@ -34,7 +34,7 @@ instead, signed in just the same; run the command again later to get the app.
 
 Its first screen, **Finish setting up**, asks for the two things only you have:
 
-1. **SayGM** (the AI models): [get a key at saygm.com](https://saygm.com) and paste it into the box.
+1. **SayGM** (the AI models): [get a key at saygm.com](https://saygm.com/r/17swtkpu) and paste it into the box.
 2. **Ditto** (BitBull's memory): press **Connect Ditto** and sign in, or sign up free, in your
    browser. There is no key to copy.
 

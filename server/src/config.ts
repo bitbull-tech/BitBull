@@ -70,6 +70,8 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   // Leadpoet sign-in (server/src/leadpoet.ts): written by Connect Leadpoet, never typed. Tokens
   // only; where they are sent (LEADPOET_URL) stays .env-only.
   LEADPOET_OAUTH: {},
+  // SayGM sign-in (server/src/saygmConnect.ts): written by Connect with SayGM, never typed.
+  SAYGM_OAUTH: {},
   HIPPIUS_ACCESS_KEY: {},
   HIPPIUS_SECRET_KEY: {},
   HIPPIUS_BUCKET: {},
@@ -173,6 +175,18 @@ function buildConfig() {
     anthropicBaseUrl: env("SAYGM_ANTHROPIC_BASE_URL", "https://api.saygm.com"),
     /** "api-key" -> x-api-key header, "bearer" -> Authorization: Bearer */
     anthropicAuth: env("SAYGM_ANTHROPIC_AUTH", "api-key") as "api-key" | "bearer",
+    /**
+     * Connect with SayGM (saygmConnect.ts). The client id is public (the flow is PKCE, with no
+     * secret): it is the BitBull app as registered with SayGM, the same for every install.
+     */
+    oauthClientId: env("SAYGM_OAUTH_CLIENT_ID", SAYGM_CLIENT_ID),
+    authorizeUrl: env("SAYGM_AUTHORIZE_URL", "https://saygm.com/oauth/authorize"),
+    /** SayGM's account API: code exchange, revoke, profile. Not the inference host. */
+    accountUrl: env("SAYGM_ACCOUNT_URL", "https://account.saygm.com/v1").replace(/\/+$/, ""),
+    /** BitBull's SayGM referral code: on the sign-in address and on links to saygm.com. Empty = none. */
+    ref: env("SAYGM_REF", "17swtkpu").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40),
+    /** the sign-in BitBull holds (JSON: account tokens, scopes, email); set by Connect with SayGM */
+    oauth: env("SAYGM_OAUTH", ""),
   },
 
   /** Talking to BitBull (docs/VOICE.md): Piper speaks inside the container, a Gemini model on SayGM listens. */
@@ -338,6 +352,13 @@ function buildConfig() {
   c.integrations.atlas.workflowsDir = path.resolve(env("ATLAS_WORKFLOWS_DIR", path.join(c.dataDir, "integrations", "atlas", "workflows")));
   return c;
 }
+
+/**
+ * BitBull's client id on SayGM, issued when the app was registered there. Public by design (PKCE,
+ * no secret). Empty until SayGM has issued it: Connect with SayGM is then not offered, and a key
+ * can be pasted as before. SAYGM_OAUTH_CLIENT_ID in .env overrides it.
+ */
+const SAYGM_CLIENT_ID = "";
 
 export const config = buildConfig();
 

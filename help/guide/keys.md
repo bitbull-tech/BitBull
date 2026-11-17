@@ -1,3 +1,29 @@
+## Connect with SayGM
+BitBull's first screen and Settings → Integrations → SayGM have **Connect with SayGM**. It opens
+saygm.com, where you sign in or create an account, see what BitBull is asking for, and choose a
+monthly spending limit for it. The browser then comes back to BitBull, which now has its own key
+on your account. Nothing is copied or pasted.
+
+- **What BitBull asks for:** to run models (`inference:use`), to read the usage of its own key
+  (`usage:read`) and to see which account it is connected to (`profile:read`). It cannot see or
+  change your other SayGM keys, your balance or your billing.
+- **The limit is yours.** You set it on SayGM's page and can change it, or remove BitBull, under
+  Connected apps on saygm.com. BitBull can't change it. If a model stops with a payment error,
+  check both your credits and that limit.
+- **Disconnect** (Settings → Integrations → SayGM) removes BitBull from your SayGM account and
+  its key stops working.
+- **It works from BitBull on the computer it runs on** (`http://127.0.0.1:8787` or
+  `http://localhost:8787`): SayGM only sends the browser back to addresses registered for
+  BitBull. Reaching BitBull some other way, paste a key instead.
+- **Pasting a key still works** ("I already have a key to paste"), exactly as before.
+
+New accounts made through Connect, and the links to saygm.com in BitBull and its docs, carry
+BitBull's SayGM referral code. To use your own code, or none, set `SAYGM_REF` in `.env` (empty
+for none). The code is on the browser address only; it is not a credential. Technical notes:
+SayGM's partner sign-in is Authorization Code with PKCE and a public client id
+(`SAYGM_OAUTH_CLIENT_ID`), described at <https://docs.saygm.com/api/oauth/>; the key and tokens
+are kept like any key (the vault when unlocked, hidden from the agent's shell, redacted in logs).
+
 ## Keys and settings: `.env` or the UI
 `.env` is the base. Keys and settings marked **Edit** in Settings can also be set from the UI:
 the outside services (SayGM, Ditto, GitHub, Taostats, Atlas, 404, Hippius) under

@@ -55,6 +55,7 @@ import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, s
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { benchState, startBench } from "./houndBench.js";
+import { disconnect as saygmDisconnect, finishConnect as saygmFinish, SAYGM_CALLBACK, saygmConnectState, startConnect as saygmConnect } from "./saygmConnect.js";
 import { probeModel } from "./modelProbe.js";
 import { checkQuote } from "./houndChecks.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
@@ -355,6 +356,27 @@ app.post("/api/leadpoet/disconnect", async (c) => {
   return c.json(s);
 });
 
+/**
+ * Connect with SayGM (server/src/saygmConnect.ts): the owner signs in or signs up on saygm.com
+ * and BitBull gets its own key on their account. `connect` returns the saygm.com address to open;
+ * the browser comes back to /oauth/saygm/callback. No key or token is ever returned here.
+ */
+app.get("/api/saygm/connect", (c) => c.json(saygmConnectState()));
+app.post("/api/saygm/connect", async (c) => {
+  const body = z.object({ origin: z.string().max(300) }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "origin required" }, 400);
+  try {
+    return c.json(saygmConnect(body.data));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+app.post("/api/saygm/disconnect", async (c) => {
+  const s = await saygmDisconnect();
+  void reloadOpencode().catch(() => {});
+  return c.json(s);
+});
+
 /** What is left to spend on SayGM and Ditto Router, read with the keys BitBull already holds (balances.ts). */
 app.get("/api/balances", async (c) => c.json(await balances(!!c.req.query("refresh"))));
 
@@ -475,6 +497,28 @@ app.get("/oauth/leadpoet/callback", async (c) => {
     return page("Leadpoet is connected", "You can close this tab and go back to BitBull.", true);
   } catch (e) {
     return page("Leadpoet wasn't connected", e instanceof Error ? e.message : String(e), false);
+  }
+});
+
+/** The same for SayGM: where saygm.com sends the owner's browser back after they approve BitBull. */
+app.get(SAYGM_CALLBACK, async (c) => {
+  const q = (k: string) => c.req.query(k) ?? null;
+  const page = (title: string, text: string, ok: boolean) =>
+    c.html(
+      `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BitBull · SayGM</title>` +
+        `<body style="font:16px/1.5 system-ui,sans-serif;background:#0d0d0b;color:#f4f1e8;display:grid;place-items:center;min-height:100vh;margin:0">` +
+        `<main style="max-width:440px;padding:24px;text-align:center"><h1 style="font-size:22px;margin:0 0 8px;color:${ok ? "#f3c249" : "#ff8a7a"}">${escapeHtml(title)}</h1><p style="margin:0;opacity:.85">${escapeHtml(text)}</p></main>`,
+      ok ? 200 : 400,
+      { "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'", "cache-control": "no-store", "referrer-policy": "no-referrer" },
+    );
+  try {
+    const s = await saygmFinish({ code: q("code"), state: q("state"), error: q("error") });
+    // the models list is read with the new key, and OpenCode restarts with it
+    await publicModels(true).catch(() => {});
+    void reloadOpencode().catch(() => {});
+    return page("SayGM is connected", `${s.email ? `Signed in as ${s.email}. ` : ""}You can close this tab and go back to BitBull.`, true);
+  } catch (e) {
+    return page("SayGM wasn't connected", e instanceof Error ? e.message : String(e), false);
   }
 });
 

@@ -211,7 +211,7 @@ else
   # Kept even if weak: changing it would sign out every browser and script that uses it
   [ "${#APP_TOKEN_NOW}" -ge 32 ] || note "  It's short for a password (${#APP_TOKEN_NOW} characters). For a strong one: openssl rand -hex 32"
 fi
-ask_key SAYGM_API_KEY "one key for every AI model" "https://saygm.com"
+ask_key SAYGM_API_KEY "one key for every AI model" "https://saygm.com/r/17swtkpu"
 ask_key DITTO_API_KEY "BitBull's long-term memory" "https://app.heyditto.ai/mcp" "https://www.bitbull.tech/ditto"
 
 if [ "$START" = 0 ]; then
