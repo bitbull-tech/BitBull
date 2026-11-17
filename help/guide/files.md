@@ -90,9 +90,11 @@ wsl -d bitbull --exec docker exec bitbull-agent python3 -c "import socket; socke
 The agent only ever reads a linked folder. A change reaches it one way: the agent writes the new
 files in its workspace and hands them over, and the link helper on your PC writes them in.
 
-- **You are asked once per folder.** The first time the agent has a change for a folder, the card
-  offers **Allow changes in this folder and write** (a box on the PC asks you to confirm). You can
-  also allow it beforehand from the **Resources** panel or Settings → Folders.
+- **You are asked once per folder, in each project.** The first time the agent has a change for a
+  folder, the card offers **Allow changes in this folder and write** (a box on the PC asks you to
+  confirm, naming the project). You can also allow it beforehand from the **Resources** panel.
+  The permission is that project's: add the same folder to another project and it starts
+  read-only there.
 - **After that, changes are written straight away.** Each one appears in the chat corner with its
   files and diffs, an **Undo**, and, when the files are in a git repo, the commands to review and
   publish it (`git status`, `git diff`, `git add`, `git commit`, `git push`) with a Copy button.
@@ -111,6 +113,10 @@ What keeps this safe:
 
 - **What is written is what was shown.** Each file's hash goes to the helper; a file that
   changed since it was staged is refused and nothing is written.
+- **Your own edits are not overwritten.** Each change also carries the hash of every file as the
+  agent read it. If a file in your folder is no longer that (you edited it, or it appeared or
+  went since), the whole change is refused, nothing is written, and the agent is told. Refresh
+  the folder if it is a copy, and ask again.
 - **Some files are never written**, because they run on your PC without you choosing to run
   them, or hold secrets: `.git` (hooks, config), `.gitconfig`, `.githooks`, `.husky`, `.vscode`,
   `.idea`, `.devcontainer`, `.github/workflows`, shell start-up files, `.envrc`, `.env` and
@@ -121,9 +127,10 @@ What keeps this safe:
   Recycle Bin, with a copy in the backup folder.
 - **Read-only when nobody is watching.** Scheduled runs and Telegram messages can't change a
   linked folder, and a change is only written while BitBull is open on the PC.
-- **Listed and removable.** The Resources panel and Settings → Folders show every folder with
-  changes allowed, with **Make read-only** to take it away (no question asked). Removing a link
-  removes its permissions.
+- **Listed and removable.** The Resources panel shows what its project may do in each folder,
+  with **Make read-only** for that project. Settings → Folders lists every folder and the
+  projects allowed to change it, with **Make read-only** for all of them. Neither asks a
+  question. Removing a link removes its permissions.
 
 Changes work on Windows for now; on a Mac, links are read-only copies.
 

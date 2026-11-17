@@ -127,6 +127,19 @@ test("which repo a change belongs to", () => {
   assert.equal(loose.set!.repo, null);
 });
 
+test("each file carries what it was when the agent read it, so a later edit isn't overwritten", () => {
+  put(ws, "work/r2.md", "a newer readme\n");
+  put(ws, "work/fresh.md", "fresh\n");
+  const before = createHash("sha256").update(readFileSync(path.join(links, "github", "myrepo", "README.md"))).digest("hex");
+  const s = F.propose({ link: "github", summary: "hashes", files: [{ to: "myrepo/README.md", from: "work/r2.md" }, { to: "myrepo/fresh-file.md", from: "work/fresh.md" }], deletes: ["myrepo/README.md".replace("README", "OLD")], workspace: ws }).set!;
+  const readme = s.files.find((f) => f.path === "myrepo/README.md")!;
+  assert.equal(readme.before, before, "the file as it is in the folder now");
+  assert.notEqual(readme.before, readme.sha256);
+  assert.equal(s.files.find((f) => f.path === "myrepo/fresh-file.md")!.before, "", "a new file expects there to be none");
+  assert.deepEqual(s.deleteBefore, {}, "a delete of something that isn't there is dropped");
+  F.decide(s.id, "declined");
+});
+
 test("the agent waits for the owner's answer and is told which it was", async () => {
   put(ws, "work/a.md", "A\n");
   const s = proposal([{ to: "myrepo/a.md", from: "work/a.md" }], [], "Add a").set!;

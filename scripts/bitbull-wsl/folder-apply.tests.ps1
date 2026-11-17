@@ -159,13 +159,52 @@ Put $pb ".git/config" "evil config" | Out-Null
 $u = Invoke-BitBullUndo -Root $pr -BackupDir $pb
 Check "undo never writes a protected path" ([System.IO.File]::ReadAllText((Join-BitBullPath $pr ".git/config")) -eq "real config" -and $u.restored -eq 0)
 
-# ---------- grants ----------
+# ---------- a file changed since the agent read it is not overwritten ----------
+$sr = New-Tmp; $ss = New-Tmp; $sb = Join-Path (New-Tmp) "20261117-090000-demo"
+$pa = Put $sr "a.txt" "as the agent read it"
+Put $sr "b.txt" "b as read" | Out-Null
+$ha = Get-BitBullSha256 $pa
+$hb = Get-BitBullSha256 (Join-BitBullPath $sr "b.txt")
+$sm = @((Entry $ss "a.txt" "the agent's new a"), (Entry $ss "new.txt" "brand new"))
+$r = Invoke-BitBullApply -Root $sr -Staging $ss -Manifest $sm -Deletes @() -AllowDelete $false -BackupDir $sb -Expect @{ "a.txt" = $ha; "new.txt" = "" }
+Check "unchanged since read: written" ($r.ok -and $r.written -eq 2)
+# now the owner edits a.txt; the agent proposes again from what it read before
+[System.IO.File]::WriteAllText((Join-BitBullPath $sr "a.txt"), "the owner's own edit")
+$sm2 = @((Entry $ss "a.txt" "the agent's second a"), (Entry $ss "b.txt" "the agent's b"))
+$r = Invoke-BitBullApply -Root $sr -Staging $ss -Manifest $sm2 -Deletes @() -AllowDelete $false -BackupDir $sb -Expect @{ "a.txt" = (Get-BitBullSha256 (Join-BitBullPath $ss "a.txt")); "b.txt" = $hb }
+Check "changed since read: refused" (-not $r.ok -and $r.stale -and $r.message -match "a.txt changed in your folder")
+Check "and the owner's edit is still there" ([System.IO.File]::ReadAllText((Join-BitBullPath $sr "a.txt")) -eq "the owner's own edit")
+Check "and nothing else in the change was written" ([System.IO.File]::ReadAllText((Join-BitBullPath $sr "b.txt")) -eq "b as read")
+# a file the agent took to be new, but which is there
+$r = Invoke-BitBullApply -Root $sr -Staging $ss -Manifest @((Entry $ss "b.txt" "x")) -Deletes @() -AllowDelete $false -BackupDir $sb -Expect @{ "b.txt" = "" }
+Check "believed new but present: refused" (-not $r.ok -and $r.stale -and $r.message -match "as if it did not exist")
+# a file the agent read that has gone
+$r = Invoke-BitBullApply -Root $sr -Staging $ss -Manifest @((Entry $ss "gone.txt" "x")) -Deletes @() -AllowDelete $false -BackupDir $sb -Expect @{ "gone.txt" = $hb }
+Check "read but now gone: refused" (-not $r.ok -and $r.stale)
+# a delete of a file that changed since
+$r = Invoke-BitBullApply -Root $sr -Staging $ss -Manifest @() -Deletes @("a.txt") -AllowDelete $true -BackupDir $sb -Expect @{ "a.txt" = $ha }
+Check "delete of a file changed since: refused" (-not $r.ok -and $r.stale -and (Test-Path -LiteralPath (Join-BitBullPath $sr "a.txt")))
+# no expectations given (an older page): behaves as before
+$r = Invoke-BitBullApply -Root $sr -Staging $ss -Manifest @((Entry $ss "b.txt" "written without a check")) -Deletes @() -AllowDelete $false -BackupDir $sb
+Check "no expectations: written as before" ($r.ok)
+
+# ---------- grants: per folder and per project ----------
 $gf = Join-Path (New-Tmp) "sub/folder-access.json"
 Check "no file, no grants" ((Get-BitBullGrants $gf).Count -eq 0)
-$g = @{ github = @{ write = $true; delete = $false; path = "D:\github"; since = "2026-11-14" } }
+$g = @{ github = @{ path = "D:\github"; projects = @{ "proj-1" = @{ write = $true; delete = $false; since = "2026-11-17" } } } }
 Save-BitBullGrants $gf $g
 $back = Get-BitBullGrants $gf
-Check "grants round-trip" ($back.github.write -eq $true -and $back.github.delete -eq $false -and $back.github.path -eq "D:\github")
+Check "grants round-trip" ($back.github.path -eq "D:\github" -and $back.github.projects["proj-1"].write -eq $true -and $back.github.projects["proj-1"].delete -eq $false)
+Check "the project it was given for" ((Get-BitBullGrantFor $back "github" "d:\GitHub\" "proj-1").write -eq $true)
+Check "not another project" ($null -eq (Get-BitBullGrantFor $back "github" "D:\github" "proj-2"))
+Check "not the general workspace" ($null -eq (Get-BitBullGrantFor $back "github" "D:\github" "general"))
+Check "not the same name on another folder" ($null -eq (Get-BitBullGrantFor $back "github" "D:\other" "proj-1"))
+Check "not another link" ($null -eq (Get-BitBullGrantFor $back "docs" "D:\github" "proj-1"))
+Check "not without a project" ($null -eq (Get-BitBullGrantFor $back "github" "D:\github" ""))
+Check "not an odd project id" ($null -eq (Get-BitBullGrantFor $back "github" "D:\github" "../x"))
+# the older shape (one grant for the whole folder) is not carried over to any project
+[System.IO.File]::WriteAllText($gf, '{"github":{"write":true,"delete":true,"path":"D:\\github","since":"2026-11-16"}}')
+Check "an older whole-folder grant gives no project anything" ((Get-BitBullGrants $gf).Count -eq 0)
 [System.IO.File]::WriteAllText($gf, "{not json")
 Check "damaged file means no grants" ((Get-BitBullGrants $gf).Count -eq 0)
 

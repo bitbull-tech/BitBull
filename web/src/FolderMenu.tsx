@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconCheck, IconCopy, IconFolder, IconLock, IconPlus, IconRefresh } from './icons'
-import { HELPER_CMD, helperStatus, inDesktopApp, isMac, linkFolderFor, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
+import { grantFor, HELPER_CMD, helperStatus, inDesktopApp, isMac, linkFolderFor, onThisPc, refreshFolder, type HelperLink } from './linkHelper'
 
 /**
  * The composer's folder button: upload a copy (the agent may change it), attach a folder you
@@ -156,10 +156,10 @@ export function FolderMenu({ onUpload, onLink, projectId }: { onUpload: () => vo
                         <small>
                           {winPath(l.name) ? `${winPath(l.name)} · ` : ''}
                           {info(l.name)?.mode === 'filtered'
-                            ? info(l.name)?.write
+                            ? grantFor(info(l.name), projectId)?.write
                               ? 'read as a copy without its secrets (.env, keys, wallets). Changes allowed: written to your real folder, then the copy is refreshed.'
                               : 'read as a copy without its secrets (.env, keys, wallets). Refresh it after changing the folder.'
-                            : info(l.name)?.write
+                            : grantFor(info(l.name), projectId)?.write
                               ? 'read in place. Changes allowed: the agent proposes them and you approve each one before it is written.'
                               : 'read in place. Read-only until you allow changes: you are asked once, the first time the agent has a change for it.'}{' '}
                           {l.entries ?? '?'} items.

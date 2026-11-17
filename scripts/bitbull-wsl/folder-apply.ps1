@@ -89,8 +89,11 @@ function Get-BitBullSha256([string]$file) {
 }
 
 # Checks everything before anything is written. Returns @{ ok; message; files = @(@{ rel; src; dest }) ; deletes = @(@{ rel; dest }) }
+# $Expect (optional): for each path, the SHA-256 of the file as the agent read it, or "" when the
+# agent believed there was no such file. A file that is no longer that is one you (or something
+# else) changed since: it is not overwritten, and nothing in the change is written.
 function Test-BitBullChangeSet {
-  param([string]$Root, [string]$Staging, $Manifest, $Deletes, [bool]$AllowDelete)
+  param([string]$Root, [string]$Staging, $Manifest, $Deletes, [bool]$AllowDelete, $Expect = $null)
   $files = @(); $dels = @()
   $rootItem = Get-Item -LiteralPath $Root -Force -ErrorAction SilentlyContinue
   if (-not $rootItem -or -not $rootItem.PSIsContainer) { return @{ ok = $false; message = "The folder is not there: $Root" } }
@@ -113,7 +116,15 @@ function Test-BitBullChangeSet {
     if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { return @{ ok = $false; message = "The staged copy of $rel is missing." } }
     # what you approved is the content with this hash: anything else is not what you saw
     if ((Get-BitBullSha256 $src) -ne ([string]$m.sha256).ToLowerInvariant()) { return @{ ok = $false; message = "The staged copy of $rel changed after you were shown it. Nothing was written." } }
-    $files += @{ rel = $rel; src = $src; dest = (Join-BitBullPath $Root $rel) }
+    $dest = Join-BitBullPath $Root $rel
+    if ($Expect -and $Expect.ContainsKey($rel)) {
+      $was = ([string]$Expect[$rel]).ToLowerInvariant()
+      $there = Test-Path -LiteralPath $dest -PathType Leaf
+      if (-not $was -and $there) { return @{ ok = $false; stale = $true; message = "$rel is in your folder, but the agent was working as if it did not exist (it was added since the agent read the folder, or is hidden from it). It was not overwritten, and nothing was written. Refresh the folder in BitBull and ask again." } }
+      if ($was -and -not $there) { return @{ ok = $false; stale = $true; message = "$rel is no longer in your folder (it was there when the agent read it). Nothing was written. Refresh the folder in BitBull and ask again." } }
+      if ($was -and (Get-BitBullSha256 $dest) -ne $was) { return @{ ok = $false; stale = $true; message = "$rel changed in your folder after the agent read it, so it was not overwritten, and nothing was written. Refresh the folder in BitBull and ask the agent to make the change again on the current file." } }
+    }
+    $files += @{ rel = $rel; src = $src; dest = $dest }
   }
   foreach ($d in $dlist) {
     $rel = [string]$d
@@ -123,7 +134,11 @@ function Test-BitBullChangeSet {
     if ($seen.ContainsKey($rel.ToLowerInvariant())) { return @{ ok = $false; message = "Refused ${rel}: both written and deleted" } }
     $why = Test-BitBullNoLinks $Root $rel
     if ($why) { return @{ ok = $false; message = "Refused deleting ${rel}: $why" } }
-    $dels += @{ rel = $rel; dest = (Join-BitBullPath $Root $rel) }
+    $ddest = Join-BitBullPath $Root $rel
+    if ($Expect -and $Expect.ContainsKey($rel) -and [string]$Expect[$rel] -and (Test-Path -LiteralPath $ddest -PathType Leaf) -and (Get-BitBullSha256 $ddest) -ne ([string]$Expect[$rel]).ToLowerInvariant()) {
+      return @{ ok = $false; stale = $true; message = "$rel changed in your folder after the agent read it, so it was not deleted, and nothing was written. Refresh the folder in BitBull and ask again." }
+    }
+    $dels += @{ rel = $rel; dest = $ddest }
   }
   return @{ ok = $true; files = $files; deletes = $dels }
 }
@@ -202,8 +217,8 @@ function Invoke-BitBullUndo {
 
 # files mode: copy into the folder. Overwritten and deleted files are copied to $BackupDir first.
 function Invoke-BitBullApply {
-  param([string]$Root, [string]$Staging, $Manifest, $Deletes, [bool]$AllowDelete, [string]$BackupDir)
-  $check = Test-BitBullChangeSet -Root $Root -Staging $Staging -Manifest $Manifest -Deletes $Deletes -AllowDelete $AllowDelete
+  param([string]$Root, [string]$Staging, $Manifest, $Deletes, [bool]$AllowDelete, [string]$BackupDir, $Expect = $null)
+  $check = Test-BitBullChangeSet -Root $Root -Staging $Staging -Manifest $Manifest -Deletes $Deletes -AllowDelete $AllowDelete -Expect $Expect
   if (-not $check.ok) { return $check }
   $written = 0; $deleted = 0; $backedUp = 0
   # what was done, so it can be undone: which files are new, which replaced one (the old one is in
@@ -330,13 +345,24 @@ function Invoke-BitBullBranch {
 
 # ---------- who may be changed: kept on this PC, outside anything BitBull can write ----------
 
+# Permissions are per folder AND per project: allowing changes for one project's chats says
+# nothing about another project the same folder is later added to.
+#   { "<link name>": { "path": "D:\\x", "projects": { "<project id | general>": { "write": true, "delete": false, "since": "2026-11-17" } } } }
+# An entry in the older shape (one grant for the whole folder) is not carried over: it was given
+# before projects had folders, so it names no project, and widening it to all of them would be a guess.
 function Get-BitBullGrants([string]$file) {
   $g = @{}
   if (Test-Path -LiteralPath $file) {
     try {
       $j = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
       foreach ($p in $j.PSObject.Properties) {
-        $g[$p.Name] = @{ write = [bool]$p.Value.write; delete = [bool]$p.Value.delete; path = [string]$p.Value.path; since = [string]$p.Value.since }
+        if (-not $p.Value.projects) { continue }
+        $projects = @{}
+        foreach ($q in $p.Value.projects.PSObject.Properties) {
+          if ($q.Name -notmatch '^[A-Za-z0-9_-]{1,80}$') { continue }
+          $projects[$q.Name] = @{ write = [bool]$q.Value.write; delete = [bool]$q.Value.delete; since = [string]$q.Value.since }
+        }
+        $g[$p.Name] = @{ path = [string]$p.Value.path; projects = $projects }
       }
     } catch { $g = @{} }
   }
@@ -345,5 +371,16 @@ function Get-BitBullGrants([string]$file) {
 
 function Save-BitBullGrants([string]$file, $grants) {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null
-  ($grants | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $file -Encoding UTF8
+  ($grants | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $file -Encoding UTF8
+}
+
+# What one project may do in one linked folder, if the grant still names the same real folder
+# (a link name used again for another folder starts with nothing). $null: nothing.
+function Get-BitBullGrantFor($grants, [string]$name, [string]$path, [string]$project) {
+  if (-not $project -or $project -notmatch '^[A-Za-z0-9_-]{1,80}$') { return $null }
+  if (-not $grants.ContainsKey($name)) { return $null }
+  $e = $grants[$name]
+  if (([string]$e.path).TrimEnd('\', '/').ToLowerInvariant() -ne $path.TrimEnd('\', '/').ToLowerInvariant()) { return $null }
+  if (-not $e.projects.ContainsKey($project)) { return $null }
+  return $e.projects[$project]
 }

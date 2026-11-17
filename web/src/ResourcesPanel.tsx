@@ -10,7 +10,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { api, type FileEntry, type LinkedFolder, type NetworkState, type Project, type RepoInfo } from './api'
 import { IconBranch, IconChevronRight, IconFile, IconFolder, IconLock, IconPlus, IconRefresh, IconX } from './icons'
-import { grantFolder, helperStatus, isMac, linkFolderFor, linkProgress, onThisPc, refreshFolder, revokeFolder, type HelperLink } from './linkHelper'
+import { grantFolder, grantFor, helperStatus, isMac, linkFolderFor, linkProgress, onThisPc, refreshFolder, revokeFolder, type HelperLink } from './linkHelper'
 
 const KEY = 'bitbull.resources.open'
 export const resourcesDefaultOpen = () => {
@@ -116,7 +116,8 @@ export function ResourcesPanel({
   const mine = (links ?? []).filter((l) => l.projects?.includes(key))
   const elsewhere = (links ?? []).filter((l) => !l.projects?.includes(key))
   const info = (name: string) => helper?.links.find((h) => h.name === name)
-  const canGrant = !!helper?.caps.includes('changes')
+  const canGrant = !!helper?.caps.includes('projects')
+  const oldHelper = !!helper && helper.caps.includes('changes') && !canGrant
 
   const act = async (label: string, fn: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>, done: string) => {
     setNote(null)
@@ -165,6 +166,8 @@ export function ResourcesPanel({
           <>
             {mine.map((l) => {
               const h = info(l.name)
+              // what this project may do here; another project using the same folder has its own
+              const g = grantFor(h, scope)
               return (
                 <div className="res-item" key={l.name}>
                   <div className="res-line">
@@ -185,9 +188,9 @@ export function ResourcesPanel({
                         secrets hidden
                       </span>
                     )}
-                    {h?.write ? (
-                      <span className="pill warn" title={`Changes the agent makes here are written straight away, each shown with its diff and an Undo${h.since ? `. Allowed on ${h.since}` : ''}.`}>
-                        changes allowed{h.delete ? ' · deleting too' : ''}
+                    {g?.write ? (
+                      <span className="pill warn" title={`Changes the agent makes here from this ${project ? 'project' : 'workspace'} are written straight away, each shown with its diff and an Undo${g.since ? `. Allowed on ${g.since}` : ''}.`}>
+                        changes allowed{g.delete ? ' · deleting too' : ''}
                       </span>
                     ) : (
                       <span className="pill ok">read-only</span>
@@ -195,13 +198,33 @@ export function ResourcesPanel({
                   </div>
                   {onThisPc() && helper && (
                     <div className="res-actions">
-                      {!h?.write && canGrant && (
-                        <button className="btn sm" disabled={!!busy} title="A box on this PC asks you once" onClick={() => void act(`Answer the box that opened on this PC to allow changes in ${l.name}…`, () => grantFolder(l.name, 'write'), `Changes allowed in ${l.name}.`)}>
+                      {!g?.write && canGrant && (
+                        <button
+                          className="btn sm"
+                          disabled={!!busy}
+                          title={`A box on this PC asks you once. It is for ${here} only.`}
+                          onClick={() => void act(`Answer the box that opened on this PC to allow changes in ${l.name}…`, () => grantFolder(l.name, 'write', scope, project?.name), `Changes allowed in ${l.name} for ${here}.`)}
+                        >
                           Allow changes
                         </button>
                       )}
-                      {h?.write && (
-                        <button className="btn sm" disabled={!!busy} title="Back to read-only. No question asked: it only makes BitBull able to do less." onClick={() => void act(`Making ${l.name} read-only…`, () => revokeFolder(l.name, 'write'), `${l.name} is read-only again.`)}>
+                      {g?.write && !g.delete && canGrant && (
+                        <button
+                          className="btn sm"
+                          disabled={!!busy}
+                          title="A second box on this PC: deleting files is its own permission"
+                          onClick={() => void act(`Answer the box that opened on this PC to allow deleting in ${l.name}…`, () => grantFolder(l.name, 'delete', scope, project?.name), `Deleting allowed in ${l.name} for ${here}.`)}
+                        >
+                          Allow deleting
+                        </button>
+                      )}
+                      {g?.write && (
+                        <button
+                          className="btn sm"
+                          disabled={!!busy}
+                          title="Back to read-only for this project. No question asked: it only makes BitBull able to do less."
+                          onClick={() => void act(`Making ${l.name} read-only…`, () => revokeFolder(l.name, 'write', scope), `${l.name} is read-only again for ${here}.`)}
+                        >
                           Make read-only
                         </button>
                       )}
@@ -242,6 +265,7 @@ export function ResourcesPanel({
             ) : (
               <p className="muted small">{onThisPc() ? 'The link helper on this PC is not answering, so folders can\'t be linked or changed right now. Open the BitBull app or run start.ps1.' : 'Open BitBull on the computer it runs on to link a folder.'}</p>
             )}
+            {oldHelper && mine.length > 0 && <p className="small error">The link helper running on this PC is older than this BitBull, so changes can't be allowed yet. Press Start in the launcher (or run start.ps1) to replace it.</p>}
             {busy && <p className="small fm-busy">{busy}</p>}
             {note && <p className={`small ${note.ok ? 'muted' : 'error'}`}>{note.text}</p>}
           </>

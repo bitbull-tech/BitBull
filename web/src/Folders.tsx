@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type LinkedFolder } from './api'
 import { IconLock, IconPlus, IconRefresh, IconTrash } from './icons'
-import { grantFolder, HELPER_HINT, helperStatus, linkFolder, onThisPc, refreshFolder, revokeFolder, unlinkFolder, type HelperLink } from './linkHelper'
+import { grantedProjects, HELPER_HINT, helperStatus, linkFolder, onThisPc, refreshFolder, revokeFolder, unlinkFolder, type HelperLink } from './linkHelper'
 import { FolderChangeHistory } from './FolderChanges'
 
 /** Settings → Folders: the read-only links, with Link / Remove through the helper on this PC. */
@@ -44,10 +44,10 @@ export function FoldersPanel() {
   const ready = helper && helper !== 'checking'
   // changes can be allowed only where the helper on this PC knows how (Windows for now)
   const canGrant = ready && helper.caps.includes('changes')
-  const rows: Array<{ name: string; path?: string; mode?: string; inBitBull?: LinkedFolder; state?: string; write?: boolean; del?: boolean; since?: string }> = []
+  const rows: Array<{ name: string; path?: string; mode?: string; inBitBull?: LinkedFolder; state?: string; write?: boolean; del?: boolean; since?: string; granted?: string[] }> = []
   for (const l of links?.links ?? []) {
     const h = ready ? helper.links.find((x) => x.name === l.name) : undefined
-    rows.push({ name: l.name, inBitBull: l, path: h?.path, mode: h?.mode, write: h?.write, del: h?.delete, since: h?.since })
+    rows.push({ name: l.name, inBitBull: l, path: h?.path, mode: h?.mode, write: h?.write, del: h?.delete, since: h?.since, granted: grantedProjects(h) })
   }
   if (ready) for (const h of helper.links) if (!rows.some((r) => r.name === h.name)) rows.push({ name: h.name, path: h.path, mode: h.mode, state: h.state, write: h.write, del: h.delete, since: h.since })
 
@@ -59,7 +59,8 @@ export function FoldersPanel() {
         add it to another from the Resources panel beside a chat.
       </p>
       <p className="muted small">
-        <b>Changes.</b> Allow them once per folder (a box on this PC asks). After that, changes the agent makes for that folder in a chat are
+        <b>Changes.</b> Allow them once per folder in each project, from that project's Resources panel or the first change's card (a box on
+        this PC asks). After that, changes the agent makes for that folder in that project's chats are
         written by this PC straight away, each shown in the chat with its diff, an Undo and the git commands to publish it. Never written: git
         hooks and config, editor and CI files, .env files and programs. Deleting is a separate permission. Scheduled runs and Telegram can't
         change anything.
@@ -87,40 +88,18 @@ export function FoldersPanel() {
                     </span>
                   )}
                   {r.write && (
-                    <span className="pill warn" title={`You allowed changes here${r.since ? ` on ${r.since}` : ''}. They are written straight away, each shown in the chat with an Undo.`}>
-                      changes allowed{r.del ? ' · deleting too' : ''}
+                    <span
+                      className="pill warn"
+                      title="Changes the agent makes here from these projects are written straight away, each shown in the chat with an Undo. Other projects using this folder have to be allowed separately."
+                    >
+                      changes allowed for {(r.granted ?? []).map((id) => (id === 'general' ? 'General' : (projectNames[id] ?? 'a project'))).join(', ') || 'a project'}
+                      {r.del ? ' · deleting too' : ''}
                     </span>
                   )}
                   {r.inBitBull?.projects && (
                     <span className="muted small" title="The projects whose chats are offered this folder">
-                      {r.inBitBull.projects.length ? r.inBitBull.projects.map((id) => (id === 'general' ? 'General' : (projectNames[id] ?? 'a project'))).join(', ') : 'in no project yet'}
+                      {r.inBitBull.projects.length ? `used by ${r.inBitBull.projects.map((id) => (id === 'general' ? 'General' : (projectNames[id] ?? 'a project'))).join(', ')}` : 'in no project yet'}
                     </span>
-                  )}
-                  {canGrant && (r.mode === 'live' || helper.caps.includes('copies')) && r.inBitBull && !r.write && (
-                    <button
-                      className="btn sm"
-                      disabled={!!busy}
-                      title="A box on this PC asks you to confirm"
-                      onClick={() => {
-                        setBusy(`Confirm in the box that opened on this PC to allow changes in ${r.name}…`)
-                        void run(() => grantFolder(r.name, 'write'), `Changes allowed in ${r.name}.`)
-                      }}
-                    >
-                      Allow changes…
-                    </button>
-                  )}
-                  {canGrant && r.write && !r.del && (
-                    <button
-                      className="btn sm"
-                      disabled={!!busy}
-                      title="A box on this PC asks you to confirm"
-                      onClick={() => {
-                        setBusy(`Confirm in the box that opened on this PC to allow deleting in ${r.name}…`)
-                        void run(() => grantFolder(r.name, 'delete'), `Deleting allowed in ${r.name}.`)
-                      }}
-                    >
-                      Allow deleting…
-                    </button>
                   )}
                   {canGrant && r.del && (
                     <button className="btn sm" disabled={!!busy} onClick={() => (setBusy('…'), void run(() => revokeFolder(r.name, 'delete'), `Deleting is off again in ${r.name}.`))}>
@@ -128,7 +107,7 @@ export function FoldersPanel() {
                     </button>
                   )}
                   {canGrant && r.write && (
-                    <button className="btn sm danger" disabled={!!busy} onClick={() => (setBusy('…'), void run(() => revokeFolder(r.name, 'write'), `${r.name} is read-only again.`))}>
+                    <button className="btn sm danger" disabled={!!busy} title="Takes the permission away from every project" onClick={() => (setBusy('…'), void run(() => revokeFolder(r.name, 'write'), `${r.name} is read-only again, for every project.`))}>
                       Make read-only
                     </button>
                   )}

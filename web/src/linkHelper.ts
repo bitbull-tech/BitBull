@@ -14,12 +14,19 @@ export interface HelperLink {
   /** live: the folder itself; filtered: a read-only copy without its secrets (refresh to update) */
   mode: 'live' | 'filtered'
   path: string
-  /** you allowed changes in this folder (each one still needs your approval in BitBull) */
+  /** changes are allowed here for at least one project */
   write?: boolean
-  /** and deleting files as part of a change */
+  /** and deleting, for at least one */
   delete?: boolean
   since?: string
+  /** which project may do what here (project id, or "general"): a permission is for one project's chats */
+  grants?: Record<string, { write: boolean; delete: boolean; since?: string }>
 }
+
+/** What one project may do in a linked folder. */
+export const grantFor = (h: HelperLink | undefined | null, project: string | null | undefined) => h?.grants?.[project || 'general']
+/** The projects with changes allowed in a folder. */
+export const grantedProjects = (h: HelperLink | undefined | null) => Object.keys(h?.grants ?? {})
 
 /** BitBull on a Mac: the helper is the BitBull app itself, folders open in Finder, links are copies. */
 export const isMac = /Mac/i.test(navigator.userAgent)
@@ -101,23 +108,36 @@ export async function refreshFolder(name: string, onStep?: (s: string) => void) 
 }
 
 /** Allow changes ("write") or deleting ("delete") in a linked folder: the helper asks you in a box on this PC. */
-export const grantFolder = (name: string, what: 'write' | 'delete') => post('/grant', { name, what })
-/** Take that permission away again. No question: it only makes BitBull able to do less. */
-export const revokeFolder = (name: string, what: 'write' | 'delete') => post('/revoke', { name, what })
+export const grantFolder = (name: string, what: 'write' | 'delete', project: string | null, projectName?: string) =>
+  post('/grant', { name, what, project: project || 'general', projectName: projectName ?? '' })
+/** Take that permission away again: for one project, or (no project given) for all of them. No question: it only makes BitBull able to do less. */
+export const revokeFolder = (name: string, what: 'write' | 'delete', project?: string | null) => post('/revoke', { name, what, project: project === undefined ? '' : project || 'general' })
 
 /**
  * Apply a change set you approved: the helper copies the staged files into the folder (mode
  * "files") or makes a new git branch holding them (mode "branch"). It checks every file against
  * the hash given here, which is the one you were shown.
  */
-export async function applyChange(body: { name: string; staging: string; manifest: { path: string; sha256: string; new?: boolean }[]; deletes: string[]; mode: 'files' | 'branch'; branch: string; message: string }) {
+export async function applyChange(body: {
+  name: string
+  staging: string
+  manifest: { path: string; sha256: string; new?: boolean }[]
+  deletes: string[]
+  mode: 'files' | 'branch'
+  branch: string
+  message: string
+  /** the project the change came from: the permission is per project */
+  project: string
+  /** each file's hash when the agent read it ("" = there was none): the helper won't overwrite anything else */
+  expect?: Record<string, string>
+}) {
   const r = await fetch(`${HELPER}/apply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  return (await r.json()) as { ok: boolean; cancelled?: boolean; message?: string; branch?: string; repo?: string; written?: number; deleted?: number; backup?: string; backupId?: string }
+  return (await r.json()) as { ok: boolean; cancelled?: boolean; stale?: boolean; message?: string; branch?: string; repo?: string; written?: number; deleted?: number; backup?: string; backupId?: string }
 }
 
 /** Undo one apply: what it replaced or deleted is put back, what it created is removed; files changed since are left alone. */
-export async function undoChange(name: string, backup: string) {
-  const r = await fetch(`${HELPER}/undo`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, backup }) })
+export async function undoChange(name: string, backup: string, project: string) {
+  const r = await fetch(`${HELPER}/undo`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, backup, project }) })
   return (await r.json()) as { ok: boolean; message?: string; restored?: number; removed?: number; skipped?: string[] }
 }
 

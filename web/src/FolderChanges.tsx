@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api, type FolderChange, type FolderChangeDetail, type FolderChangeFile } from './api'
 import { onLiveActivity, reportLocal } from './activity'
 import { IconFile, IconFolder } from './icons'
-import { applyChange, grantFolder, helperStatus, onThisPc, undoChange, HELPER_HINT, type HelperLink } from './linkHelper'
+import { applyChange, grantFolder, grantFor, helperStatus, onThisPc, undoChange, HELPER_HINT, type HelperLink } from './linkHelper'
 
 let state: FolderChange[] | null = null
 const subs = new Set<() => void>()
@@ -61,15 +61,23 @@ function Card({ c, onOpenSession }: { c: FolderChange; onOpenSession?: (id: stri
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(c.status === 'failed' ? (c.message ?? 'It could not be applied.') : null)
   const [link, setLink] = useState<HelperLink | null | 'none'>(null)
+  // a helper from before permissions were per project can't be asked for one
+  const [oldHelper, setOldHelper] = useState(false)
   useEffect(() => {
     void api.folderChange(c.id).then(setDetail, () => {})
-    void helperStatus().then((h) => setLink(h?.links.find((l) => l.name === c.link) ?? 'none'))
+    void helperStatus().then((h) => {
+      setLink(h?.links.find((l) => l.name === c.link) ?? 'none')
+      setOldHelper(!!h && !h.caps.includes('projects'))
+    })
   }, [c.id, c.link])
 
   const helper = link && link !== 'none' ? link : null
   const where = helper?.path ?? `the linked folder ${c.link}`
-  const canWrite = !!helper?.write
-  const needsDelete = c.deletes.length > 0 && !helper?.delete
+  // the permission is this project's: the same folder in another project asks again
+  const project = c.project || 'general'
+  const grant = grantFor(helper, project)
+  const canWrite = !!grant?.write
+  const needsDelete = c.deletes.length > 0 && !grant?.delete
 
   const finish = async (status: 'applied' | 'branch' | 'declined' | 'failed', message?: string, extra: { backup?: string; auto?: boolean } = {}) => {
     await api.decideFolderChange(c.id, status, message, extra).then(
@@ -96,6 +104,8 @@ function Card({ c, onOpenSession }: { c: FolderChange; onOpenSession?: (id: stri
         mode,
         branch: c.branch,
         message: c.summary,
+        project,
+        expect: Object.fromEntries([...detail.files.filter((f) => f.before !== undefined).map((f) => [f.path, f.before!] as const), ...Object.entries(c.deleteBefore ?? {})]),
       })
       if (r.ok) await finish(mode === 'branch' ? 'branch' : 'applied', r.message, { backup: r.backupId, auto })
       else if (!r.cancelled) {
@@ -130,7 +140,7 @@ function Card({ c, onOpenSession }: { c: FolderChange; onOpenSession?: (id: stri
     setErr(null)
     setBusy('Answer the box that opened on this PC…')
     try {
-      const g = await grantFolder(c.link, 'write')
+      const g = await grantFolder(c.link, 'write', project)
       if (!g.ok) {
         if (!g.cancelled) setErr(g.message ?? 'Changes could not be allowed.')
         return
@@ -217,7 +227,7 @@ function Card({ c, onOpenSession }: { c: FolderChange; onOpenSession?: (id: stri
             ) : (
               <button
                 className="btn primary sm"
-                disabled={!!busy || !detail || needsDelete}
+                disabled={!!busy || !detail || needsDelete || oldHelper}
                 onClick={() => void allowAndApply()}
                 title="A box on this PC asks you once. After that, changes the agent makes for this folder are written straight away, each listed here with its diff and an Undo."
               >
@@ -233,7 +243,8 @@ function Card({ c, onOpenSession }: { c: FolderChange; onOpenSession?: (id: stri
               Decline
             </button>
           </div>
-          {!canWrite && <p className="small muted">You are asked once per folder. After that the agent's changes here are written straight away, with the diff and an Undo shown each time.</p>}
+          {oldHelper && <p className="small lv-error-text">The link helper running on this PC is older than this BitBull. Press Start in the launcher (or run start.ps1) to replace it, then come back to this card.</p>}
+          {!canWrite && !oldHelper && <p className="small muted">You are asked once per folder in each project. After that the agent's changes here are written straight away, with the diff and an Undo shown each time.</p>}
           {canWrite && needsDelete && <p className="small muted">This change deletes {plural(c.deletes.length, 'file')}, and deleting isn't allowed in this folder. Allow it under Settings → Folders{c.repo !== null ? ', or use the branch.' : '.'}</p>}
         </>
       )}
@@ -278,7 +289,7 @@ function Done({ c, onGone }: { c: FolderChange; onGone: () => void }) {
     setBusy(true)
     setNote(null)
     try {
-      const r = await undoChange(c.link, c.backup)
+      const r = await undoChange(c.link, c.backup, c.project || 'general')
       setNote({ ok: r.ok, text: r.message ?? (r.ok ? 'Undone.' : 'It could not be undone.') })
       if (r.ok)
         await api.decideFolderChange(c.id, 'undone', r.message).then(

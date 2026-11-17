@@ -122,24 +122,32 @@ function Get-Links {
   $list = @()
   foreach ($r in $rows) {
     if ($r -match '^(\S+)\s+(mounted|missing)\s+(live|filtered)\s+(.+)$') {
-      $l = @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim(); write = $false; delete = $false }
-      $g = Get-Grant $l
-      if ($g) { $l.write = $g.write; $l.delete = ($g.write -and $g.delete); $l.since = $g.since }
+      # write/delete: allowed for at least one project; grants: which project may do what
+      $l = @{ name = $Matches[1]; state = $Matches[2]; mode = $Matches[3]; path = $Matches[4].Trim(); write = $false; delete = $false; grants = @{} }
+      $all = Get-BitBullGrants $grantFile
+      if ($all.ContainsKey($l.name)) {
+        foreach ($pk in @($all[$l.name].projects.Keys)) {
+          $g = Get-BitBullGrantFor $all $l.name $l.path $pk
+          if ($g -and $g.write) {
+            $l.grants[$pk] = @{ write = $true; delete = [bool]$g.delete; since = $g.since }
+            $l.write = $true
+            if ($g.delete) { $l.delete = $true }
+          }
+        }
+      }
       $list += $l
     }
   }
   return ,$list
 }
 
-# The permission you gave for a link, if it still names the same folder (a link name reused for
-# another folder starts with none) and the link is the live folder, not a filtered copy.
-function Get-Grant($link) {
-  $all = Get-BitBullGrants $grantFile
-  if (-not $all.ContainsKey($link.name)) { return $null }
-  $g = $all[$link.name]
-  if ($g.path.TrimEnd('\').ToLowerInvariant() -ne $link.path.TrimEnd('\').ToLowerInvariant()) { return $null }
-  return $g
+# The permission you gave one project for a link, if it still names the same folder (a link name
+# reused for another folder starts with none). The project is the one the page says the chat is
+# in: the page is BitBull's own (Origin-checked), and nothing in the sandbox can reach this helper.
+function Get-Grant($link, [string]$project) {
+  return (Get-BitBullGrantFor (Get-BitBullGrants $grantFile) $link.name $link.path $project)
 }
+$projectRe = '^[A-Za-z0-9_-]{1,80}$'
 
 function Find-Link([string]$name) {
   if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,39}$') { return $null }
@@ -147,18 +155,24 @@ function Find-Link([string]$name) {
   return $null
 }
 
-function Do-Grant([string]$name, [string]$what) {
+function Do-Grant([string]$name, [string]$what, [string]$project, [string]$projectName) {
   $link = Find-Link $name
   if (-not $link) { return @{ ok = $false; message = "No such link." } }
   if ($what -ne "write" -and $what -ne "delete") { return @{ ok = $false; message = "bad request" } }
+  if ($project -notmatch $projectRe) { return @{ ok = $false; message = "This BitBull page is older than the helper on this PC. Reload the page and try again." } }
+  # shown in the box so you can see which project you are allowing; it is only a label
+  $label = (($projectName -replace '[\x00-\x1f]', ' ').Trim())
+  if ($label.Length -gt 60) { $label = $label.Substring(0, 60) }
+  if (-not $label) { $label = $(if ($project -eq "general") { "chats outside a project" } else { "this project" }) }
   $all = Get-BitBullGrants $grantFile
-  $cur = Get-Grant $link
+  $cur = Get-Grant $link $project
   if ($what -eq "delete" -and -not ($cur -and $cur.write)) { return @{ ok = $false; message = "Allow changes in this folder first." } }
   $owner = New-Owner
   try {
     if ($what -eq "write") {
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
-        "Allow BitBull to change files in this folder?`n`n$($link.path)`n`n" +
+        "Allow BitBull to change files in this folder, for $label?`n`n$($link.path)`n`n" +
+        "This is for that project's chats only. Another project using the same folder asks again.`n`n" +
         "From now on, changes the agent makes for this folder in a chat on this PC are written here straight away. Each one is listed in the chat with its diff and an Undo, and what it replaces is backed up first.`n`n" +
         "Never written, whatever is approved: .git (hooks, config), .vscode, .idea, .github\workflows, shell start-up files, .env files, programs and shortcuts.`n" +
         "Deleting files stays off unless you allow it separately. Scheduled runs and Telegram can't change anything here.`n`n" +
@@ -166,24 +180,33 @@ function Do-Grant([string]$name, [string]$what) {
         "BitBull: allow changes in this folder?", "OKCancel", "Warning", "Button2")
     } else {
       $q = [System.Windows.Forms.MessageBox]::Show($owner,
-        "Also allow BitBull to DELETE files in this folder?`n`n$($link.path)`n`n" +
+        "Also allow BitBull to DELETE files in this folder, for $label?`n`n$($link.path)`n`n" +
         "Only files in a change you approve are deleted, and they go to the Recycle Bin, with a copy kept in BitBull's backup folder. Protected paths (.git and the rest) are never deleted.",
         "BitBull: allow deleting in this folder?", "OKCancel", "Warning", "Button2")
     }
   } finally { $owner.Close() }
   if ($q -ne [System.Windows.Forms.DialogResult]::OK) { return @{ ok = $false; cancelled = $true; message = "Not changed." } }
-  if ($what -eq "write") { $all[$link.name] = @{ write = $true; delete = $false; path = $link.path; since = (Get-Date).ToString("yyyy-MM-dd") } }
-  else { $all[$link.name].delete = $true }
+  # a grant recorded for another folder under this name is not kept
+  if (-not $all.ContainsKey($link.name) -or ([string]$all[$link.name].path).TrimEnd('\').ToLowerInvariant() -ne $link.path.TrimEnd('\').ToLowerInvariant()) { $all[$link.name] = @{ path = $link.path; projects = @{} } }
+  if ($what -eq "write") { $all[$link.name].projects[$project] = @{ write = $true; delete = $false; since = (Get-Date).ToString("yyyy-MM-dd") } }
+  else { $all[$link.name].projects[$project].delete = $true }
   Save-BitBullGrants $grantFile $all
   return @{ ok = $true; message = "Allowed." }
 }
 
 # Taking access away needs no question: it can only make BitBull able to do less.
-function Do-Revoke([string]$name, [string]$what) {
+# With a project: that project only. Without one: every project (Settings, and removing the link).
+function Do-Revoke([string]$name, [string]$what, [string]$project) {
   if ($name -notmatch '^[a-z0-9][a-z0-9-]{0,39}$') { return @{ ok = $false; message = "bad name" } }
+  if ($project -and $project -notmatch $projectRe) { return @{ ok = $false; message = "bad request" } }
   $all = Get-BitBullGrants $grantFile
   if ($all.ContainsKey($name)) {
-    if ($what -eq "delete") { $all[$name].delete = $false } else { $all.Remove($name) }
+    $keys = @($all[$name].projects.Keys)
+    if ($project) { $keys = @($keys | Where-Object { $_ -eq $project }) }
+    foreach ($k in $keys) {
+      if ($what -eq "delete") { $all[$name].projects[$k].delete = $false } else { $all[$name].projects.Remove($k) }
+    }
+    if ($all[$name].projects.Count -eq 0) { $all.Remove($name) }
     Save-BitBullGrants $grantFile $all
   }
   return @{ ok = $true; message = "Removed." }
@@ -208,8 +231,15 @@ function Do-Apply($body) {
   if (-not $staging) { return @{ ok = $false; message = "The staged files can't be read from this PC. Run start.ps1 once after updating (it makes BitBull's data folder readable from here), then try again." } }
   $manifest = @($body.manifest | Where-Object { $_ })
   $deletes = @($body.deletes | Where-Object { $_ } | ForEach-Object { [string]$_ })
-  $grant = Get-Grant $link
+  $project = [string]$body.project
+  $grant = Get-Grant $link $project
   $mode = [string]$body.mode
+  # what the agent read, per file, so a file changed since is not overwritten
+  $expect = $null
+  if ($body.expect) {
+    $expect = @{}
+    foreach ($e in $body.expect.PSObject.Properties) { $expect[$e.Name] = [string]$e.Value }
+  }
 
   if ($mode -eq "branch") {
     if (-not ($grant -and $grant.write)) {
@@ -225,7 +255,7 @@ function Do-Apply($body) {
     return (Invoke-BitBullBranch -Root $link.path -Staging $staging -Manifest $manifest -Deletes $deletes -Branch ([string]$body.branch) -Message ([string]$body.message))
   }
 
-  if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder. Allow them in Settings > Folders first (or put the change on a branch)." } }
+  if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder for this project. Allow them from the change's card or the Resources panel (or put the change on a branch)." } }
   # BitBull reads a copy of this folder without its secrets. A file it believes is new but that is
   # in your folder is one it was never shown (a hidden key or .env, or something added since the
   # last refresh): it is not overwritten blind.
@@ -237,7 +267,7 @@ function Do-Apply($body) {
     }
   }
   $backup = Join-Path $backupRoot ((Get-Date).ToString("yyyyMMdd-HHmmss") + "-" + $link.name)
-  $r = Invoke-BitBullApply -Root $link.path -Staging $staging -Manifest $manifest -Deletes $deletes -AllowDelete ([bool]$grant.delete) -BackupDir $backup
+  $r = Invoke-BitBullApply -Root $link.path -Staging $staging -Manifest $manifest -Deletes $deletes -AllowDelete ([bool]$grant.delete) -BackupDir $backup -Expect $expect
   # keep the thirty most recent backups
   if ($r.backup) { $r.backupId = (Split-Path -Leaf $r.backup) }
   # a copy without its secrets is what BitBull reads: copy it again so it shows what was written
@@ -250,12 +280,12 @@ function Do-Apply($body) {
 }
 
 # Undo one apply, by the name of its backup folder (which the page was given when it applied).
-function Do-Undo([string]$name, [string]$backupId) {
+function Do-Undo([string]$name, [string]$backupId, [string]$project) {
   $link = Find-Link $name
   if (-not $link) { return @{ ok = $false; message = "No such link." } }
   if ($backupId -notmatch '^\d{8}-\d{6}-[a-z0-9][a-z0-9-]{0,39}$' -or -not $backupId.EndsWith("-" + $link.name)) { return @{ ok = $false; message = "bad request" } }
-  $grant = Get-Grant $link
-  if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder any more, so BitBull won't write to it, not even to undo. The old files are in $backupRoot\$backupId." } }
+  $grant = Get-Grant $link $project
+  if (-not ($grant -and $grant.write)) { return @{ ok = $false; message = "Changes aren't allowed in this folder for this project any more, so BitBull won't write to it, not even to undo. The old files are in $backupRoot\$backupId." } }
   $r = Invoke-BitBullUndo -Root $link.path -BackupDir (Join-Path $backupRoot $backupId)
   if ($r.ok -and $link.mode -eq "filtered") { $r.refreshed = [bool](Do-Refresh $link.name).ok }
   return $r
@@ -320,7 +350,7 @@ function Do-Unlink([string]$name) {
   $r = Invoke-Link @("-Remove", $name)
   if ($r.code -ne 0) { return @{ ok = $false; message = (($r.out -split "`n") | Select-Object -Last 2) -join " " } }
   # a removed link takes its permissions with it
-  Do-Revoke $name "write" | Out-Null
+  Do-Revoke $name "write" "" | Out-Null
   return @{ ok = $true; message = "Removed $name" }
 }
 
@@ -421,7 +451,7 @@ while ($listener.IsListening) {
     if ($origin -and -not ($origins -contains $origin)) { Send $ctx 403 @{ ok = $false; message = "origin not allowed" }; continue }
     if ($req.HttpMethod -eq "OPTIONS") { Send $ctx 204 @{}; continue }
     $path = $req.Url.AbsolutePath
-    if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links); caps = @("changes", "undo", "copies") }; continue }
+    if ($req.HttpMethod -eq "GET" -and $path -eq "/status") { Send $ctx 200 @{ ok = $true; links = (Get-Links); caps = @("changes", "undo", "copies", "projects", "expect") }; continue }
     if ($req.HttpMethod -eq "GET" -and $path -eq "/vault-key") {
       if (-not $origin) { Send $ctx 403 @{ ok = $false; message = "BitBull's page only" }; continue }
       Send $ctx 200 (Do-VaultKey); continue
@@ -438,9 +468,9 @@ while ($listener.IsListening) {
     }
     if ($path -eq "/grant" -or $path -eq "/revoke" -or $path -eq "/apply" -or $path -eq "/undo") {
       $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
-      if ($path -eq "/grant") { Send $ctx 200 (Do-Grant ([string]$body.name) ([string]$body.what)); continue }
-      if ($path -eq "/revoke") { Send $ctx 200 (Do-Revoke ([string]$body.name) ([string]$body.what)); continue }
-      if ($path -eq "/undo") { Send $ctx 200 (Do-Undo ([string]$body.name) ([string]$body.backup)); continue }
+      if ($path -eq "/grant") { Send $ctx 200 (Do-Grant ([string]$body.name) ([string]$body.what) ([string]$body.project) ([string]$body.projectName)); continue }
+      if ($path -eq "/revoke") { Send $ctx 200 (Do-Revoke ([string]$body.name) ([string]$body.what) ([string]$body.project)); continue }
+      if ($path -eq "/undo") { Send $ctx 200 (Do-Undo ([string]$body.name) ([string]$body.backup) ([string]$body.project)); continue }
       Send $ctx 200 (Do-Apply $body); continue
     }
     if ($path -eq "/unlink") {

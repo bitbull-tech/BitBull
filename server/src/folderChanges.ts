@@ -133,6 +133,8 @@ export interface ChangeFile {
   removed: number;
   /** text files only, and not too long */
   diff?: string;
+  /** SHA-256 of the file as it was in the folder when this was staged ("" = there was none): the helper won't overwrite anything else */
+  before: string;
 }
 export type ChangeStatus = "pending" | "applied" | "branch" | "declined" | "failed" | "expired" | "undone";
 export interface ChangeSet {
@@ -143,6 +145,8 @@ export interface ChangeSet {
   sessionTitle?: string;
   files: ChangeFile[];
   deletes: string[];
+  /** SHA-256 of each file to delete, as it was when this was staged */
+  deleteBefore: Record<string, string>;
   /** the git repo (relative to the linked folder, "" = the folder itself) every path sits in, if there is one */
   repo: string | null;
   /** the branch name offered for "put it on a branch" */
@@ -287,9 +291,10 @@ export function propose(p: Proposal): { ok: boolean; text: string; set?: ChangeS
       }
       const text = isText(buf) && (!before || isText(before));
       const d = text ? lineDiff(before ? before.toString("utf8") : "", buf.toString("utf8")) : { added: 0, removed: 0 };
-      files.push({ path: to, status: before ? "modified" : "new", size: buf.length, sha256: createHash("sha256").update(buf).digest("hex"), added: d.added, removed: before ? d.removed : 0, diff: d.diff });
+      files.push({ path: to, status: before ? "modified" : "new", size: buf.length, sha256: createHash("sha256").update(buf).digest("hex"), added: d.added, removed: before ? d.removed : 0, diff: d.diff, before: before ? createHash("sha256").update(before).digest("hex") : "" });
     }
     const deletes: string[] = [];
+    const deleteBefore: Record<string, string> = {};
     for (const raw of p.deletes) {
       const to = norm(raw);
       const why = protectedReason(to);
@@ -305,6 +310,11 @@ export function propose(p: Proposal): { ok: boolean; text: string; set?: ChangeS
         continue; // not there: nothing to delete
       }
       deletes.push(to);
+      try {
+        deleteBefore[to] = createHash("sha256").update(readFileSync(path.join(linkDir, to))).digest("hex");
+      } catch {
+        /* unreadable: the helper then has nothing to compare, and deletes as before */
+      }
     }
     if (refused.length && !files.length && !deletes.length) {
       rmSync(staging, { recursive: true, force: true });
@@ -322,6 +332,7 @@ export function propose(p: Proposal): { ok: boolean; text: string; set?: ChangeS
       sessionTitle: p.sessionTitle,
       files,
       deletes,
+      deleteBefore,
       repo: repoOf(linkDir, [...files.map((f) => f.path), ...deletes]),
       branch: `bitbull/${slug(p.summary)}-${id.slice(0, 4)}`,
       hostStaging: hostPath(staging),

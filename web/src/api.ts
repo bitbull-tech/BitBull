@@ -388,6 +388,8 @@ export interface FolderChangeFile {
   sha256: string
   added: number
   removed: number
+  /** the file's hash in the folder when this was staged ("" = none) */
+  before?: string
 }
 export interface FolderChange {
   id: string
@@ -397,6 +399,7 @@ export interface FolderChange {
   sessionTitle?: string
   files: FolderChangeFile[]
   deletes: string[]
+  deleteBefore?: Record<string, string>
   /** the git repo the files sit in ("" = the folder itself), or null */
   repo: string | null
   branch: string
