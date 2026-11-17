@@ -55,6 +55,7 @@ import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, s
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
 import { benchState, startBench } from "./houndBench.js";
+import { probeModel } from "./modelProbe.js";
 import { checkQuote } from "./houndChecks.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
@@ -211,6 +212,16 @@ app.get("/api/models/:id", async (c) => {
   const m = await modelDetail(c.req.param("id"));
   if (!m) return c.json({ error: "not found" }, 404);
   return c.json({ model: m });
+});
+
+/** Ask SayGM about one model directly, with no engine involved: is a failure BitBull's or the gateway's? (modelProbe.ts) */
+app.post("/api/models/probe", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { model?: unknown };
+  if (typeof body.model !== "string") return c.json({ error: "model required" }, 400);
+  const r = await probeModel(body.model);
+  if ("error" in r) return c.json(r, 400);
+  record({ level: r.side === "bitbull" ? "warn" : "info", source: "server", message: `Model check on ${r.model}: ${r.legs.map((l) => `${l.door} ${l.status ?? "no answer"}`).join(", ")} (${r.side})`, detail: r.verdict });
+  return c.json(r);
 });
 
 app.post("/api/models/refresh", async (c) => {

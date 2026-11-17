@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ReplyFiles } from './ReplyFiles'
 import { captureFiles, WindowShare } from './screen'
-import { api, type OutputFile, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type Project, type Session, type ToolCall, type Uploaded } from './api'
+import { api, type OutputFile, type AgentEvent, type AppConfig, type EngineId, type Message, type Model, type ModelProbe, type Project, type Session, type ToolCall, type Uploaded } from './api'
 import { IconBrain, IconCheck, IconClip, IconCopy, IconFile, IconFolder, IconHeadset, IconLock, IconMic, IconMonitor, IconPlan, IconSend, IconShare, IconSpeaker, IconSpeakerOff, IconStop, IconTool, IconX } from './icons'
 import { useSpeaking, useVoice } from './voice/useVoice'
 import { speaker } from './voice/speaker'
@@ -829,6 +829,8 @@ function MessageView({
   filesAt?: { projectId: string; host: string | null } | null
 }) {
   const [copied, copy] = useCopy()
+  const [probe, setProbe] = useState<ModelProbe | { error: string } | null>(null)
+  const [probing, setProbing] = useState(false)
   const [exported, setExported] = useState<'' | 'full' | 'short'>('')
   const [copiedX, copyExchange] = useCopy()
   const [reading, setReading] = useState(false)
@@ -947,6 +949,47 @@ function MessageView({
                     </option>
                   ))}
               </select>
+            )}
+            {m.model && !m.model.startsWith('ditto-router/') && (
+              <button
+                className="link small"
+                disabled={probing}
+                title="Asks SayGM about this model directly, with BitBull's key and no engine involved, to show whether the fault is BitBull's or SayGM's. Costs a few tokens."
+                onClick={async () => {
+                  setProbing(true)
+                  setProbe(null)
+                  try {
+                    setProbe(await api.probeModel(m.model!))
+                  } catch (e) {
+                    setProbe({ error: e instanceof Error ? e.message.replace(/^\d+ /, '').replace(/^\{"error":"(.*)"\}$/, '$1') : String(e) })
+                  } finally {
+                    setProbing(false)
+                  }
+                }}
+              >
+                {probing ? 'Checking…' : 'Is it BitBull or SayGM?'}
+              </button>
+            )}
+          </div>
+        )}
+        {probe && (
+          <div className={`probe small ${'side' in probe ? probe.side : 'unclear'}`}>
+            {'error' in probe ? (
+              <span>{probe.error}</span>
+            ) : (
+              <>
+                <b>{probe.side === 'gateway' ? 'SayGM’s side.' : probe.side === 'bitbull' ? 'BitBull’s side.' : probe.side === 'key' ? 'The key.' : probe.side === 'network' ? 'The network.' : 'Not clear-cut.'}</b> {probe.verdict}
+                <ul>
+                  {probe.legs.map((l) => (
+                    <li key={l.door}>
+                      <span className="mono">{l.door === 'anthropic' ? 'Anthropic-style' : 'OpenAI-style'}</span> ({l.door === 'anthropic' ? 'Claude Agent SDK engine' : 'OpenCode engine'}):{' '}
+                      <b>{l.ok ? `answered (${l.status})` : l.status === null ? 'no answer' : `refused (${l.status})`}</b> in {(l.ms / 1000).toFixed(1)}s
+                      {l.message ? ` · ${l.message}` : ''}
+                      {l.retryAfter ? ` · retry after ${l.retryAfter}s` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
         )}

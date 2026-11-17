@@ -487,6 +487,14 @@ export interface HoundFinding {
   heldBecause?: string
 }
 
+/** Two plain requests to SayGM about one model, no engine involved (server/src/modelProbe.ts) */
+export interface ModelProbe {
+  model: string
+  legs: Array<{ door: 'anthropic' | 'openai'; url: string; status: number | null; ok: boolean; ms: number; message?: string; retryAfter?: string }>
+  verdict: string
+  side: 'gateway' | 'bitbull' | 'key' | 'network' | 'unclear'
+}
+
 /** QA Hound's model benchmark (server/src/houndBench.ts): which models may be behind an approval */
 export interface HoundBench {
   version: number
@@ -586,6 +594,7 @@ export const api = {
   config: () => req<AppConfig>('/api/config'),
   models: (refresh = false) => req<{ models: Model[]; router?: { configured: boolean; count: number; error: string | null } }>(`/api/models${refresh ? '?refresh=1' : ''}`),
   model: (id: string) => req<{ model: ModelDetail }>(`/api/models/${encodeURIComponent(id)}`),
+  probeModel: (model: string) => req<ModelProbe>('/api/models/probe', { method: 'POST', body: JSON.stringify({ model }) }),
   sessions: () => req<{ sessions: Session[] }>('/api/sessions'),
   session: (id: string) =>
     req<{ session: Session; messages: Message[]; running: boolean; turnId: string | null }>(`/api/sessions/${id}`),

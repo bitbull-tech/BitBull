@@ -1513,3 +1513,7 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .models-note { margin: 0; padding: 8px 18px; border-bottom: 1px solid var(--line); background: var(--panel-2); color: var(--text-2); }
 
 .net-prompt.fc-done { border-color: var(--line); border-left-color: var(--ok); }
+.probe { margin: 6px 0 2px; padding: 8px 11px; border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 8px; background: var(--panel-2); line-height: 1.5; }
+.probe.gateway { border-left-color: var(--ok); }
+.probe.bitbull, .probe.key { border-left-color: var(--bad); }
+.probe ul { margin: 6px 0 0; padding-left: 18px; }
