@@ -47,7 +47,7 @@ import { listModels, modelDetail, publicModels, routerState } from "./models.js"
 import { describeSettings, status, updateSettings } from "./settings.js";
 import { recent, record, subscribe, type Level } from "./activity.js";
 import { exportJson, exportMarkdown } from "./export.js";
-import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused } from "./egress.js";
+import { addApproval, decide, fromEgress, networkState, proxyCheck, revoke, ScopeRefused, normalizeHost, staticAllowlist } from "./egress.js";
 import { handleMcp, MCP_PATH, BITBULL_MCP_HEADER, LEADPOET_MCP_PATH, mcpTokenOk } from "./mcp.js";
 import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, finishFromUrl as leadpoetFinishFromUrl, leadpoetState, proxyMcp as leadpoetMcp, startConnect as leadpoetConnect } from "./leadpoet.js";
 import { linksAvailable, listLinks } from "./links.js";
@@ -531,6 +531,10 @@ app.post("/api/network/requests/:id", async (c) => {
 app.post("/api/network/approved", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { host?: string; scope?: string };
   try {
+    // already on the built-in list: adding it again changes nothing, and it reads as if it had been blocked
+    const asked = normalizeHost(String(body.host ?? ""));
+    if (asked && staticAllowlist().some((e) => (e.startsWith(".") ? asked === e.slice(1) || asked.endsWith(e) : asked === e)))
+      return c.json({ error: `${asked} is already always allowed (it is on the built-in list below), so there is nothing to add. If something still can't reach it, the cause is elsewhere.` }, 400);
     const a = addApproval(String(body.host ?? ""), body.scope === "domain" ? "domain" : "host", "added in Settings");
     if (!a) return c.json({ error: "Not a valid domain name (no IPs, ports or paths)" }, 400);
     return c.json({ approval: a, ...networkState() });

@@ -8,7 +8,7 @@ import { test } from "node:test";
 // links.ts reads BITBULL_LINKS_PATH at import time
 const links = mkdtempSync(path.join(tmpdir(), "bitbull-rs-links-"));
 process.env.BITBULL_LINKS_PATH = links;
-const { addRepo, gitError, inspectRepo, linkedRepos, resolveSource, setRemote, syncRepo } = await import("./repos.js");
+const { addRepo, gitEnv, gitError, inspectRepo, linkedRepos, resolveSource, setRemote, syncRepo } = await import("./repos.js");
 
 const g = (dir: string, ...a: string[]) =>
   execFileSync("git", a, { cwd: dir, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@x" } })
@@ -111,4 +111,25 @@ test("add: a working copy of a linked repo, following it, with its GitHub origin
   assert.equal((await addRepo(ws2, "links/github/BitBull")).ok, false);
   // a GitHub address is the agent's job
   assert.equal((await addRepo(ws2, "bitbull-tech/other")).ok, false);
+});
+
+test("git run by the server goes out through the sandbox's proxy, and takes nothing else from the environment", () => {
+  const before = { p: process.env.HTTPS_PROXY, n: process.env.NO_PROXY, t: process.env.GITHUB_TOKEN };
+  process.env.HTTPS_PROXY = "http://egress:3128";
+  process.env.NO_PROXY = "localhost";
+  process.env.GITHUB_TOKEN = "stand-in";
+  try {
+    const env = gitEnv();
+    assert.equal(env.HTTPS_PROXY, "http://egress:3128");
+    assert.equal(env.NO_PROXY, "localhost");
+    assert.equal(env.GITHUB_TOKEN, undefined, "the token is not handed to this git");
+    assert.equal(env.GIT_TERMINAL_PROMPT, "0");
+    delete process.env.HTTPS_PROXY;
+    assert.equal(gitEnv().HTTPS_PROXY, undefined);
+  } finally {
+    for (const [k, v] of [["HTTPS_PROXY", before.p], ["NO_PROXY", before.n], ["GITHUB_TOKEN", before.t]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });

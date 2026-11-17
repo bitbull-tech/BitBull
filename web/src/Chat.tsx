@@ -978,12 +978,12 @@ function MessageView({
               <span>{probe.error}</span>
             ) : (
               <>
-                <b>{probe.side === 'gateway' ? 'SayGM’s side.' : probe.side === 'bitbull' ? 'BitBull’s side.' : probe.side === 'key' ? 'The key.' : probe.side === 'network' ? 'The network.' : 'Not clear-cut.'}</b> {probe.verdict}
+                <b>{probe.side === 'gateway' ? 'Not BitBull.' : probe.side === 'bitbull' ? 'BitBull’s side.' : probe.side === 'key' ? 'The key.' : probe.side === 'network' ? 'The network.' : 'Not clear-cut.'}</b> {probe.verdict}
                 <ul>
                   {probe.legs.map((l) => (
                     <li key={l.door}>
                       <span className="mono">{l.door === 'anthropic' ? 'Anthropic-style' : 'OpenAI-style'}</span> ({l.door === 'anthropic' ? 'Claude Agent SDK engine' : 'OpenCode engine'}):{' '}
-                      <b>{l.ok ? `answered (${l.status})` : l.status === null ? 'no answer' : `refused (${l.status})`}</b> in {(l.ms / 1000).toFixed(1)}s
+                      <b>{l.ok ? `answered (${l.status})` : l.status === null ? 'no answer' : /is served on/i.test(l.message ?? '') ? `not served here (${l.status})` : `refused (${l.status})`}</b> in {(l.ms / 1000).toFixed(1)}s
                       {l.message ? ` · ${l.message}` : ''}
                       {l.retryAfter ? ` · retry after ${l.retryAfter}s` : ''}
                     </li>

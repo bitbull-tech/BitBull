@@ -48,7 +48,19 @@ test("the verdict says whose problem it is", async () => {
   };
   assert.equal((await run([429, cooling], [429, cooling])).side, "gateway");
   assert.match((await run([429, cooling], [429, cooling])).verdict, /not BitBull/);
-  assert.equal((await run([200, {}], [200, {}])).side, "bitbull");
+  assert.equal((await run([200, {}], [200, {}])).side, "gateway");
+  assert.match((await run([200, {}], [200, {}])).verdict, /still fails while this check passes, that is BitBull's/);
+  // a Claude model is only on the Anthropic-style endpoint: the other one saying so is not a fault
+  const elsewhere = { error: { type: "invalid_request_error", message: "claude-fable-5 is served on POST /v1/messages" } };
+  const fine = await run([200, {}], [400, elsewhere]);
+  assert.equal(fine.side, "gateway");
+  assert.match(fine.verdict, /answers on this model now.*temporary and on SayGM's side, not BitBull's/);
+  const cold = await run([429, cooling], [400, elsewhere]);
+  assert.equal(cold.side, "gateway");
+  assert.match(cold.verdict, /refusing this model.*not BitBull/);
+  assert.equal((await run([401, { error: "no" }], [400, elsewhere])).side, "key");
+  // an ordinary 400 on one side is still just reported
+  assert.equal((await run([200, {}], [400, { error: { message: "max_tokens too small" } }])).side, "unclear");
   assert.equal((await run([401, { error: "bad key" }], [401, { error: "bad key" }])).side, "key");
   const half = await run([401, { error: { message: "invalid x-api-key" } }], [200, {}]);
   assert.equal(half.side, "key");

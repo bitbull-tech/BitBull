@@ -66,7 +66,7 @@ const EXEC_KEY = /^(core\.(fsmonitor|hookspath|sshcommand|pager|editor|gitproxy|
  * The null device (never a plantable path) stands in for the global config on both platforms;
  * Windows needs a handful of ambient variables to start a process at all, and none are secrets.
  */
-function gitEnv() {
+export function gitEnv() {
   const win = process.platform === "win32";
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
@@ -84,6 +84,13 @@ function gitEnv() {
     }
   } else {
     env.HOME = "/nonexistent";
+  }
+  // In the sandbox the only way out is the allowlist proxy, named in the server's own environment
+  // (docker-compose.yml). Without these, a fetch from here could never reach GitHub, however the
+  // allowlist was set: Sync and Change remote failed with "couldn't be reached" (2026-11).
+  for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy", "SSL_CERT_FILE", "GIT_SSL_CAINFO"]) {
+    const v = process.env[k];
+    if (v) env[k] = v;
   }
   return env;
 }
@@ -180,10 +187,12 @@ export function gitError(e: unknown): string {
     .map((l) => l.replace(/^(fatal|error|remote|warning):\s*/i, "").trim())
     .filter(Boolean);
   const text = lines.join(" ");
+  // the plain explanation, then what git itself said, so a wrong guess here can still be seen through
+  const said2 = text ? ` (git said: ${clean(text, 160)})` : "";
   if (err?.killed) return "it took too long and was stopped";
   if (/repository .* not found|not found$/i.test(text)) return "there is no repository at that address any more (renamed, moved, or private). Point this copy at where it lives now with Change remote";
-  if (/could not read Username|Authentication failed|terminal prompts disabled/i.test(text)) return "that repository needs a sign-in, which this button doesn't use (it is private). Ask the agent to fetch it: it has your GitHub token";
-  if (/CONNECT tunnel failed|403|Could not resolve host|Failed to connect/i.test(text)) return "the remote couldn't be reached from the sandbox (not on the network allowlist, or offline)";
+  if (/could not read Username|Authentication failed|terminal prompts disabled/i.test(text)) return `that repository needs a sign-in, which this button doesn't use (it is private). Ask the agent to fetch it: it has your GitHub token${said2}`;
+  if (/CONNECT tunnel failed|403|Could not resolve host|Failed to connect/i.test(text)) return `the remote couldn't be reached from the sandbox${said2}`;
   if (/dubious ownership/i.test(text)) return "git won't read that folder because another user owns it";
   if (/does not appear to be a git repository/i.test(text)) return "that isn't a git repository";
   return clean(text || (err?.message ?? String(e)).replace(/^Command failed: git .*$/m, "git failed"), 200);

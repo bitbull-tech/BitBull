@@ -295,8 +295,9 @@ export function ReposDialog({ project, onClose, onBrowse }: { project: Project |
                         </div>
                         {source.trim() && lastName(source) !== r.name && r.path !== '.' && (
                           <label className="check small">
-                            <input type="checkbox" checked={rename} onChange={(e) => setRename(e.target.checked)} /> Rename the folder from <span className="mono">{r.name}</span> to{' '}
-                            <span className="mono">{lastName(source)}</span>
+                            <input type="checkbox" checked={rename} onChange={(e) => setRename(e.target.checked)} /> Also rename this working copy's folder in the project's workspace, from{' '}
+                            <span className="mono">{r.path}</span> to <span className="mono">{r.path.includes('/') ? `${r.path.slice(0, r.path.lastIndexOf('/') + 1)}${lastName(source)}` : lastName(source)}</span>{' '}
+                            <span className="muted">(the agent's copy inside BitBull; nothing on your PC is renamed)</span>
                           </label>
                         )}
                         <p className="muted small">

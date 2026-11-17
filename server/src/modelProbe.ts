@@ -61,8 +61,21 @@ async function leg(door: ProbeLeg["door"], url: string, headers: Record<string, 
 export function verdictOf(a: ProbeLeg, o: ProbeLeg): Pick<ProbeResult, "verdict" | "side"> {
   const denied = (l: ProbeLeg) => l.status === 401 || l.status === 403;
   const busy = (l: ProbeLeg) => l.status === 429 || l.status === 503 || l.status === 529;
+  // SayGM serves some models on one endpoint only and says so on the other ("… is served on
+  // POST /v1/messages"). That refusal is not a fault: judge by the endpoint the model lives on.
+  const elsewhere = (l: ProbeLeg) => !l.ok && (l.status === 400 || l.status === 404) && /is served on|not (available|supported) on this endpoint|use \/v1\//i.test(l.message ?? "");
+  const only = elsewhere(o) ? a : elsewhere(a) ? o : null;
+  if (only) {
+    const where = only.door === "anthropic" ? "Anthropic-style" : "OpenAI-style";
+    if (only.ok)
+      return { side: "gateway", verdict: `SayGM answers on this model now, with BitBull's key, on the one endpoint it is served on (${where}). So the earlier refusal was temporary and on SayGM's side, not BitBull's: press Try again. If the engine still fails while this check passes, that would be BitBull's, and worth sending me.` };
+    if (busy(only)) return { side: "gateway", verdict: `SayGM is refusing this model for your key right now on a plain request with no engine involved (it is only served on the ${where} endpoint). That is on SayGM's side, not BitBull. Try again later or pick another model.` };
+    if (denied(only)) return { side: "key", verdict: `SayGM turned BitBull's key away on the ${where} endpoint, the only one this model is served on. Check the key under Settings → Integrations → SayGM${only.door === "anthropic" ? `, or set SAYGM_ANTHROPIC_AUTH to ${config.saygm.anthropicAuth === "bearer" ? "api-key" : "bearer"}` : ""}.` };
+    return { side: "unclear", verdict: `This model is only served on SayGM's ${where} endpoint, and a plain request there was not answered (what it said is below). With no engine involved, that is not something BitBull's agent code caused.` };
+  }
   if (a.status === null && o.status === null) return { side: "network", verdict: "Neither request reached SayGM from BitBull's server, so this is the network (the sandbox's allowlist, or SayGM is down), not the model." };
-  if (a.ok && o.ok) return { side: "bitbull", verdict: "SayGM answered on this model both ways with BitBull's key. The failure is in how the engine made its request, which is BitBull's to fix: send this result with the failed reply (Copy for agent → full)." };
+  if (a.ok && o.ok)
+    return { side: "gateway", verdict: "SayGM answers on this model now, both ways, with BitBull's key. If the earlier error was a busy or rate-limit one, it was temporary and on SayGM's side: press Try again. If the engine still fails while this check passes, that is BitBull's to fix: send this result with the failed reply (Copy for agent → full)." };
   if (denied(a) && denied(o)) return { side: "key", verdict: "SayGM turned BitBull's key away on both endpoints. Check the key under Settings → Integrations → SayGM." };
   if (busy(a) && busy(o)) return { side: "gateway", verdict: "SayGM is refusing this model for your key right now, on a plain request with no engine involved. That is on SayGM's side (the model, or a limit on your account), not BitBull. Try again later or pick another model." };
   if (busy(a) && o.ok) return { side: "gateway", verdict: "SayGM serves this model on its OpenAI-style endpoint but is refusing it on its Anthropic-style one, which is what the Claude Agent SDK engine uses. Not BitBull: switch this chat to the OpenCode engine for now, or try again later." };
