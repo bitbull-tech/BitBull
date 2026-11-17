@@ -33,7 +33,7 @@ BitBull holds the Cathedral key and makes every call. You have tools, not a key:
 
 - An upload whose answer was lost says "upload outcome unknown". Call `cathedral_upload` again with `check: true`: it only reads the path back and compares, and never uploads. Ask the user before sending again.
 - `lost` from `cathedral_exec_wait` means the outcome is unknown: the command may or may not have run.
-- The room limit (`sealed_room_limit_reached`), sold out or unavailable: say so plainly and offer to try later.
+- The room limit (`sealed_room_limit_reached`), or sold out: say so plainly and offer to try later.
 
 ## What receipts mean
 
