@@ -209,6 +209,24 @@ export function decideCreate(id: string, decision: "approve" | "deny"): CreateRe
   return r;
 }
 
+/**
+ * The owner stopped this chat's turn: its waiting cards close, so an Approve clicked later can't
+ * create (and bill) a sandbox nobody is waiting for. The waiting call answers "denied".
+ */
+export function cancelCreates(sessionId: string): number {
+  let n = 0;
+  for (const r of requests) {
+    if (r.sessionId !== sessionId || r.status !== "pending") continue;
+    r.status = "denied";
+    r.decidedAt = new Date().toISOString();
+    n++;
+    record({ level: "info", source: "cathedral", message: `Closed a Cathedral sandbox request: the turn was stopped (${r.size}, nothing created)`, sessionId: r.sessionId, sessionTitle: r.sessionTitle });
+    for (const fn of waiters.get(r.id) ?? []) fn(r);
+    waiters.delete(r.id);
+  }
+  return n;
+}
+
 /** Raise the card and wait for the owner (or the timeout). */
 async function waitForOwner(r: CreateRequest): Promise<CreateRequest | null> {
   requests.push(r);
@@ -378,6 +396,11 @@ export function namedFile(workspace: string, rel: string, mustExist: boolean): s
     return { error: `The folder for ${clean} does not exist in this workspace.` };
   }
   if (!inside(dir)) return { error: `${clean} leads outside this workspace.` };
+  // the same rules for where the folder really is: foo -> .git makes foo/hooks/x a .git path
+  const realDir = path.relative(wsReal, dir).split(path.sep).join("/");
+  if (realDir.split("/").some((p) => p.toLowerCase() === ".git")) return { error: `${clean} leads into .git, which is never written.` };
+  const realSecret = realDir ? secretPart(realDir) : null;
+  if (realSecret) return { error: `${clean} leads into ${realSecret}, which looks like it holds keys or secrets and is never written.` };
   const target = path.join(dir, path.basename(abs));
   if (existsSync(target) && lstatSync(target).isSymbolicLink()) return { error: `${clean} is a link; it is not written through.` };
   return target;

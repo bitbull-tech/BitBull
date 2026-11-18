@@ -14,6 +14,7 @@ import { config } from "./config.js";
 import { turnEvents, turns, type SessionRow, type TurnStatus } from "./db.js";
 import type { AgentEvent } from "./engines/types.js";
 import { record } from "./activity.js";
+import { cancelCreates } from "./cathedral.js";
 
 export type { TurnStatus };
 export interface TurnRecord {
@@ -188,6 +189,7 @@ export function abortTurn(sessionId: string) {
     if (t) t.aborted = true;
   }
   abortRun(sessionId);
+  cancelCreates(sessionId);
   return !!id;
 }
 

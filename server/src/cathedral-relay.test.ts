@@ -354,3 +354,26 @@ test("upload checks the file a link leads to: a repo's notes.txt -> ../.env is r
     assert.equal(typeof r, "object", f);
   }
 });
+
+test("stopping the turn closes its waiting card: a later Approve creates nothing", async () => {
+  const t = setInterval(() => {
+    const p = C.listCreateRequests().find((r) => r.status === "pending" && r.sessionId === chatOn.id);
+    if (p) {
+      clearInterval(t);
+      assert.equal(C.cancelCreates(chatOn.id), 1);
+      assert.equal(C.decideCreate(p.id, "approve")?.status, "denied", "an Approve after the stop changes nothing");
+    }
+  }, 5);
+  const out = await call("create", { size: "sealed-1x2", lifetime_seconds: 300, reason: "stopped before approval", op: "c9" }, chatOn.id);
+  assert.equal(out.ok, false);
+  assert.equal(out.error, "denied");
+  assert.equal(posts().length, 0);
+});
+
+test("download refuses a folder that is a link into .git", () => {
+  mkdirSync(path.join(ws, ".git", "hooks"), { recursive: true });
+  symlinkSync(path.join(ws, ".git"), path.join(ws, "gitlink"));
+  const r = C.namedFile(ws, "gitlink/hooks/pre-commit", false);
+  assert.equal(typeof r, "object");
+  assert.match((r as { error: string }).error, /\.git/);
+});

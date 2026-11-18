@@ -204,6 +204,8 @@ a key that can spend money and a destination files and commands can be sent to.
   it never sees.
 - **Per project.** The tools answer only in chats of a project with Cathedral ticked; a call that
   can't be tied to one chat (several running at once, no session header) is refused.
+  The session header is the chat's word, not proof: within R1, an agent that reads the startup
+  token from its engine's config could claim another chat, as with the Leadpoet relay.
 - **Approval.** Every create raises a card (size, rate, lifetime, spend cap, internet on, off or a
   host list) and waits; scheduled runs and Telegram messages are refused. The network is closed
   unless the owner approves internet, or a named list of hosts (clean-machine installs).
