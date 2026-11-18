@@ -190,7 +190,7 @@ function buildConfig() {
      * Connect with SayGM (saygmConnect.ts). The client id is public (the flow is PKCE, with no
      * secret): it is the BitBull app as registered with SayGM, the same for every install.
      */
-    oauthClientId: env("SAYGM_OAUTH_CLIENT_ID", SAYGM_CLIENT_ID),
+    oauthClientId: env("SAYGM_OAUTH_CLIENT_ID", SAYGM_CLIENT_ID).replace(/^(off|none)$/i, ""),
     authorizeUrl: env("SAYGM_AUTHORIZE_URL", "https://saygm.com/oauth/authorize"),
     /** SayGM's account API: code exchange, revoke, profile. Not the inference host. */
     accountUrl: env("SAYGM_ACCOUNT_URL", "https://account.saygm.com/v1").replace(/\/+$/, ""),
@@ -376,10 +376,11 @@ function buildConfig() {
 
 /**
  * BitBull's client id on SayGM, issued when the app was registered there. Public by design (PKCE,
- * no secret). Empty until SayGM has issued it: Connect with SayGM is then not offered, and a key
- * can be pasted as before. SAYGM_OAUTH_CLIENT_ID in .env overrides it.
+ * no secret), and the same for every install: it names the app "BitBull" on SayGM's consent page,
+ * registered with the loopback callbacks in saygmConnect.ts. SAYGM_OAUTH_CLIENT_ID in .env
+ * overrides it (a fork registering its own app); set it to "off" to switch Connect off.
  */
-const SAYGM_CLIENT_ID = "";
+const SAYGM_CLIENT_ID = "sgm_n5533IoAPfP_QacoxAoPpg440oB21WLr";
 
 export const config = buildConfig();
 

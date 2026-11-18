@@ -150,10 +150,19 @@ test("what doesn't connect: the wrong state, a refusal, no key, SayGM saying no"
   await S.disconnect(saygm().f);
 });
 
-test("no client id: Connect isn't offered, and says so", async () => {
+test("BitBull ships with its client id; switched off, Connect isn't offered and says so", async () => {
+  {
+    const { reloadConfig } = await import("./config.js");
+    const mine = process.env.SAYGM_OAUTH_CLIENT_ID;
+    delete process.env.SAYGM_OAUTH_CLIENT_ID;
+    reloadConfig();
+    assert.match(config.saygm.oauthClientId, /^sgm_[A-Za-z0-9_-]{20,}$/, "the registered BitBull app is the default");
+    process.env.SAYGM_OAUTH_CLIENT_ID = mine;
+    reloadConfig();
+  }
   const { reloadConfig } = await import("./config.js");
   const before = process.env.SAYGM_OAUTH_CLIENT_ID;
-  process.env.SAYGM_OAUTH_CLIENT_ID = "";
+  process.env.SAYGM_OAUTH_CLIENT_ID = "off";
   reloadConfig();
   try {
     assert.equal(S.saygmConnectState().available, false);
