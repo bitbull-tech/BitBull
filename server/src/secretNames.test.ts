@@ -37,7 +37,7 @@ test("every secret exclude in the linked-folder copy (bitbull-links.sh) is cover
 });
 
 test("keys, wallets and .env files are secret; templates and ordinary code are not", () => {
-  for (const n of [".env", ".env.local", "server.pem", "TLS.KEY", "coldkey", "coldkeypub.txt", "hotkeys", "hotkey_backup", "id_ed25519", "id_rsa.pub", "wallet.dat", "wallet-main.json", "my-mnemonic.txt", "seed_phrase.txt", ".ssh", ".bittensor", "credentials.json", "settings.local.json"])
+  for (const n of [".env", ".env.local", "server.pem", "TLS.KEY", "coldkey", "coldkeypub.txt", "hotkeys", "hotkey_backup", "coldkey.bak", "hotkey.backup", "id_ed25519", "id_rsa.pub", "wallet.dat", "wallet-main.json", "my-mnemonic.txt", "seed_phrase.txt", ".ssh", ".bittensor", "credentials.json", "settings.local.json"])
     assert.equal(isSecretName(n), true, n);
   for (const n of [".env.example", ".env.template", "index.ts", "id_generator.py", "keys.ts", "README.md", "notes.txt", "hotkey.py", "hotkeys.ts", "coldkey_utils.py"])
     assert.equal(isSecretName(n), false, n);
@@ -106,6 +106,9 @@ test("a folder copy inside a repo (not committed yet) leaves out what git ignore
   } finally {
     snap.cleanup();
   }
+  // a folder git ignores entirely gives nothing to send: refused, not an empty room
+  const empty = await snapshotTarget(dir, "repo2/newpkg/build");
+  assert.ok("error" in empty, JSON.stringify(empty));
   // one ignored file named as the target is refused
   const one = await snapshotTarget(dir, "repo2/newpkg/secrets.toml");
   assert.ok("error" in one);

@@ -18,10 +18,10 @@ const GLOBS: RegExp[] = [
   /^wallet.*\.json$/,
   /seed.*\.txt$/,
   /mnemonic/,
-  // Bittensor wallet files and folders (coldkey, coldkeypub.txt, hotkeys/), not code such as hotkey.py
-  /^(coldkey|hotkey)[^.]*$/,
-  /^(coldkey|hotkey).*\.(txt|json)$/,
 ];
+
+/** Code and docs named after keys (hotkey.py, hotkeys.ts) are not wallet files. */
+const CODE_EXT = /\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|rs|go|rb|java|kt|c|h|cc|cpp|hpp|cs|swift|sh|md|rst|html|css|ipynb)$/;
 
 /** Templates that only show which settings exist; they stay. */
 const ENV_TEMPLATES = new Set([".env.example", ".env.sample", ".env.template", ".env.dist"]);
@@ -30,7 +30,9 @@ const ENV_TEMPLATES = new Set([".env.example", ".env.sample", ".env.template", "
 export function isSecretName(name: string): boolean {
   const low = name.toLowerCase();
   if (ENV_TEMPLATES.has(low)) return false;
-  return NAMES.has(low) || GLOBS.some((re) => re.test(low));
+  if (NAMES.has(low) || GLOBS.some((re) => re.test(low))) return true;
+  // Bittensor wallet files and folders (coldkey, coldkeypub.txt, hotkeys/, coldkey.bak), not code
+  return /^(coldkey|hotkey)/.test(low) && !CODE_EXT.test(low);
 }
 
 /** The first part of a relative path (folders included) that looks like a secret, or null. */

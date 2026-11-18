@@ -364,11 +364,15 @@ export async function snapshotTarget(ws: string, target: string): Promise<Snapsh
     }
     const realWs = realpathSync(ws);
     if (realAbs && !(realAbs === realWs || realAbs.startsWith(realWs + path.sep))) throw new Error("The target leads outside this workspace through a link; it is not copied.");
-    // inside a repo, only what git would track: gitignored files (often local secrets) stay out
+    // inside a repo, only what git would track by the repo's own .gitignore (BitBull's git reads no
+    // global config, so a global excludes file is not applied): ignored local secrets stay out
     let keep: { files: Set<string>; dirs: Set<string> } | undefined;
     if (repoDir && realAbs) {
       const rel = path.relative(realpathSync(repoDir), realAbs).split(path.sep).join("/");
-      if (lstatSync(realAbs).isDirectory()) keep = await gitListed(repoDir, rel);
+      if (lstatSync(realAbs).isDirectory()) {
+        keep = await gitListed(repoDir, rel);
+        if (!keep.files.size) throw new Error(`${target} holds nothing git would track (it is ignored or empty); nothing is copied.`);
+      }
       else {
         const dirRel = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
         if (!(await gitListed(repoDir, dirRel)).files.has(path.posix.basename(rel))) throw new Error(`${target} is ignored by git; it is not copied.`);

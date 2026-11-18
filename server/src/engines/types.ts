@@ -38,7 +38,7 @@ export interface RunInput {
   /** Read-only planning turn: investigate and propose, change nothing */
   plan?: boolean;
   /**
-   * A QA Hound reviewer with "Run it in a sealed sandbox" ticked: in plan mode, the one Cathedral
+   * A QA Hound reviewer with "Run it in a confidential sandbox" ticked: in plan mode, the one Cathedral
    * tool review_exec stays on (it runs commands only in the room that run created). Ignored otherwise.
    */
   reviewSandbox?: boolean;
