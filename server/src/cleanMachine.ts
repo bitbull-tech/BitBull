@@ -1,7 +1,7 @@
 /**
- * QA Hound on Cathedral sealed rooms, run by BitBull itself (no model in the loop):
+ * QA Hound on Cathedral confidential sandboxes, run by BitBull itself (no model in the loop):
  *
- *  - "Run it in a sealed sandbox": a snapshot of the target (its exact commit when it is in a git
+ *  - "Run it in a confidential sandbox": a snapshot of the target (its exact commit when it is in a git
  *    repo, else a filtered copy of the folder) goes into a fresh room with the network closed, and
  *    the run's reviewers may run commands there (cathedral.ts review_exec).
  *  - The clean-machine test: the repo at its exact commit, the project's install, build and test
@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { execCapableConfig } from "./repos.js";
+import { isSecretName, secretPart } from "./secretNames.js";
 
 const run = promisify(execFile);
 
@@ -146,7 +147,7 @@ export interface RepoState {
 
 export async function repoState(ws: string, repoDir: string): Promise<RepoState | { error: string }> {
   const unsafe = await execCapableConfig(repoDir);
-  if (unsafe.length) return { error: `Refused: the repo's own git config sets ${unsafe.slice(0, 4).join(", ")}, which git would run as a command. Remove it, or review without the sealed room.` };
+  if (unsafe.length) return { error: `Refused: the repo's own git config sets ${unsafe.slice(0, 4).join(", ")}, which git would run as a command. Remove it, or review without the confidential sandbox.` };
   let commit: string;
   try {
     commit = (await git(repoDir, ["rev-parse", "--verify", "HEAD^{commit}"])).trim();
@@ -172,15 +173,13 @@ export async function repoState(ws: string, repoDir: string): Promise<RepoState 
 
 // ---------- a folder as a tar, without secrets ----------
 
-const SECRET_NAME = /^\.env(\..*)?$/i;
-const ENV_TEMPLATES = new Set([".env.example", ".env.sample", ".env.template", ".env.dist"]);
 export const MAX_SNAPSHOT_BYTES = 200 * 1024 * 1024;
 const MAX_FILES = 50_000;
 
-/** Left out of a folder snapshot: .git, .env files (templates stay), symlinks and anything that isn't a file or folder. */
+/** Left out of a folder snapshot: .git, anything that looks like a key or wallet (secretNames.ts; .env templates stay), symlinks and anything that isn't a file or folder. */
 export function skipped(name: string): boolean {
   if (name === ".git") return true;
-  return SECRET_NAME.test(name) && !ENV_TEMPLATES.has(name.toLowerCase());
+  return isSecretName(name);
 }
 
 function tarHeader(name: string, size: number, type: "0" | "5" | "x", mode: number, mtime: number): Buffer {
@@ -295,13 +294,10 @@ async function archive(repoDir: string, out: string, sub: string, rev = "HEAD"):
     const type = (await git(repoDir, ["cat-file", "-t", `${rev}:${sub}`])).trim();
     args = type === "tree" ? ["archive", "--format=tar", "-o", out, `${rev}:${sub}`] : ["archive", "--format=tar", "-o", out, rev, "--", sub];
   }
-  // a committed .env file would go to the room through Cathedral's API in plaintext: refuse
+  // a committed key, wallet or .env file would go to the room through Cathedral's API in plaintext: refuse
   const listed = (await git(repoDir, ["ls-tree", "-r", "--name-only", "-z", rev, ...(sub ? ["--", sub] : [])], 60_000)).split("\0").filter(Boolean);
-  const secret = listed.find((f) => {
-    const base = f.split("/").pop() ?? "";
-    return SECRET_NAME.test(base) && !ENV_TEMPLATES.has(base.toLowerCase());
-  });
-  if (secret) throw new Error(`The commit holds ${secret}, a .env file; it is not sent to a sandbox. Remove it from the repo first.`);
+  const secret = listed.find((f) => secretPart(f) !== null);
+  if (secret) throw new Error(`The commit holds ${secret}, which looks like a key, wallet or .env file; it is not sent to a sandbox. Remove it from the repo first.`);
   await git(repoDir, args, 300_000);
   if (statSync(out).size > MAX_SNAPSHOT_BYTES) throw new Error("The snapshot is over 200 MiB, the limit for one upload.");
 }
@@ -387,7 +383,7 @@ export async function openReviewRoom(
       size: input.size,
       lifetimeSeconds: (input.maxMinutes + 10) * 60,
       internet: false,
-      reason: `QA Hound on ${input.target}: the reviewers may run its code and tests in a sealed room holding ${what}, network closed.`,
+      reason: `QA Hound on ${input.target}: the reviewers may run its code and tests in a confidential sandbox holding ${what}, network closed.`,
       op: "create",
       task,
     });
@@ -398,7 +394,7 @@ export async function openReviewRoom(
     room.receiptId = made.receipt_id ?? undefined;
     const put = (await deps.helper(["put", made.sandbox_id, "--task", task, "--op", "putsrc", "--src", snap.file, "--path", "/work/src.tar"])).out;
     if (!put.ok) throw new Error(`upload failed: ${errText(put)}`);
-    deps.log("info", `QA Hound sent ${what} to sealed room ${made.sandbox_id}: ${input.target} → /work/src.tar (${snap.bytes} bytes, sha256 ${snap.sha256})`);
+    deps.log("info", `QA Hound sent ${what} to confidential sandbox ${made.sandbox_id}: ${input.target} → /work/src.tar (${snap.bytes} bytes, sha256 ${snap.sha256})`);
     const x = (await deps.helper(["exec", made.sandbox_id, "--task", task, "--op", "extract", "--cmd", "mkdir -p /work/src && tar -xf /work/src.tar -C /work/src", "--cwd", "/work", "--timeout", "45"])).out;
     if (!x.ok) throw new Error(`unpacking failed: ${errText(x)}`);
     return room;
@@ -596,7 +592,7 @@ export async function runCleanMachine(
         // never the open internet: closed, or closed apart from the hosts install needs
         internet: false,
         allowHosts: o.allowHosts.length ? o.allowHosts : undefined,
-        reason: `Clean-machine test of ${st.rel} at ${st.commit.slice(0, 12)}: run ${steps.map((s) => s.step).join(", ")} in a fresh sealed room, network ${o.allowHosts.length ? `closed apart from ${o.allowHosts.join(", ")}` : "closed"}.`,
+        reason: `Clean-machine test of ${st.rel} at ${st.commit.slice(0, 12)}: run ${steps.map((s) => s.step).join(", ")} in a fresh confidential sandbox, network ${o.allowHosts.length ? `closed apart from ${o.allowHosts.join(", ")}` : "closed"}.`,
         op: "create",
         task,
       });
@@ -690,7 +686,7 @@ export async function runCleanMachine(
     deps.log("info", `Clean-machine test: room ${id} for ${repo.rel} at ${repo.commit.slice(0, 12)}`);
     const put = (await deps.helper(["put", id, "--task", task, "--op", "putsrc", "--src", tar, "--path", "/work/src.tar"])).out;
     if (!put.ok) failure = `upload failed: ${errText(put)}`;
-    else deps.log("info", `Clean-machine test sent git archive of ${repo.rel} at ${repo.commit.slice(0, 12)} to sealed room ${id}: /work/src.tar (${tarBytes} bytes, sha256 ${tarSha})`);
+    else deps.log("info", `Clean-machine test sent git archive of ${repo.rel} at ${repo.commit.slice(0, 12)} to confidential sandbox ${id}: /work/src.tar (${tarBytes} bytes, sha256 ${tarSha})`);
     if (!failure) {
       const x = (await deps.helper(["exec", id, "--task", task, "--op", "extract", "--cmd", "mkdir -p /work/src && tar -xf /work/src.tar -C /work/src && rm /work/src.tar", "--cwd", "/work", "--timeout", "45"])).out;
       if (!x.ok) failure = `unpacking failed: ${errText(x)}`;
@@ -829,15 +825,15 @@ export function renderCertificate(c: Certificate): string {
   );
   L.push("", "## What this shows", "");
   L.push(
-    `- These commands ran in a fresh Cathedral sealed room at commit ${code(c.repo.commit)}, with the results above.`,
-    "- The room's own receipts are signed by a key held by the sealed host's guest, which that host's AMD SEV-SNP attestation report commits to. The offline verifier checks that link and the AMD certificate chain, and checks Cathedral's receipt chain against the pinned key.",
+    `- These commands ran in a fresh Cathedral confidential sandbox at commit ${code(c.repo.commit)}, with the results above.`,
+    "- The room's own receipts are signed by a key held by the host's guest, which that host's AMD SEV-SNP attestation report commits to. The offline verifier checks that link and the AMD certificate chain, and checks Cathedral's receipt chain against the pinned key.",
   );
   L.push("", "## What this does not show", "");
   L.push(
     "- That the code is safe or correct. Passing commands show only that they exited 0 here.",
     "- That the image digest above is the image that ran, unless the guest's create receipt carries it (open the public create receipt and compare its image_digest).",
     "- That the receipt chain is complete at its end: the head is not signed, so receipts cut from the tail would not show.",
-    "- That the room had a machine to itself: rooms on one sealed host share one guest and are kept apart by gVisor, not by hardware.",
+    "- That the room had a machine to itself: rooms on one host share one guest and are kept apart by gVisor, not by hardware.",
     "- That every room receipt was kept: the guest's own receipts are those Cathedral kept, and gaps in their sequence are not checked.",
     "- Anything for receipts signed before the host last restarted: they can't be checked against its current attestation.",
     "- Anything Cathedral's verify did not check. It lists:",
@@ -850,7 +846,7 @@ export function renderCertificate(c: Certificate): string {
 /** A few lines for the verdict prompt and the pull request. */
 export function certificateSummary(c: Certificate): string[] {
   return [
-    `Clean-machine test: **${c.result.toUpperCase()}** at ${code(c.repo.commit.slice(0, 12))} in a fresh sealed room (${c.room.network === "closed" ? "network closed" : `network closed apart from ${c.room.allowHosts.join(", ")}`}).`,
+    `Clean-machine test: **${c.result.toUpperCase()}** at ${code(c.repo.commit.slice(0, 12))} in a fresh confidential sandbox (${c.room.network === "closed" ? "network closed" : `network closed apart from ${c.room.allowHosts.join(", ")}`}).`,
     ...c.commands.map((x) => `- ${x.step}: ${x.ok ? "passed" : x.state === "not_run" ? "not run" : `${cell(x.state)}${x.exitCode != null ? ` (exit ${x.exitCode})` : ""}`}`),
     `- receipt chain head n=${c.receiptHead.n ?? "?"}; verify ${c.verify.ok === true ? "passed" : c.verify.ok === false ? "FAILED" : "not available"}${c.room.createReceiptUrl ? `; create receipt ${c.room.createReceiptUrl}` : ""}`,
   ];

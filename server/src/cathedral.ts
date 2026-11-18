@@ -1,10 +1,11 @@
 /**
- * Cathedral sealed sandboxes (cathedral.computer), run by BitBull on the agent's behalf.
+ * Cathedral confidential sandboxes (cathedral.computer), run by BitBull on the agent's behalf.
  *
  * What it is for: running and checking code, repos, files and folders the owner doesn't trust or
- * was given, in a sealed room (AMD SEV-SNP) away from the owner's keys, workspace and network.
- * Isolation, not confidentiality: commands and files pass Cathedral's API in plaintext on the way
- * to the room (docs/THREAT-MODEL.md R13), so the agent is told never to send secrets.
+ * was given, in a confidential sandbox (AMD SEV-SNP) away from the owner's keys, workspace and network.
+ * Confidential means the code runs in memory encrypted by AMD SEV-SNP, and each receipt proves it
+ * from the chip. It does not cover the way in: commands and files pass Cathedral's API in plaintext
+ * on the way to the sandbox (docs/THREAT-MODEL.md R13), so the agent is told never to send secrets.
  *
  * Shape, the same as BitBull's other paid or outbound integrations (Leadpoet, Telegram):
  *
@@ -39,6 +40,7 @@ import { config, effectiveCathedralCap, ROOT } from "./config.js";
 import { projects, sessions, workspaceFor, type ProjectRow, type SessionRow } from "./db.js";
 import { addBuiltIn } from "./egress.js";
 import { isUnattended, liveSessions, resolveSession } from "./mcp.js";
+import { secretPart } from "./secretNames.js";
 
 // ---------- the helper ----------
 
@@ -333,20 +335,17 @@ export function roomFor(id: string) {
 
 // ---------- named files inside the workspace ----------
 
-const SECRET_NAME = /^\.env(\..*)?$/i;
-const ENV_TEMPLATES = new Set([".env.example", ".env.sample", ".env.template", ".env.dist"]);
-
 /**
  * A workspace-relative file the call names: inside the workspace after symlinks are resolved, a
- * regular file, not under .git and not a .env file. Returns the absolute path, or why not.
+ * regular file, not under .git and nothing that looks like a key or wallet (secretNames.ts). Returns the absolute path, or why not.
  */
 export function namedFile(workspace: string, rel: string, mustExist: boolean): string | { error: string } {
   const clean = String(rel ?? "").replace(/\\/g, "/").trim();
   if (!clean || clean.startsWith("/") || clean.includes("\0") || clean.split("/").some((p) => p === ".." || p === "")) return { error: "Name one file by its path inside this project's workspace, e.g. src/app.py (no absolute paths, no ..)." };
   const parts = clean.split("/");
   if (parts.some((p) => p.toLowerCase() === ".git")) return { error: "Files under .git are never sent or written." };
-  const base = parts[parts.length - 1];
-  if (SECRET_NAME.test(base) && !ENV_TEMPLATES.has(base.toLowerCase())) return { error: `${base} holds secrets and is never sent or written.` };
+  const secret = secretPart(clean);
+  if (secret) return { error: `${secret} looks like it holds keys or secrets and is never sent or written.` };
   let wsReal: string;
   try {
     wsReal = realpathSync(workspace);
@@ -366,8 +365,8 @@ export function namedFile(workspace: string, rel: string, mustExist: boolean): s
     // the same rules for the file a link leads to: a cloned repo can ship notes.txt -> ../.env
     const realParts = path.relative(wsReal, real).split(path.sep);
     if (realParts.some((p) => p.toLowerCase() === ".git")) return { error: `${clean} leads into .git, which is never sent.` };
-    const realBase = realParts[realParts.length - 1];
-    if (SECRET_NAME.test(realBase) && !ENV_TEMPLATES.has(realBase.toLowerCase())) return { error: `${clean} leads to ${realBase}, which holds secrets and is never sent.` };
+    const realSecret = secretPart(realParts.join("/"));
+    if (realSecret) return { error: `${clean} leads to ${realSecret}, which looks like it holds keys or secrets and is never sent.` };
     if (!statSync(real).isFile()) return { error: `${clean} is not a file. Name each file to send.` };
     return real;
   }
@@ -426,9 +425,9 @@ function build(hint: string | undefined) {
   server.registerTool(
     "quote",
     {
-      title: "Price a sealed sandbox",
+      title: "Price a confidential sandbox",
       description:
-        "Cathedral sealed sandboxes are for running and checking code, repos and files the owner doesn't trust or was given, away from their keys, workspace and network. " +
+        "Cathedral confidential sandboxes are for running and checking code, repos and files the owner doesn't trust or was given, away from their keys, workspace and network. " +
         "This prices one: the sizes on sale, the hourly rate, and the hold for a lifetime. It creates nothing and spends nothing.",
       inputSchema: { size: z.string().describe("A sealed size, e.g. sealed-1x2"), lifetime_seconds: z.number().int().min(60).max(86400) },
     },
@@ -444,9 +443,9 @@ function build(hint: string | undefined) {
   server.registerTool(
     "create",
     {
-      title: "Create a sealed sandbox (the owner approves)",
+      title: "Create a confidential sandbox (the owner approves)",
       description:
-        "Create a sealed sandbox. The owner sees a card with the size, hourly rate, lifetime, spend cap and whether internet is on, and must approve it; the call waits (a few minutes). " +
+        "Create a confidential sandbox. The owner sees a card with the size, hourly rate, lifetime, spend cap and whether internet is on, and must approve it; the call waits (a few minutes). " +
         "Not available in scheduled runs or from Telegram. Network is closed unless internet=true, which you ask for only when the owner asked for internet. " +
         "Never send secrets: commands and files pass Cathedral's API on the way to the room. Delete the sandbox when you are done.",
       inputSchema: {
@@ -529,7 +528,7 @@ function build(hint: string | undefined) {
     {
       title: "Send one named file from the workspace to a sandbox",
       description:
-        "Send one file from this project's workspace to /work/... in a sandbox. Name each file: no folders, no globs. Never .env files or anything under .git. " +
+        "Send one file from this project's workspace to /work/... in a sandbox. Name each file: no folders, no globs. Never .env files, keys, wallets (*.pem, coldkey, hotkey ...) or anything under .git. " +
         "Each upload is logged for the owner with its path, size and SHA-256. To check whether an upload whose answer was lost landed, call again with check=true (it only reads back).",
       inputSchema: {
         sandbox_id: z.string(),
@@ -635,9 +634,9 @@ function build(hint: string | undefined) {
   server.registerTool(
     "review_exec",
     {
-      title: "Run a command in this review's sealed sandbox",
+      title: "Run a command in this review's confidential sandbox",
       description:
-        "Only in a QA Hound review with 'Run it in a sealed sandbox' ticked: run a shell command in the sealed room that holds a copy of the target (under /work/src), network closed. " +
+        "Only in a QA Hound review with 'Run it in a confidential sandbox' ticked: run a shell command in the confidential sandbox that holds a copy of the target (under /work/src), network closed. " +
         "Use it to run the target's tests or try what you suspect. Nothing else of the owner's is in the room.",
       inputSchema: {
         sandbox_id: z.string(),
