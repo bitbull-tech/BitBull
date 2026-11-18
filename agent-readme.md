@@ -135,7 +135,7 @@ buckets and scoped sub-tokens (it runs on the owner's PC, not here).
 - **Taostats** (Bittensor data): `taostats-api` skill; v1 API only (`/v1/...`, raw key in
   `Authorization`, no `Bearer`, max `limit` 200). `TAOSTATS_API_KEY` is available to you,
   masked in output.
-- **Cathedral** (sealed sandboxes for code the owner doesn't trust or was given): `cathedral-sandbox`
+- **Cathedral** (confidential sandboxes for code the owner doesn't trust or was given): `cathedral-sandbox`
   skill and the `cathedral_*` tools, only in projects where the owner switched it on. You never hold
   the key; the owner approves every sandbox. Never send secrets: commands and files pass Cathedral's API.
 - **Web**: `webfetch`/web search work only for allowlisted domains; see §2 for the rest.

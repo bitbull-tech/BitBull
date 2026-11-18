@@ -186,7 +186,7 @@ refuses protected paths, links out of the folder and unpermitted deletes on its 
 program on the PC can call the helper as the page does; it could already write to those folders
 as the owner. Unattended runs can neither propose nor apply.
 
-### R13: Cathedral sealed sandboxes (only while a key is set, only in projects that tick it)
+### R13: Cathedral confidential sandboxes (only while a key is set, only in projects that tick it)
 `server/src/cathedral.ts`, `tools/cathedral.mjs`, `skills/cathedral-sandbox`. For running and checking
 code the owner doesn't trust or was given, away from the owner's keys, workspace and network. It adds
 a key that can spend money and a destination files and commands can be sent to.
@@ -210,12 +210,14 @@ a key that can spend money and a destination files and commands can be sent to.
 - **Uploads.** Only a file the call names, resolved inside the project's workspace (no `..`, no links
   out, no folders, never `.env` or `.git/`), each logged to Activity with path, size and SHA-256.
   exec, upload, download and delete only reach rooms this project created in this run of BitBull.
-- **Isolation, not confidentiality.** Commands and files pass Cathedral's API in plaintext on the way
-  to the room. Cathedral's code has a sealed path (secrets and commands encrypted to a key held inside
+- **Confidential in the room, plaintext on the way in.** Confidential means the code runs in memory
+  encrypted by AMD SEV-SNP, and each receipt proves it from the chip; protection is what AMD SEV-SNP
+  provides at the firmware version named in the receipt. Commands and files still pass Cathedral's
+  API in plaintext on the way to the room. Cathedral's code has a sealed path (secrets and commands encrypted to a key held inside
   the guest, named in its attestation). It is live on cathedral.computer but not used by this
   integration yet; files have no such path. The agent is told
   never to send secrets.
-- **QA Hound.** With "Run it in a sealed sandbox", reviewers (plan mode, otherwise no MCP tools) get
+- **QA Hound.** With "Run it in a confidential sandbox", reviewers (plan mode, otherwise no MCP tools) get
   one tool, `cathedral_review_exec`, for the one room their run created, holding only a copy of the
   target, network closed; BitBull checks the caller is one of that run's reviewers.
 - **Receipts.** `verify` reports Cathedral's own checks. The AMD SEV-SNP report, AMD's certificate

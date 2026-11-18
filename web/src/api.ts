@@ -389,7 +389,7 @@ export interface NetworkRequest {
   decidedAt?: string
   scope?: 'host' | 'domain'
 }
-/** A sealed sandbox the agent asked for, waiting on the owner (server/src/cathedral.ts) */
+/** A confidential sandbox the agent asked for, waiting on the owner (server/src/cathedral.ts) */
 export interface CathedralRequest {
   id: string
   purpose: 'chat' | 'qa-hound' | 'clean-machine'
@@ -944,7 +944,7 @@ async function readEvents(
   return { ended, seq }
 }
 
-/** QA Hound's sealed-room options (server/src/hound.ts, cleanMachine.ts), next to HoundOptions */
+/** QA Hound's sandbox options (server/src/hound.ts, cleanMachine.ts), next to HoundOptions */
 export interface HoundRoomOptions {
   sandbox: boolean
   sandboxSize?: string

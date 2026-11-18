@@ -56,7 +56,7 @@ export function bitbullMcpServer(sessionId?: string): { url: string; headers: Re
 /** For BitBull's other local MCP routes (the Leadpoet relay): same startup token, proxy or not. */
 export const internalMcpHeaders = (): Record<string, string> => ({ [BITBULL_MCP_HEADER]: TOKEN });
 export const LEADPOET_MCP_PATH = "/mcp/leadpoet";
-/** Cathedral sealed sandboxes: BitBull holds the key and runs every call (cathedral.ts). */
+/** Cathedral confidential sandboxes: BitBull holds the key and runs every call (cathedral.ts). */
 export const CATHEDRAL_MCP_PATH = "/mcp/cathedral";
 
 /** Which chat a tool call came from: the engine's hint when it names a real chat, else the only chat running a turn. */

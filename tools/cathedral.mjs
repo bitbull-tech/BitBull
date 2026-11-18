@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Cathedral sealed sandboxes. Run by BitBull's server only (server/src/cathedral.ts), which holds the
+// Cathedral confidential sandboxes. Run by BitBull's server only (server/src/cathedral.ts), which holds the
 // key and gives the agent tools on its own MCP route; the agent never runs this with a key.
 //
 // Every command prints exactly one JSON object on stdout and exits 0 on success, 1 on a refusal or
@@ -278,7 +278,7 @@ async function readCatalog(ctx) {
 const sealedOf = (catalog) => (catalog.sealed && typeof catalog.sealed === "object" ? catalog.sealed : {});
 function findSize(sealed, size) {
   const entry = (Array.isArray(sealed.sizes) ? sealed.sizes : []).find((s) => s && (s.template === size || s.name === size));
-  if (!entry) throw new Refusal("unknown_size", `${size} is not one of the sealed sizes: ${(sealed.sizes ?? []).map((s) => s.template ?? s.name).join(", ") || "none listed"}`);
+  if (!entry) throw new Refusal("unknown_size", `${size} is not one of the sizes on sale: ${(sealed.sizes ?? []).map((s) => s.template ?? s.name).join(", ") || "none listed"}`);
   const rate = toMicros(entry.hourly_rate_usd);
   if (rate === null) throw new Refusal("catalog_unreadable", `The catalog gives no usable hourly rate for ${size}`);
   return { entry, rate };
@@ -445,7 +445,7 @@ async function cmdCreate(ctx, parsed) {
   }
 
   const sealed = sealedOf(await readCatalog(ctx));
-  if (sealed.available !== true && !resume) throw new Refusal("sealed_unavailable", `Sealed sandboxes are unavailable: ${sealed.reason ?? "no reason given"}`);
+  if (sealed.available !== true && !resume) throw new Refusal("sealed_unavailable", `Confidential sandboxes are unavailable: ${sealed.reason ?? "no reason given"}`);
   const { rate } = findSize(sealed, flags.size);
   // --allow host,host: closed apart from the hosts named (enforced inside the guest); never with --internet
   let allow = null;
@@ -457,7 +457,7 @@ async function cmdCreate(ctx, parsed) {
   const wanted = flags.internet === true ? "internet" : allow ? "allowlist" : "deny_all";
   const modes = Array.isArray(sealed.network_modes) ? sealed.network_modes : [];
   // never falls back to a more open mode
-  if (!modes.includes(wanted)) throw new Refusal("network_mode_not_offered", `The catalog does not offer network mode ${wanted} for sealed sandboxes (offered: ${modes.join(", ") || "none listed"}). Nothing was created.`);
+  if (!modes.includes(wanted)) throw new Refusal("network_mode_not_offered", `The catalog does not offer network mode ${wanted} for confidential sandboxes (offered: ${modes.join(", ") || "none listed"}). Nothing was created.`);
 
   if (!resume) {
     if (remaining !== null && spend > remaining) throw new Refusal("max_spend_above_remaining", `--max-spend ${usd(spend)} is above what the key has left (${usd(remaining)})`);
@@ -613,11 +613,11 @@ async function cmdExecWait(ctx, { id, flags }) {
   }
 }
 
-/** A sealed room's files API reaches /work only (Cathedral answers 422 otherwise). */
+/** A confidential sandbox's files API reaches /work only (Cathedral answers 422 otherwise). */
 function workPath(path) {
   const parts = path.split("/");
   if (!path.startsWith("/work/") || path.length > 2048 || path.includes("\u0000") || parts.some((x) => x === ".." || x === ".")) {
-    throw new Refusal("path_outside_work", "Sealed sandboxes move files under /work only. Use a path like /work/notes.txt");
+    throw new Refusal("path_outside_work", "Confidential sandboxes move files under /work only. Use a path like /work/notes.txt");
   }
   return path;
 }

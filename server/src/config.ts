@@ -64,7 +64,7 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   FOUR04_MODEL_URL: {},
   FOUR04_MODEL_KEY: {},
   TAOSTATS_API_KEY: {},
-  // Cathedral sealed sandboxes (server/src/cathedral.ts). Only the key: BitBull holds it and makes
+  // Cathedral confidential sandboxes (server/src/cathedral.ts). Only the key: BitBull holds it and makes
   // every call. The URL (where the key is sent), the spend limit per sandbox and the uncapped-key
   // switch stay .env-only, so nothing the agent's shell can write changes them.
   CATHEDRAL_API_KEY: {},

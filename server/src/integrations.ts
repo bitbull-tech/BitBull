@@ -55,7 +55,7 @@ export function integrations(): IntegrationDef[] {
     {
       id: "cathedral",
       name: "Cathedral sandboxes",
-      blurb: "Run and check code, repos and files you don't trust or were given, in a sealed sandbox (AMD SEV-SNP) away from your keys, workspace and network, with receipts. You approve every sandbox.",
+      blurb: "Run and check code, repos and files you don't trust or were given, in a confidential sandbox (AMD SEV-SNP) away from your keys, workspace and network, with receipts. You approve every sandbox.",
       docs: "https://cathedral.computer",
       env: [
         { key: "CATHEDRAL_API_KEY", label: "API key (cat_sk_…)", secret: true, value: ca.apiKey },
@@ -65,7 +65,7 @@ export function integrations(): IntegrationDef[] {
       configured: !!ca.apiKey,
       notes:
         `Spend limit per sandbox: $${effectiveCathedralCap(ca.maxSpendUsd).toFixed(2)} (CATHEDRAL_MAX_SPEND_USD, .env only). ` +
-        "Off until you tick it in a project's settings. The agent never holds the key: BitBull makes every call, asks you before each sandbox (size, rate, lifetime, spend cap, internet), sends only files the agent names from the project's workspace and logs each one. Commands and files pass Cathedral's API on the way to the sandbox, so this is isolation, not confidentiality: never send secrets.",
+        "Off until you tick it in a project's settings. The agent never holds the key: BitBull makes every call, asks you before each sandbox (size, rate, lifetime, spend cap, internet), sends only files the agent names from the project's workspace and logs each one. Confidential means the code runs in memory encrypted by AMD SEV-SNP, with a receipt from the chip; commands and files still pass Cathedral's API in plaintext on the way in, so never send secrets.",
     },
     {
       id: "atlas",
@@ -239,12 +239,12 @@ async function probeCathedralRaw(): Promise<CathedralProbe> {
     if (!cat.ok) return out(false, `Cathedral said ${cat.status} reading the catalog`);
     const body = (await cat.json().catch(() => ({}))) as { sealed?: { available?: boolean; reason?: string; sizes?: Array<{ template?: string; name?: string; hourly_rate_usd?: unknown }> } };
     const sealed = body.sealed;
-    if (!sealed) return out(false, "Cathedral's catalog has no sealed offer");
+    if (!sealed) return out(false, "Cathedral's catalog has no confidential sandbox offer");
     if (!sealed.available) {
       const reason = String(sealed.reason ?? "unavailable");
       // Cathedral's own sold-out set (SOLD_OUT_ERRORS in its broker): a full,
       // throttled, down or unreachable pool reads as sold out, never unavailable.
-      return out(false, CATHEDRAL_SOLD_OUT.has(reason) ? "Sealed sandboxes are sold out right now" : `Sealed sandboxes are unavailable: ${reason}`);
+      return out(false, CATHEDRAL_SOLD_OUT.has(reason) ? "Confidential sandboxes are sold out right now" : `Confidential sandboxes are unavailable: ${reason}`);
     }
     const sizes = (sealed.sizes ?? []).map((s) => `${s.template ?? s.name} $${Number(s.hourly_rate_usd)}/h`).join(", ");
     const account = capped

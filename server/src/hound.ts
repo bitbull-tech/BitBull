@@ -31,7 +31,7 @@ export interface HoundOptions {
    * that has just read the code under review, and an approval is given under the owner's account.
    */
   prApprove: boolean;
-  /** reviewers may run the target in a sealed Cathedral room, network closed (cleanMachine.ts) */
+  /** reviewers may run the target in a confidential Cathedral sandbox, network closed (cleanMachine.ts) */
   sandbox: boolean;
   /** that room's size */
   sandboxSize: string;
@@ -280,7 +280,7 @@ export function prBody(input: { target: string; models: string[]; verdict?: Verd
       "",
       ...input.cleanMachine,
       "",
-      "<sub>The clean-machine certificate shows these commands ran in a fresh sealed room at this commit with these results; it does not show that the code is safe. The full certificate and the evidence bundle for the offline verifier are saved with the verdict in BitBull.</sub>",
+      "<sub>The clean-machine certificate shows these commands ran in a fresh confidential sandbox at this commit with these results; it does not show that the code is safe. The full certificate and the evidence bundle for the offline verifier are saved with the verdict in BitBull.</sub>",
     );
   }
   lines.push("", `<sub>Posted from BitBull · cost $${input.spentUsd.toFixed(2)}</sub>`);

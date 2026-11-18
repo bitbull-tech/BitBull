@@ -89,15 +89,15 @@ export function CathedralPrompt({ onOpenSession }: { onOpenSession?: (id: string
       .finally(() => setBusy(null))
   }
   return (
-    <div className="net-prompts" role="region" aria-label="Sealed sandbox requests">
+    <div className="net-prompts" role="region" aria-label="Confidential sandbox requests">
       {pending.map((r) => {
         const purpose = PURPOSE[r.purpose]
         return (
-          <div key={r.id} className="net-prompt" role="alertdialog" aria-label={`Approve a sealed sandbox for ${r.projectName}?`}>
+          <div key={r.id} className="net-prompt" role="alertdialog" aria-label={`Approve a confidential sandbox for ${r.projectName}?`}>
             <div className="net-head">
               <IconLock size={15} />
               <span>
-                <b>Approve a sealed sandbox?</b>
+                <b>Approve a confidential sandbox?</b>
               </span>
             </div>
             <p className="net-reason">“{r.reason}”</p>

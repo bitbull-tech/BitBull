@@ -183,7 +183,7 @@ const PHASE_LINE: Record<Swarm['phase'], string> = {
 
 const short = (h?: string | null, n = 12) => (h ? h.replace(/^sha256:/, '').slice(0, n) : '')
 
-/** The sealed sandbox and the clean-machine certificate, when the run used them. */
+/** The confidential sandbox and the clean-machine certificate, when the run used them. */
 function RoomsPanel({ s }: { s: Swarm & SwarmRooms }) {
   const c = s.certificate
   const sandboxAsked = (s.options as { sandbox?: boolean } | undefined)?.sandbox
@@ -193,7 +193,7 @@ function RoomsPanel({ s }: { s: Swarm & SwarmRooms }) {
     <div className="theatre-checks small">
       {sandboxAsked && (
         <p>
-          <b>Sealed sandbox: </b>
+          <b>Confidential sandbox: </b>
           {s.sandbox?.sandboxId && !s.sandboxError ? (
             <span>
               reviewers could run the code in room <span className="mono">{s.sandbox.sandboxId}</span>, network closed
@@ -259,7 +259,7 @@ function RoomsPanel({ s }: { s: Swarm & SwarmRooms }) {
                 ) : (
                   'The certificate could not be saved.'
                 )}{' '}
-                It shows these commands ran in a fresh sealed room at this commit with these results; not that the code is safe.
+                It shows these commands ran in a fresh confidential sandbox at this commit with these results; not that the code is safe.
               </span>
             </>
           )}

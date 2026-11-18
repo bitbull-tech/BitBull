@@ -182,7 +182,7 @@ const account = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const catalogReady = {
-  sealed: { available: true, sizes: [{ template: "sealed-1x2", hourly_rate_usd: "0.0175" }, { template: "sealed-2x4", hourly_rate_usd: "0.035" }] },
+  sealed: { available: true, sizes: [{ template: "sealed-1x2", hourly_rate_usd: "0.005" }, { template: "sealed-2x4", hourly_rate_usd: "0.01" }] },
 };
 function serve(acct: () => Response, cat: () => Response) {
   stub = async (url) => (url.endsWith("/v1/account") ? acct() : cat());
@@ -220,8 +220,8 @@ test("probe: ready shows cap, committed, remaining, expiry, sizes and rates; sen
   assert.match(r.detail, /committed \$1/i);
   assert.match(r.detail, /remaining \$4/i);
   assert.match(r.detail, /2026-12-01/);
-  assert.match(r.detail, /sealed-1x2 \$0\.0175\/h/);
-  assert.match(r.detail, /sealed-2x4 \$0\.035\/h/);
+  assert.match(r.detail, /sealed-1x2 \$0\.005\/h/);
+  assert.match(r.detail, /sealed-2x4 \$0\.01\/h/);
   assert.deepEqual(calls.map((c) => c.url), ["https://cathedral.computer/v1/account", "https://cathedral.computer/v1/sandboxes/catalog"]);
   for (const c of calls) {
     assert.equal((c.init?.headers as Record<string, string>).Authorization, `Bearer ${KEY}`);

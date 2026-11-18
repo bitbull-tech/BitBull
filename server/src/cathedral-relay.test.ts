@@ -57,7 +57,7 @@ const fake: typeof fetch = async (url: any, init?: RequestInit) => {
   const p = u.pathname;
   if (p === "/v1/account") return j(200, { scopes: ["sandboxes:control"], api_key: { budget_usd: "5", committed_usd: "0", remaining_usd: "5" } });
   if (p === "/v1/sandboxes/catalog")
-    return j(200, { sealed: { available: true, network_modes: catalogModes, sizes: [{ template: "sealed-1x2", resources: { cpu: 1, memory_gib: 2 }, hourly_rate_usd: "0.0175" }] } });
+    return j(200, { sealed: { available: true, network_modes: catalogModes, sizes: [{ template: "sealed-1x2", resources: { cpu: 1, memory_gib: 2 }, hourly_rate_usd: "0.005" }] } });
   if (p === "/v1/sandboxes" && method === "POST") return j(201, { id: ID, state: "running", image: "python@sha256:abc", image_digest: "sha256:abc", receipt_id: "r1", receipt_url: "/v1/receipts/r1" });
   if (p === `/v1/sandboxes/${ID}/exec`) return j(200, { exit_code: 0, stdout: "ok\n", stderr: "" });
   if (p === `/v1/sandboxes/${ID}/files` && method === "PUT") return new Response(null, { status: 204 });
@@ -128,7 +128,7 @@ test("1. the agent's tools reach Cathedral through BitBull: the key goes only in
   }
   assert.ok(!JSON.stringify(out).includes(KEY));
   // the spend held is the quote, within the .env limit
-  assert.equal(posts()[0].json.max_spend_usd, "0.001459");
+  assert.equal(posts()[0].json.max_spend_usd, "0.000417");
 });
 
 // ---- 3. per project ----
@@ -178,9 +178,9 @@ test("4. create raises a card with size, rate, lifetime, spend cap and internet,
   assert.equal(out.ok, true);
   assert.equal(seen.size, "sealed-1x2");
   assert.deepEqual(seen.resources, { cpu: 1, memory_gib: 2 });
-  assert.equal(seen.hourlyRateUsd, "0.017500");
+  assert.equal(seen.hourlyRateUsd, "0.005000");
   assert.equal(seen.lifetimeSeconds, 600);
-  assert.equal(seen.spendCapUsd, "0.002917");
+  assert.equal(seen.spendCapUsd, "0.000834");
   assert.equal(seen.limitUsd, "0.50");
   assert.equal(seen.internet, false);
   assert.equal(seen.projectId, on.id);

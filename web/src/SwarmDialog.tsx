@@ -27,7 +27,7 @@ function savedOptions(): HoundOptions {
 const lines = (t: string) => t.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
 const ROOMS_KEY = 'bitbull-hound-rooms'
 const ROOM_DEFAULTS: HoundRoomOptions = { sandbox: false, cleanMachine: { enabled: false, install: '', build: '', test: '', allowHosts: [] } }
-/** The sealed-room settings last used, per browser (the commands are the project's, so worth keeping). */
+/** The sandbox settings last used, per browser (the commands are the project's, so worth keeping). */
 function savedRooms(): HoundRoomOptions {
   try {
     const r = JSON.parse(localStorage.getItem(ROOMS_KEY) ?? '{}') as Partial<HoundRoomOptions>
@@ -384,13 +384,13 @@ export function SwarmDialog({
             )}
           </div>
           <div className="hound-opts">
-            <div className="hound-opts-title">Sealed room (Cathedral)</div>
+            <div className="hound-opts-title">Confidential sandbox (Cathedral)</div>
             {roomsWhyNot && <p className="muted small">{roomsWhyNot}</p>}
             <label className="check">
               <input type="checkbox" disabled={!!roomsWhyNot} checked={!roomsWhyNot && rooms.sandbox} onChange={(e) => setRooms((r) => ({ ...r, sandbox: e.target.checked }))} />
               <span>
-                Run it in a sealed sandbox{' '}
-                <span className="muted small">Reviewers may run the code in a sealed Cathedral room, network closed. You approve the room first.</span>
+                Run it in a confidential sandbox{' '}
+                <span className="muted small">Reviewers may run the code in a confidential Cathedral sandbox, network closed. You approve the room first.</span>
               </span>
             </label>
             <label className="check">
@@ -398,7 +398,7 @@ export function SwarmDialog({
               <span>
                 Clean-machine test{' '}
                 <span className="muted small">
-                  BitBull runs your install, build and test commands on the repo's exact commit in a fresh sealed room and saves a certificate with
+                  BitBull runs your install, build and test commands on the repo's exact commit in a fresh confidential sandbox and saves a certificate with
                   the verdict. Needs a git repo and Cathedral on for this project; you approve the room first.
                 </span>
               </span>

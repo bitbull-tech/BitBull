@@ -592,7 +592,7 @@ const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
   { id: 'telegram', name: 'Telegram', blurb: 'Message BitBull from your phone through your own private bot, and get scheduled results there. One account only: yours.', docs: 'https://core.telegram.org/bots/features#botfather' },
   { id: 'leadpoet', name: 'Leadpoet', blurb: 'Subnet 71: find B2B leads that fit your ideal customer, then plan and run email and LinkedIn campaigns.', docs: 'https://leadpoet.com/ai-assistants' },
   { id: 'taostats', name: 'Taostats', blurb: 'Bittensor network data (subnets, validators, prices) for the taostats-api skill.', docs: 'https://docs.taostats.io' },
-  { id: 'cathedral', name: 'Cathedral sandboxes', blurb: 'Run and check code you don’t trust in a sealed sandbox away from your computer, with receipts. You approve every sandbox.', docs: 'https://cathedral.computer' },
+  { id: 'cathedral', name: 'Cathedral sandboxes', blurb: 'Run and check code you don’t trust in a confidential sandbox away from your computer, with receipts. You approve every sandbox.', docs: 'https://cathedral.computer' },
   { id: 'atlas', name: 'Atlas AI Studio', blurb: 'Images, video, 3D and animation workflows.', docs: 'https://docs.atlas.design' },
   { id: 'four04', name: '404 (3D as code)', blurb: 'Subnet 17: 3D objects as Three.js code with the public 404 game recipe. No key needed.', docs: 'https://github.com/404-Repo/404-game-recipe' },
   { id: 'hippius', name: 'Hippius storage', blurb: 'Encrypted copies of your uploads on decentralised S3 storage.', docs: 'https://hippius.com' },

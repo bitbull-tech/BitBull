@@ -1,13 +1,13 @@
 ---
 name: cathedral-sandbox
-description: Use when the user asks to run or check code, a repo, files or a folder they don't trust or were given, in a Cathedral sealed sandbox away from their keys, workspace and network. Only in projects where the owner switched Cathedral on. Uses BitBull's cathedral_* tools; BitBull holds the key and asks the owner before every sandbox.
+description: Use when the user asks to run or check code, a repo, files or a folder they don't trust or were given, in a Cathedral confidential sandbox away from their keys, workspace and network. Only in projects where the owner switched Cathedral on. Uses BitBull's cathedral_* tools; BitBull holds the key and asks the owner before every sandbox.
 ---
 
-# Cathedral sealed sandboxes
+# Cathedral confidential sandboxes
 
-A Cathedral sandbox is a sealed room on an AMD SEV-SNP machine, away from the owner's computer. Its job here is one thing: running and checking code, repos, files and folders the owner doesn't trust or was given. It costs money by the second until deleted.
+A Cathedral confidential sandbox is a small room on an AMD SEV-SNP machine, away from the owner's computer. Its job here is one thing: running and checking code, repos, files and folders the owner doesn't trust or was given. It costs money by the second until deleted.
 
-It is isolation, not confidentiality: commands and files pass Cathedral's API on their way to the room. Never send secrets, keys, tokens or private files.
+Confidential means the code runs in memory encrypted by AMD SEV-SNP, and each receipt proves it from the chip. Protection is what AMD SEV-SNP provides at the firmware version named in the receipt. It does not cover the way in: commands and files pass Cathedral's API in plaintext on their way to the room. Never send secrets, keys, tokens or private files.
 
 ## The tools
 
@@ -39,5 +39,5 @@ BitBull holds the Cathedral key and makes every call. You have tools, not a key:
 
 Say what they prove and what they do not, as `cathedral_verify` reports it.
 
-- Room receipts are signed by a key held by the sealed host's guest, which that host's AMD SEV-SNP attestation report commits to.
+- Room receipts are signed by a key held by the host's guest, which that host's AMD SEV-SNP attestation report commits to.
 - `cathedral_verify` does not check the AMD report and AMD's certificate chain, the approved build, or receipts cut from the end of the chain. For that, the owner runs Cathedral's offline verifier (`ctcli receipt verify`) on the sandbox's evidence bundle.

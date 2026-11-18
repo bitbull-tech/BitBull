@@ -154,7 +154,7 @@ test("happy path: a certificate with the commit, commands, hashes, room, receipt
   assert.deepEqual(f.deletes, [SID]);
   assert.ok(f.logs.some((l) => /certificate .*PASS/.test(l)));
   // request 5: the upload itself is logged with what, where, size and hash
-  assert.ok(f.logs.some((l) => /sent git archive of .* to sealed room .*: \/work\/src\.tar \(\d+ bytes, sha256 [0-9a-f]{64}\)/.test(l)), f.logs.join("\n"));
+  assert.ok(f.logs.some((l) => /sent git archive of .* to confidential sandbox .*: \/work\/src\.tar \(\d+ bytes, sha256 [0-9a-f]{64}\)/.test(l)), f.logs.join("\n"));
   assert.ok(r.certificate!.commands.every((c) => c.state === "not_run" || /^[0-9a-f]{64}$/.test(c.commandSha256 ?? "")));
 });
 

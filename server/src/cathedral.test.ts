@@ -52,10 +52,10 @@ const seq =
 const once = (f: () => Response): Handler => seq(f);
 
 const SIZES = [
-  { template: "sealed-1x2", resources: { cpu: 1, memory_gib: 2, disk_gib: 10 }, hourly_rate_usd: "0.0175" },
-  { template: "sealed-2x4", resources: { cpu: 2, memory_gib: 4, disk_gib: 10 }, hourly_rate_usd: "0.035" },
-  { template: "sealed-4x8", resources: { cpu: 4, memory_gib: 8, disk_gib: 10 }, hourly_rate_usd: "0.07" },
-  { template: "sealed-8x16", resources: { cpu: 8, memory_gib: 16, disk_gib: 10 }, hourly_rate_usd: "0.14" },
+  { template: "sealed-1x2", resources: { cpu: 1, memory_gib: 2, disk_gib: 10 }, hourly_rate_usd: "0.005" },
+  { template: "sealed-2x4", resources: { cpu: 2, memory_gib: 4, disk_gib: 10 }, hourly_rate_usd: "0.01" },
+  { template: "sealed-4x8", resources: { cpu: 4, memory_gib: 8, disk_gib: 10 }, hourly_rate_usd: "0.02" },
+  { template: "sealed-8x16", resources: { cpu: 8, memory_gib: 16, disk_gib: 10 }, hourly_rate_usd: "0.04" },
 ];
 const catalogBody = (over: Record<string, unknown> = {}, sizes = SIZES) => ({ sealed: { available: true, network_modes: ["deny_all", "internet"], sizes, ...over } });
 const acctBody = (over: Record<string, unknown> = {}) => ({
@@ -166,10 +166,10 @@ test("catalog and account print one JSON object and send the bearer key", async 
 
 test("quote: the hold for each size at 60 s, 3600 s and 86400 s, rounded up to the micro-dollar", async () => {
   const want: Record<string, [string, string, string]> = {
-    "sealed-1x2": ["0.000292", "0.017500", "0.420000"],
-    "sealed-2x4": ["0.000584", "0.035000", "0.840000"],
-    "sealed-4x8": ["0.001167", "0.070000", "1.680000"],
-    "sealed-8x16": ["0.002334", "0.140000", "3.360000"],
+    "sealed-1x2": ["0.000084", "0.005000", "0.120000"],
+    "sealed-2x4": ["0.000167", "0.010000", "0.240000"],
+    "sealed-4x8": ["0.000334", "0.020000", "0.480000"],
+    "sealed-8x16": ["0.000667", "0.040000", "0.960000"],
   };
   for (const [size, holds] of Object.entries(want)) {
     for (const [i, life] of [60, 3600, 86400].entries()) {
@@ -483,7 +483,7 @@ test("resume: a budget change between two runs; with --resume the body is identi
 
 test("resume: a catalog rate change between runs leaves the body identical", async () => {
   const rate = (r: string): Route => ["GET", /^\/v1\/sandboxes\/catalog$/, once(() => j(200, catalogBody({}, SIZES.map((s) => (s.template === "sealed-1x2" ? { ...s, hourly_rate_usd: r } : s)))))];
-  const first = await go(CREATE(), [rate("0.0175"), createRoute()]);
+  const first = await go(CREATE(), [rate("0.005"), createRoute()]);
   const resumed = await go(CREATE("sealed-1x2", ["--resume"]), [rate("0.5"), createRoute()]);
   assert.equal(resumed.r.code, 0, resumed.r.stdout);
   assert.equal(posts(first.reqs, /sandboxes$/)[0].raw!.toString(), posts(resumed.reqs, /sandboxes$/)[0].raw!.toString());
