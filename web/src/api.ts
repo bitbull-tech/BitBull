@@ -15,7 +15,7 @@ export interface Session {
   updated_at: number
 }
 
-export type IntegrationId = 'atlas' | 'four04' | 'github' | 'leadpoet'
+export type IntegrationId = 'atlas' | 'four04' | 'github' | 'leadpoet' | 'cathedral'
 
 export interface Project {
   id: string
@@ -55,11 +55,13 @@ export interface IntegrationInfo {
   env: { key: string; label: string; set: boolean; value: string }[]
 }
 export interface IntegrationStatus {
-  id: IntegrationId
+  id: IntegrationId | 'cathedral'
   ok: boolean
   configured: boolean
   detail: string
   tools?: string[]
+  /** Cathedral's probe: red, amber (uncapped key allowed) or green */
+  level?: 'red' | 'amber' | 'green'
 }
 
 /** Your usage of one model here, from stored turns and replies (server/src/advisor.ts). */
@@ -386,6 +388,28 @@ export interface NetworkRequest {
   createdAt: string
   decidedAt?: string
   scope?: 'host' | 'domain'
+}
+/** A confidential sandbox the agent asked for, waiting on the owner (server/src/cathedral.ts) */
+export interface CathedralRequest {
+  id: string
+  purpose: 'chat' | 'qa-hound' | 'clean-machine'
+  sessionId?: string
+  sessionTitle?: string
+  projectId: string
+  projectName: string
+  size: string
+  resources?: { cpu?: number; memory_gib?: number; disk_gib?: number } | null
+  hourlyRateUsd: string
+  lifetimeSeconds: number
+  spendCapUsd: string
+  limitUsd: string
+  internet: boolean
+  /** with internet off: the only hosts the sandbox may reach (package registries, say) */
+  allowHosts: string[]
+  reason: string
+  status: 'pending' | 'approved' | 'denied' | 'expired'
+  createdAt: string
+  decidedAt?: string
 }
 export interface LinkedFolder {
   name: string
@@ -739,6 +763,9 @@ export const api = {
     req<{ stat: string }>(`/api/projects/${projectId}/repos/diff?repo=${encodeURIComponent(repo)}${base ? `&base=${encodeURIComponent(base)}` : ''}`),
   decideNetwork: (id: string, decision: 'host' | 'domain' | 'deny') =>
     req<NetworkState>(`/api/network/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  cathedralRequests: () => req<{ requests: CathedralRequest[] }>('/api/cathedral/requests'),
+  decideCathedral: (id: string, decision: 'approve' | 'deny') =>
+    req<{ request: CathedralRequest; requests: CathedralRequest[] }>(`/api/cathedral/requests/${id}`, { method: 'POST', body: JSON.stringify({ decision }) }),
   allowNetwork: (host: string, scope: 'host' | 'domain') =>
     req<NetworkState>('/api/network/approved', { method: 'POST', body: JSON.stringify({ host, scope }) }),
   revokeNetwork: (host: string, scope: 'host' | 'domain') =>
@@ -915,4 +942,35 @@ async function readEvents(
     }
   }
   return { ended, seq }
+}
+
+/** QA Hound's sandbox options (server/src/hound.ts, cleanMachine.ts), next to HoundOptions */
+export interface HoundRoomOptions {
+  sandbox: boolean
+  sandboxSize?: string
+  cleanMachine: { enabled: boolean; install: string; build: string; test: string; allowHosts: string[]; size?: string }
+}
+/** The clean-machine certificate saved with a QA Hound verdict (server/src/cleanMachine.ts) */
+export interface CleanMachineCertificate {
+  id: string
+  result: 'pass' | 'fail' | 'incomplete'
+  repo: { path: string; remote?: string; commit: string; uncommittedChanges: number }
+  commands: Array<{ step: 'install' | 'build' | 'test'; command: string; state: string; exitCode: number | null; ok: boolean; durationMs?: number | null; note?: string; stdoutSha256?: string; stderrSha256?: string }>
+  room: { sandboxId: string; size: string; image: string | null; imageDigest: string | null; network: 'closed' | 'allowlist'; allowHosts: string[]; createReceiptUrl: string | null; maxSpendUsd: string | null }
+  startedAt: string
+  finishedAt: string
+  receiptHead: { count: number | null; n: number | null; sha256: string | null; from: string }
+  verify: { ok: boolean | null; notChecked: string[]; error?: string }
+  evidence: { path?: string; error?: string }
+  deleted: boolean
+  failure?: string
+  files?: { json: string; md: string }
+}
+/** What a QA Hound run did in Cathedral rooms */
+export interface SwarmRooms {
+  sandbox?: { sandboxId?: string; image?: string; imageDigest?: string; receiptHead?: { n: number | null; sha256: string | null }; deleted?: boolean; error?: string }
+  sandboxError?: string
+  cleanMachine?: 'running' | 'done'
+  certificate?: CleanMachineCertificate
+  cleanMachineError?: string
 }

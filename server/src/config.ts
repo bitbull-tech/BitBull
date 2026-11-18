@@ -64,6 +64,10 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   FOUR04_MODEL_URL: {},
   FOUR04_MODEL_KEY: {},
   TAOSTATS_API_KEY: {},
+  // Cathedral confidential sandboxes (server/src/cathedral.ts). Only the key: BitBull holds it and makes
+  // every call. The URL (where the key is sent), the spend limit per sandbox and the uncapped-key
+  // switch stay .env-only, so nothing the agent's shell can write changes them.
+  CATHEDRAL_API_KEY: {},
   // Telegram bot (docs/TELEGRAM.md). Only the token is a setting: who may talk to the bot is set
   // by pairing, and where the token is sent (TELEGRAM_API_URL) stays .env-only.
   TELEGRAM_BOT_TOKEN: {},
@@ -83,6 +87,13 @@ export const EDITABLE: Record<string, { options?: string[] }> = {
   ENABLE_LSP: { options: ["true", "false"] },
 };
 
+/**
+ * Secrets that live only in the vault (or .env), never in settings.local.json: the agent's shell
+ * can read that file. Cathedral's key would let an agent call the API directly, past the approval
+ * card and the per-project switch, so a locked vault means it can't be saved from the UI.
+ */
+export const VAULT_ONLY = new Set(["CATHEDRAL_API_KEY"]);
+
 export const overridesFile = path.join(DATA_DIR, "settings.local.json");
 configureVault(path.join(DATA_DIR, "vault.json"));
 /** process.env as it came from .env / the container, before any UI overrides */
@@ -99,7 +110,7 @@ export function readFileOverrides(): Record<string, string> {
     const ignored: string[] = [];
     for (const [k, v] of Object.entries(raw)) {
       if (typeof v !== "string") continue;
-      if (k in EDITABLE) out[k] = v;
+      if (k in EDITABLE && !VAULT_ONLY.has(k)) out[k] = v;
       else ignored.push(k);
     }
     if (ignored.length && !warnedIgnored) {
@@ -257,6 +268,16 @@ function buildConfig() {
       /** the sign-in BitBull holds (JSON: tokens, expiry, scopes); set by Connect Leadpoet */
       oauth: env("LEADPOET_OAUTH", ""),
     },
+    cathedral: {
+      /** A Cathedral key (cat_sk_…) with its own spending cap. Held by BitBull; never given to the agent (cathedral.ts). */
+      apiKey: env("CATHEDRAL_API_KEY", ""),
+      /** Env-only: where the key is sent. Must be https. */
+      apiUrl: env("CATHEDRAL_API_URL", "https://cathedral.computer").replace(/\/+$/, ""),
+      /** .env-only. Raw setting; the number actually used is effectiveCathedralCap(maxSpendUsd) */
+      maxSpendUsd: env("CATHEDRAL_MAX_SPEND_USD", ""),
+      /** .env-only. Lets BitBull create with a key that has no cap of its own. Off by default. */
+      allowUncapped: env("CATHEDRAL_ALLOW_UNCAPPED_KEY", "off") === "on",
+    },
     telegram: {
       /** From @BotFather. Never given to the agent: it is the bot, and whoever holds it can read your chat with it. */
       botToken: env("TELEGRAM_BOT_TOKEN", ""),
@@ -398,6 +419,17 @@ for (const k of ["HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME"]) {
       /* not fatal */
     }
   }
+}
+
+/**
+ * The most one Cathedral sandbox may hold, in USD: a positive decimal up to 25.00, else 0.50.
+ * tools/cathedral-cap.mjs holds the same rule for the helper; a test checks they agree.
+ */
+export function effectiveCathedralCap(raw: string | undefined): number {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d+(\.\d+)?$/.test(s)) return 0.5;
+  const n = Number(s);
+  return n > 0 && n <= 25 ? n : 0.5;
 }
 
 /** What kind of GitHub token is configured (shown in Settings; never the token itself). */

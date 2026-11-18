@@ -102,7 +102,7 @@ export async function* runTurn(
   prompt: string,
   model: string,
   attachments: string[] = [],
-  opts: { plan?: boolean; unattended?: boolean } = {},
+  opts: { plan?: boolean; unattended?: boolean; reviewSandbox?: boolean } = {},
 ): AsyncGenerator<AgentEvent & { messageId?: string }> {
   if (running.has(session.id)) {
     yield { type: "error", message: "This session is already running a turn." };
@@ -113,6 +113,8 @@ export async function* runTurn(
   const project = projects.get(session.project_id);
   const cwd = workspaceFor(project);
   const mcp = mcpServersFor(projects.integrations(project) as IntegrationId[]);
+  // Cathedral's tools need to know which chat asks (per-project rules, approvals); the Claude engine passes this header
+  if (mcp.cathedral) mcp.cathedral = { ...mcp.cathedral, headers: { ...mcp.cathedral.headers, "x-bitbull-session": session.id } };
   // No engine session to resume but history exists → give the model the transcript
   const restore = !session.engine_session_id ? recap(session.id) : "";
   const isFirst = messages.list(session.id).length === 0;
@@ -176,6 +178,7 @@ export async function* runTurn(
       mcp,
       bitbullSessionId: session.id,
       plan: opts.plan,
+      reviewSandbox: opts.reviewSandbox,
     })) {
       // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
       if (ev.type === "text" || ev.type === "thinking") ev.delta = redact(ev.delta);

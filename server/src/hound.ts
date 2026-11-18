@@ -3,6 +3,7 @@
  * (budget, time, thresholds, scope, PR verdict), the findings the verdict ends with, which of them
  * are shown and why the rest are held back, and the review that goes on a pull request.
  */
+import { DEFAULT_CLEAN_SIZE, DEFAULT_SANDBOX_SIZE, type CleanMachineOptions } from "./cleanMachine.js";
 
 export const SEVERITIES = ["low", "medium", "high", "critical"] as const;
 export type Severity = (typeof SEVERITIES)[number];
@@ -30,6 +31,12 @@ export interface HoundOptions {
    * that has just read the code under review, and an approval is given under the owner's account.
    */
   prApprove: boolean;
+  /** reviewers may run the target in a confidential Cathedral sandbox, network closed (cleanMachine.ts) */
+  sandbox: boolean;
+  /** that room's size */
+  sandboxSize: string;
+  /** the clean-machine test and its certificate (cleanMachine.ts) */
+  cleanMachine: CleanMachineOptions;
 }
 
 export const DEFAULT_OPTIONS: HoundOptions = {
@@ -42,7 +49,53 @@ export const DEFAULT_OPTIONS: HoundOptions = {
   pr: false,
   prBlocking: "high",
   prApprove: false,
+  sandbox: false,
+  sandboxSize: DEFAULT_SANDBOX_SIZE,
+  cleanMachine: { enabled: false, install: "", build: "", test: "", allowHosts: [], size: DEFAULT_CLEAN_SIZE },
 };
+
+const SIZE_RE = /^sealed-[0-9]{1,2}x[0-9]{1,3}$/;
+const HOST_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+const size = (v: unknown, d: string) => (typeof v === "string" && SIZE_RE.test(v.trim()) ? v.trim() : d);
+
+/**
+ * A clean-machine command: one line, at most 2000 characters, no control characters. Throws with
+ * the reason rather than dropping it: a test that silently skipped the build would pass for nothing.
+ */
+function command(v: unknown, name: string): string {
+  if (v === undefined || v === null) return "";
+  if (typeof v !== "string") throw new Error(`The ${name} command must be text.`);
+  const s = v.trim();
+  if (s.length > 2000) throw new Error(`The ${name} command is over 2000 characters.`);
+  if (/[\u0000-\u001f\u007f]/.test(s)) throw new Error(`The ${name} command must be one line, without control characters (join steps with &&).`);
+  return s;
+}
+
+/** Hosts install may reach: plain host names (no scheme, port, path or wildcard), at most 32. */
+export function allowHosts(v: unknown): string[] {
+  const list = (Array.isArray(v) ? v.map(String) : typeof v === "string" ? v.split(/[\s,]+/) : []).map((h) => h.trim().toLowerCase().replace(/\.$/, "")).filter(Boolean);
+  const bad = list.filter((h) => !HOST_RE.test(h));
+  if (bad.length) throw new Error(`Not a host name: ${bad.slice(0, 3).join(", ").slice(0, 200)}. Give plain names such as pypi.org.`);
+  const out = [...new Set(list)];
+  if (out.length > 32) throw new Error("At most 32 hosts.");
+  return out;
+}
+
+function cleanMachineOptions(v: unknown): CleanMachineOptions {
+  const d = DEFAULT_OPTIONS.cleanMachine;
+  if (!v || typeof v !== "object" || (v as { enabled?: unknown }).enabled !== true) return { ...d, allowHosts: [] };
+  const r = v as Record<string, unknown>;
+  const o: CleanMachineOptions = {
+    enabled: true,
+    install: command(r.install, "install"),
+    build: command(r.build, "build"),
+    test: command(r.test, "test"),
+    allowHosts: allowHosts(r.allowHosts),
+    size: size(r.size, d.size),
+  };
+  if (!o.install && !o.build && !o.test) throw new Error("The clean-machine test needs at least one command: install, build or test.");
+  return o;
+}
 
 const sev = (v: unknown, d: Severity): Severity => (typeof v === "string" && (SEVERITIES as readonly string[]).includes(v.toLowerCase()) ? (v.toLowerCase() as Severity) : d);
 const clamp = (v: unknown, lo: number, hi: number, d: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -63,6 +116,9 @@ export function houndOptions(raw: Partial<Record<keyof HoundOptions, unknown>> =
     pr: raw.pr === true,
     prBlocking: sev(raw.prBlocking, DEFAULT_OPTIONS.prBlocking),
     prApprove: raw.prApprove === true,
+    sandbox: raw.sandbox === true,
+    sandboxSize: size(raw.sandboxSize, DEFAULT_OPTIONS.sandboxSize),
+    cleanMachine: cleanMachineOptions(raw.cleanMachine),
   };
 }
 
@@ -191,7 +247,7 @@ export function prEvent(findings: Finding[], o: HoundOptions, complete: boolean,
 const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 /** The review body for GitHub: the verdict, the shown findings, how many were held back. */
-export function prBody(input: { target: string; models: string[]; verdict?: Verdict; findings: Finding[]; spentUsd: number; partial?: string; unread?: boolean; checks?: Array<{ ok: boolean; text: string }>; approving?: boolean }): string {
+export function prBody(input: { target: string; models: string[]; verdict?: Verdict; findings: Finding[]; spentUsd: number; partial?: string; unread?: boolean; checks?: Array<{ ok: boolean; text: string }>; approving?: boolean; cleanMachine?: string[] }): string {
   const shown = input.findings.filter((f) => f.shown);
   const held = input.findings.length - shown.length;
   const verdict = input.verdict
@@ -217,6 +273,14 @@ export function prBody(input: { target: string; models: string[]; verdict?: Verd
       ...input.checks.map((c) => `- ${c.ok ? "✅" : "❌"} ${cell(c.text)}`),
       "",
       "<sub>These checks lower the chance of a missed problem; they don't remove it. A review by models is not a review by a person.</sub>",
+    );
+  }
+  if (input.cleanMachine?.length) {
+    lines.push(
+      "",
+      ...input.cleanMachine,
+      "",
+      "<sub>The clean-machine certificate shows these commands ran in a fresh confidential sandbox at this commit with these results; it does not show that the code is safe. The full certificate and the evidence bundle for the offline verifier are saved with the verdict in BitBull.</sub>",
     );
   }
   lines.push("", `<sub>Posted from BitBull · cost $${input.spentUsd.toFixed(2)}</sub>`);

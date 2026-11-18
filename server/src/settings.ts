@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { config, githubTokenKind, paths, readFileOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
+import { VAULT_ONLY } from "./config.js";
+import { config, effectiveCathedralCap, githubTokenKind, paths, readFileOverrides, reloadConfig, settingSource, shellAllowed, writeOverrides, EDITABLE } from "./config.js";
 import { record } from "./activity.js";
 import { resetDitto } from "./ditto.js";
 import { probeDitto } from "./ditto.js";
@@ -47,6 +48,8 @@ export async function updateSettings(values: Record<string, string | null>, opts
     const opts = EDITABLE[k].options;
     if (v && opts && !opts.includes(v)) throw new Error(`${k} must be one of: ${opts.join(", ")}`);
     if (v && /[\r\n]/.test(v)) throw new Error(`${k} can't contain line breaks`);
+    if (VAULT_ONLY.has(k) && v && !vaultUnlocked())
+      throw new Error(`${k} is kept only in the vault, and the vault is locked. Unlock it first (Settings, top), or put the key in .env.`);
     if (k === "UPLOAD_MAX_MB" && v && !(Number(v) > 0)) throw new Error("UPLOAD_MAX_MB must be a positive number");
     if (k === "TELEGRAM_BOT_TOKEN" && v && !/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(v.trim())) throw new Error("That doesn't look like a Telegram bot token (it should look like 123456789:AA…). Copy it again from @BotFather.");
     // Reject a bad encryption key here rather than at the first upload, when it is too late
@@ -185,6 +188,22 @@ export function describeSettings() {
         row("TAOSTATS_API_KEY", "API key", config.integrations.taostats.apiKey, {
           secret: true,
           hint: "Bittensor data via https://api.taostats.io/v1 (old /api/ routes stop on 9 Nov 2026). The agent reads it from its environment; see the taostats-api skill.",
+        }),
+      ],
+    },
+    {
+      id: "cathedral",
+      title: "Cathedral",
+      rows: [
+        row("CATHEDRAL_API_KEY", "API key", config.integrations.cathedral.apiKey, {
+          secret: true,
+          hint: "Use a Cathedral key with its own spending cap. BitBull holds it and makes every call; the agent never gets it. Turn Cathedral on per project in the project's settings.",
+        }),
+        row("CATHEDRAL_MAX_SPEND_USD", "Spend limit per sandbox (USD)", effectiveCathedralCap(config.integrations.cathedral.maxSpendUsd).toFixed(2), {
+          hint: "Set in .env only (the agent's shell can write the data folder, so this can't live there). A positive amount up to 25.00; anything else means 0.50. BitBull refuses a sandbox that could hold more, or more than the key has left.",
+        }),
+        row("CATHEDRAL_ALLOW_UNCAPPED_KEY", "Allow a key with no spending cap", config.integrations.cathedral.allowUncapped ? "on" : "off", {
+          hint: "Set in .env only. off: BitBull refuses to create sandboxes with a key that has no cap of its own. A key's own cap is the real backstop, so leave this off.",
         }),
       ],
     },

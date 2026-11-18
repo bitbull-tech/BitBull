@@ -186,6 +186,45 @@ refuses protected paths, links out of the folder and unpermitted deletes on its 
 program on the PC can call the helper as the page does; it could already write to those folders
 as the owner. Unattended runs can neither propose nor apply.
 
+### R13: Cathedral confidential sandboxes (only while a key is set, only in projects that tick it)
+`server/src/cathedral.ts`, `tools/cathedral.mjs`, `skills/cathedral-sandbox`. For running and checking
+code the owner doesn't trust or was given, away from the owner's keys, workspace and network. It adds
+a key that can spend money and a destination files and commands can be sent to.
+- **The key stays on the server.** It is vault-only (refused while the vault is locked, never read
+  from `settings.local.json`; on machines where the vault cannot unlock, it goes in .env), blanked in the agent's shells and kept out of both
+  engines' environment. Within R1's limit: the agent shares the server's uid, so server memory is
+  reachable through /proc by a determined agent. The agent has tools on BitBull's local MCP route `/mcp/cathedral`
+  (behind the startup token); BitBull makes every call. The spend limit per sandbox
+  (`CATHEDRAL_MAX_SPEND_USD`, up to 25.00, default 0.50) and `CATHEDRAL_ALLOW_UNCAPPED_KEY` are
+  .env-only, so nothing the agent can write in the data folder changes them.
+- **Closed until set.** `cathedral.computer` is not on `egress/allowlist.txt`; it is open in the proxy
+  only while a key is set (`addBuiltIn`, like Telegram and Leadpoet). As with those, while it is
+  open the proxy can't tell BitBull's calls from the agent's shell: an injected agent that already
+  holds someone else's Cathedral key could reach the API with it. It can't use the owner's key, which
+  it never sees.
+- **Per project.** The tools answer only in chats of a project with Cathedral ticked; a call that
+  can't be tied to one chat (several running at once, no session header) is refused.
+  The session header is the chat's word, not proof: within R1, an agent that reads the startup
+  token from its engine's config could claim another chat, as with the Leadpoet relay.
+- **Approval.** Every create raises a card (size, rate, lifetime, spend cap, internet on, off or a
+  host list) and waits; scheduled runs and Telegram messages are refused. The network is closed
+  unless the owner approves internet, or a named list of hosts (clean-machine installs).
+- **Uploads.** Only a file the call names, resolved inside the project's workspace (no `..`, no links
+  out, no folders, never `.env` or `.git/`), each logged to Activity with path, size and SHA-256.
+  exec, upload, download and delete only reach rooms this project created in this run of BitBull.
+- **Confidential in the room, plaintext on the way in.** Confidential means the code runs in memory
+  encrypted by AMD SEV-SNP, and each receipt proves it from the chip; protection is what AMD SEV-SNP
+  provides at the firmware version named in the receipt. Commands and files still pass Cathedral's
+  API in plaintext on the way to the room. Cathedral's code has a sealed path (secrets and commands encrypted to a key held inside
+  the guest, named in its attestation). It is live on cathedral.computer but not used by this
+  integration yet; files have no such path. The agent is told
+  never to send secrets.
+- **QA Hound.** With "Run it in a confidential sandbox", reviewers (plan mode, otherwise no MCP tools) get
+  one tool, `cathedral_review_exec`, for the one room their run created, holding only a copy of the
+  target, network closed; BitBull checks the caller is one of that run's reviewers.
+- **Receipts.** `verify` reports Cathedral's own checks. The AMD SEV-SNP report, AMD's certificate
+  chain and the approved build are checked only by the offline verifier (`ctcli receipt verify`).
+
 ## If you fork or change `.env` / `allowlist.txt`
 
 - `ALLOW_NO_AUTH=true` removes **all** authentication — combine it with a tunnel or a

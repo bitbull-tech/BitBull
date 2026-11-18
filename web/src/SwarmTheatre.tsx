@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Swarm } from './api'
+import { api, type Swarm, type SwarmRooms } from './api'
 import { IconX } from './icons'
 import { dogFor } from './dogs'
 
@@ -181,6 +181,94 @@ const PHASE_LINE: Record<Swarm['phase'], string> = {
   error: 'The investigation broke down.',
 }
 
+const short = (h?: string | null, n = 12) => (h ? h.replace(/^sha256:/, '').slice(0, n) : '')
+
+/** The confidential sandbox and the clean-machine certificate, when the run used them. */
+function RoomsPanel({ s }: { s: Swarm & SwarmRooms }) {
+  const c = s.certificate
+  const sandboxAsked = (s.options as { sandbox?: boolean } | undefined)?.sandbox
+  const cleanAsked = (s.options as { cleanMachine?: { enabled?: boolean } } | undefined)?.cleanMachine?.enabled
+  if (!sandboxAsked && !cleanAsked) return null
+  return (
+    <div className="theatre-checks small">
+      {sandboxAsked && (
+        <p>
+          <b>Confidential sandbox: </b>
+          {s.sandbox?.sandboxId && !s.sandboxError ? (
+            <span>
+              reviewers could run the code in room <span className="mono">{s.sandbox.sandboxId}</span>, network closed
+              {s.sandbox.imageDigest ? <> · image <span className="mono">{short(s.sandbox.imageDigest)}</span></> : null}
+              {s.sandbox.deleted ? ` · deleted${s.sandbox.receiptHead?.n != null ? `, receipt head n=${s.sandbox.receiptHead.n}` : ''}` : ''}
+            </span>
+          ) : s.sandboxError ? (
+            <span className="error">ran read-only: {s.sandboxError}</span>
+          ) : (
+            <span className="muted">waiting for your approval of the room</span>
+          )}
+        </p>
+      )}
+      {cleanAsked && (
+        <>
+          <b>Clean-machine test{c ? `: ${c.result === 'pass' ? 'passed' : c.result === 'fail' ? 'failed' : 'incomplete'}` : ''}</b>
+          {!c && s.cleanMachine !== 'done' && <span className="muted"> · running (you approve the room first)</span>}
+          {!c && s.cleanMachineError && <span className="error"> · no certificate: {s.cleanMachineError}</span>}
+          {c && (
+            <>
+              <ul>
+                {c.commands.map((x) => (
+                  <li key={x.step} className={x.ok ? 'ok' : x.state === 'not_run' ? '' : 'bad'} title={x.command}>
+                    <span aria-hidden="true">{x.ok ? '✓' : x.state === 'not_run' ? '·' : '✗'}</span> {x.step}{' '}
+                    <span className="mono">{x.command.length > 60 ? `${x.command.slice(0, 60)}…` : x.command}</span>
+                    {x.state === 'not_run' ? ' · not run' : ` · exit ${x.exitCode ?? x.state}`}
+                    {x.durationMs != null ? ` · ${(x.durationMs / 1000).toFixed(1)} s` : ''}
+                  </li>
+                ))}
+              </ul>
+              <span className="muted">
+                {c.repo.path} at <span className="mono">{short(c.repo.commit)}</span>
+                {c.repo.uncommittedChanges ? ` (${c.repo.uncommittedChanges} uncommitted changes not included)` : ''} · image{' '}
+                {c.room.imageDigest ? <span className="mono">{short(c.room.imageDigest)}</span> : 'digest not reported'} · network{' '}
+                {c.room.network === 'closed' ? 'closed' : `only ${c.room.allowHosts.join(', ')}`} · receipt head{' '}
+                {c.receiptHead.n != null ? <span className="mono">n={c.receiptHead.n} {short(c.receiptHead.sha256)}</span> : 'not available'} · verify{' '}
+                {c.verify.ok === true ? 'passed' : c.verify.ok === false ? <span className="error">failed</span> : 'not available'}
+                {c.room.createReceiptUrl && (
+                  <>
+                    {' · '}
+                    <a href={c.room.createReceiptUrl} target="_blank" rel="noreferrer">
+                      public receipt
+                    </a>
+                  </>
+                )}
+                {c.room.maxSpendUsd ? ` · room hold up to $${c.room.maxSpendUsd} (not model spend)` : ''}
+              </span>
+              <br />
+              <span className="muted">
+                {c.files ? (
+                  <>
+                    Saved in the project workspace: <span className="mono">{c.files.md}</span>, <span className="mono">{c.files.json}</span>
+                    {c.evidence.path ? (
+                      <>
+                        {' '}
+                        and the evidence bundle for the offline verifier, <span className="mono">{c.evidence.path}</span>
+                      </>
+                    ) : (
+                      ` (evidence bundle not saved: ${c.evidence.error ?? 'unknown'})`
+                    )}
+                    .
+                  </>
+                ) : (
+                  'The certificate could not be saved.'
+                )}{' '}
+                It shows these commands ran in a fresh confidential sandbox at this commit with these results; not that the code is safe.
+              </span>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export function SwarmTheatre({
   swarm,
   onUpdate,
@@ -310,6 +398,7 @@ export function SwarmTheatre({
             {s.options.pr && s.options.prApprove && s.checks.some((c) => !c.ok) && <span className="muted">Not all passed, so the pull request was not approved.</span>}
           </div>
         )}
+        <RoomsPanel s={s as Swarm & SwarmRooms} />
       </div>
     </div>
   )

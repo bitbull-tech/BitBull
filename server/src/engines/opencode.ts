@@ -244,9 +244,10 @@ function freePort(preferred: number): Promise<number> {
  * config legitimately needs (SayGM for models, Ditto for the MCP) travels in
  * OPENCODE_CONFIG_CONTENT; everything else ambient — APP_TOKEN, Hippius, and any vaulted
  * keys applyOverrides() put into process.env — stays out. GITHUB_TOKEN/TAOSTATS_API_KEY stay
- * by design (the agent gets them on purpose). Brief window: env is restored right after spawn.
+ * by design (the agent gets them on purpose). CATHEDRAL_API_KEY does not: BitBull makes every
+ * Cathedral call itself (cathedral.ts). Brief window: env is restored right after spawn.
  */
-const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|LEADPOET_OAUTH|SAYGM_OAUTH|HIPPIUS_.*)$/;
+const ENGINE_ENV_BLOCKLIST = /^(APP_TOKEN|SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|LEADPOET_OAUTH|SAYGM_OAUTH|CATHEDRAL_.*|HIPPIUS_.*)$/;
 
 async function withScrubbedEnv<T>(fn: () => Promise<T>): Promise<T> {
   const saved: Record<string, string | undefined> = {};
@@ -430,6 +431,39 @@ function channel<T>() {
         wake = null;
       }
     },
+  };
+}
+
+/**
+ * The per-prompt tools map. question needs an interactive answer this UI can't give yet;
+ * integrations are off unless the project enables them.
+ */
+export function promptTools(o: { plan?: boolean; reviewSandbox?: boolean; enabledMcp: string[]; integrationIds: string[]; routerMcp: string[] }): Record<string, boolean> {
+  const enabled = new Set(o.enabledMcp);
+  return {
+    question: false,
+    // Plan mode stays read-only: no subagents (some of them can edit)
+    ...(o.plan ? { task: false } : {}),
+    ...Object.fromEntries(o.integrationIds.filter((id) => !enabled.has(id)).map((id) => [`${id}_*`, false])),
+    // ...and no MCP tools at all. Denying edit and bash fences the filesystem, but MCP
+    // tools reach OUT: ditto_save_memory writes into long-term memory that every later
+    // chat trusts, and bitbull_request_network_access puts a consent card in front of the
+    // owner worded by whatever the agent just read. Plan mode is where agents read hostile
+    // things (swarm reviewers on contributor branches), so it gets none of them.
+    // (2026-11 swarm, confirmed by both reviewers; was residual R-list item since the merge.)
+    ...(o.plan
+      ? {
+          "ditto_*": false,
+          "bitbull_*": false,
+          ...Object.fromEntries([...o.integrationIds, ...o.routerMcp].map((n) => [`${n}_*`, false])),
+        }
+      : {}),
+    // The one exception: a QA Hound reviewer whose run opened a sealed room may run commands
+    // there, and only there (cathedral.ts grants the room to the run's reviewer chats). OpenCode
+    // matches these keys as wildcards and the longer, more specific key wins, so this beats
+    // "cathedral_*": false above. Only when the project has Cathedral switched on.
+    // Everywhere else it is off, including ordinary chats in a Cathedral project.
+    cathedral_review_exec: !!(o.plan && o.reviewSandbox && enabled.has("cathedral")),
   };
 }
 
@@ -637,25 +671,13 @@ export const opencodeEngine: AgentEngine = {
           system: input.systemPrompt,
           ...(input.plan ? { agent: PLAN_AGENT } : {}),
           // question needs an interactive answer this UI can't give yet; integrations off unless the project enables them
-          tools: {
-            question: false,
-            // Plan mode stays read-only: no subagents (some of them can edit)
-            ...(input.plan ? { task: false } : {}),
-            ...Object.fromEntries(integrations().filter((i) => !input.mcp[i.id]).map((i) => [`${i.id}_*`, false])),
-            // ...and no MCP tools at all. Denying edit and bash fences the filesystem, but MCP
-            // tools reach OUT: ditto_save_memory writes into long-term memory that every later
-            // chat trusts, and bitbull_request_network_access puts a consent card in front of the
-            // owner worded by whatever the agent just read. Plan mode is where agents read hostile
-            // things — swarm reviewers on contributor branches — so it gets none of them.
-            // (2026-11 swarm, confirmed by both reviewers; was residual R-list item since the merge.)
-            ...(input.plan
-              ? {
-                  "ditto_*": false,
-                  "bitbull_*": false,
-                  ...Object.fromEntries([...integrations().map((i) => i.id), ...s.mcp.map((m) => m.name)].map((n) => [`${n}_*`, false])),
-                }
-              : {}),
-          },
+          tools: promptTools({
+            plan: input.plan,
+            reviewSandbox: input.reviewSandbox,
+            enabledMcp: Object.keys(input.mcp),
+            integrationIds: integrations().map((i) => i.id),
+            routerMcp: s.mcp.map((m) => m.name),
+          }),
           parts: [{ type: "text", text: input.prompt }],
         },
       });

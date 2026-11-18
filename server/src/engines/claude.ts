@@ -13,13 +13,13 @@ import { reviewModelId, ROUTER_HEADERS, ROUTER_SESSION_HEADER, routerBackground,
  * (or a stray ANTHROPIC_* var) can never be sent to the gateway instead of the
  * gateway's own key.
  */
-function cleanEnv(): Record<string, string> {
+export function cleanEnv(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (v === undefined) continue;
     if (/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$|CLAUDECODE$|CLAUDE_AGENT_)/.test(k)) continue;
     // BitBull's own credentials: the CLI gets MCP auth in its config, not from env, and its shell shouldn't see them
-    if (/^(SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|APP_TOKEN|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|LEADPOET_OAUTH|SAYGM_OAUTH|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
+    if (/^(SAYGM_API_KEY|DITTO_API_KEY|DITTO_ROUTER_KEY|DITTO_ROUTER_REVIEW_KEY|APP_TOKEN|ATLAS_API_KEY|TELEGRAM_BOT_TOKEN|LEADPOET_OAUTH|SAYGM_OAUTH|CATHEDRAL_.*|HIPPIUS_.*|OPENCODE_CONFIG_CONTENT)$/.test(k)) continue;
     out[k] = v;
   }
   return out;

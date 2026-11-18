@@ -121,7 +121,7 @@ export function Settings({
                 {SERVICES.map((svc) => {
                   const st = serviceState(svc.id, status, live, groups, tg, lp)
                   return (
-                    <button key={svc.id} className={`status-card as-link ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`} onClick={() => openIntegration(svc.id)}>
+                    <button key={svc.id} className={`status-card as-link ${statusClass(st)}`} onClick={() => openIntegration(svc.id)}>
                       <div className="status-title">
                         <span className="pulse" />
                         {svc.name}
@@ -166,7 +166,7 @@ export function Settings({
                   return (
                     <section key={svc.id} id={`int-${svc.id}`} className={`int-card ${focus === svc.id ? 'focus' : ''}`}>
                       <div className="int-head">
-                        <div className={`status-card mini ${st.loading ? '' : st.ok ? 'ok' : st.configured ? 'bad' : 'off'}`}>
+                        <div className={`status-card mini ${statusClass(st)}`}>
                           <span className="pulse" />
                         </div>
                         <div className="grow">
@@ -197,7 +197,12 @@ export function Settings({
                         </div>
                       )}
                       {meta?.notes && <p className="muted small">{meta.notes}</p>}
-                      {meta?.hasMcp && (
+                      {svc.id === 'cathedral' && (
+                        <p className="muted small">
+                          Off until you tick Cathedral in a project’s settings; the key stays in BitBull. The spend limit and the uncapped-key switch are set in <code>.env</code> only.
+                        </p>
+                      )}
+                      {meta?.hasMcp && svc.id !== 'cathedral' && (
                         <p className="muted small">Its MCP tools reach a chat only in projects that switch it on (project settings).</p>
                       )}
                       {svc.id === 'saygm' && (
@@ -587,10 +592,18 @@ const SERVICES: { id: string; name: string; blurb: string; docs: string }[] = [
   { id: 'telegram', name: 'Telegram', blurb: 'Message BitBull from your phone through your own private bot, and get scheduled results there. One account only: yours.', docs: 'https://core.telegram.org/bots/features#botfather' },
   { id: 'leadpoet', name: 'Leadpoet', blurb: 'Subnet 71: find B2B leads that fit your ideal customer, then plan and run email and LinkedIn campaigns.', docs: 'https://leadpoet.com/ai-assistants' },
   { id: 'taostats', name: 'Taostats', blurb: 'Bittensor network data (subnets, validators, prices) for the taostats-api skill.', docs: 'https://docs.taostats.io' },
+  { id: 'cathedral', name: 'Cathedral sandboxes', blurb: 'Run and check code you don’t trust in a confidential sandbox away from your computer, with receipts. You approve every sandbox.', docs: 'https://cathedral.computer' },
   { id: 'atlas', name: 'Atlas AI Studio', blurb: 'Images, video, 3D and animation workflows.', docs: 'https://docs.atlas.design' },
   { id: 'four04', name: '404 (3D as code)', blurb: 'Subnet 17: 3D objects as Three.js code with the public 404 game recipe. No key needed.', docs: 'https://github.com/404-Repo/404-game-recipe' },
   { id: 'hippius', name: 'Hippius storage', blurb: 'Encrypted copies of your uploads on decentralised S3 storage.', docs: 'https://hippius.com' },
 ]
+
+/** Card colour class: amber (works, but a spending risk the user chose) gets its own, not green. */
+function statusClass(st: { loading: boolean; ok: boolean; configured: boolean; level?: string }) {
+  if (st.loading) return ''
+  if (st.ok) return st.level === 'amber' ? 'warn' : 'ok'
+  return st.configured ? 'bad' : 'off'
+}
 
 /** One line of state for a service, from whichever check covers it. */
 function serviceState(
@@ -600,7 +613,7 @@ function serviceState(
   groups: SettingGroup[] | null,
   tg: TelegramState | null,
   lp: LeadpoetState | null,
-): { loading: boolean; ok: boolean; configured: boolean; detail: string } {
+): { loading: boolean; ok: boolean; configured: boolean; detail: string; level?: 'red' | 'amber' | 'green' } {
   switch (id) {
     case 'leadpoet':
       if (!lp) return { loading: true, ok: false, configured: false, detail: '' }
@@ -633,6 +646,12 @@ function serviceState(
       if (!row) return { loading: !groups, ok: false, configured: false, detail: '' }
       const set = row.value !== '(not set)'
       return { loading: false, ok: set, configured: set, detail: set ? 'Key set · the agent uses it through the taostats-api skill' : 'Not configured: add an API key below' }
+    }
+    case 'cathedral': {
+      // the live probe reads the key's account and the sealed catalog; no tokens or credits are spent
+      const st = live?.find((l) => l.id === 'cathedral')
+      if (!st) return { loading: !live, ok: false, configured: false, detail: live ? 'Not configured: add an API key below' : '' }
+      return { loading: false, ok: st.ok, configured: st.configured, detail: st.detail, level: st.level }
     }
     default: {
       const st = live?.find((l) => l.id === id)

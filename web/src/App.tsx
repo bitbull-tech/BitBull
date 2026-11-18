@@ -24,6 +24,7 @@ import { ModelsDialog } from './ModelsDialog'
 import { Settings } from './Settings'
 import { useTheme } from './theme'
 import { NetworkPrompt } from './network'
+import { CathedralPrompt } from './cathedral'
 
 const MODEL_KEY = 'bitbull-model'
 const EXPANDED_KEY = 'bitbull-expanded'
@@ -910,6 +911,12 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           }}
         />
         <NetworkPrompt
+          onOpenSession={(id) => {
+            const s = sessions.find((x) => x.id === id)
+            if (s) openSession(s)
+          }}
+        />
+        <CathedralPrompt
           onOpenSession={(id) => {
             const s = sessions.find((x) => x.id === id)
             if (s) openSession(s)
