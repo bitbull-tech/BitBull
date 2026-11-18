@@ -173,6 +173,18 @@ test("CI: some checks, all finished, all passed", () => {
   assert.equal(ciCheck(undefined, "abc1234def", "GitHub 403").ok, false);
 });
 
+test("CI: a clean-machine test stands in only where the project has no checks at all", () => {
+  const standIn = { steps: ["install", "test"] };
+  const none = ciCheck({ runs: [], statuses: [] }, "abc1234def", undefined, standIn);
+  assert.equal(none.ok, true);
+  assert.match(none.text, /no automated checks.*install, test passed/);
+  // never over a failure, a check still running, or checks that couldn't be read
+  assert.equal(ciCheck({ runs: [{ name: "test", status: "completed", conclusion: "failure" }], statuses: [] }, "abc1234def", undefined, standIn).ok, false);
+  assert.equal(ciCheck({ runs: [{ name: "test", status: "queued", conclusion: null }], statuses: [] }, "abc1234def", undefined, standIn).ok, false);
+  assert.equal(ciCheck({ runs: [], statuses: [{ context: "x", state: "pending" }] }, "abc1234def", undefined, standIn).ok, false);
+  assert.equal(ciCheck(undefined, "abc1234def", "GitHub 403", standIn).ok, false);
+});
+
 test("model families, and a reviewer's own recommendation", () => {
   assert.equal(familyOf("claude-sonnet-4-5"), "Anthropic");
   assert.equal(familyOf("ditto/anthropic/claude-opus"), "Anthropic");

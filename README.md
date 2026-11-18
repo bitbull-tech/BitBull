@@ -949,7 +949,12 @@ and every check BitBull runs itself passes:
 - **CI.** The project's own automated checks (GitHub check runs and commit statuses) exist, have
   finished and passed on that exact commit. BitBull reads their result; it doesn't run the
   project's build or tests itself, because that would mean executing code it is still reviewing.
-  Your GitHub token needs read access to checks and commit statuses.
+  Your GitHub token needs read access to checks and commit statuses. A project with no automated
+  checks at all can use a **clean-machine test** instead (below): if it passed at that commit and
+  one of its commands was your test command, it stands in. It never stands in for a check that
+  failed, is still running or couldn't be read.
+- **Clean machine** (only when you tick it). The clean-machine test passed at the pull request's
+  commit and Cathedral's verify of the room's receipts passed.
 - **People.** A change that touches sign-in or key handling, CI, containers or install scripts
   always goes to a person: QA Hound comments on it and never approves it.
 - **Agreement.** Two reviewers, from different model families, each recommend "use" on their own
@@ -971,6 +976,17 @@ The review lists each check and its result. The checks lower the chance of a mis
 don't remove it, and a review by models is not a review by a person.
 A partial run says so in the heading. On your own PR, which GitHub won't let you approve or block,
 it comments and says what it would have done.
+
+**Running the code, away from your computer.** With [Cathedral](#cathedral-confidential-sandboxes)
+on for the project, the QA Hound window has two more ticks. **Run it in a confidential sandbox**
+gives the reviewers one room holding a copy of the target (its exact commit when it is in a git
+repo), network closed, where they may run the code and its tests; everywhere else they stay
+read-only. **Clean-machine test** is run by BitBull itself, with no model involved: your install,
+build and test commands on the repo's exact commit in a fresh room, network closed apart from any
+hosts you list for the install. The result is a certificate saved with the verdict and in
+`.bitbull/certificates/` in the workspace: the commit, each command with its exit code and the
+hashes of what it printed, the room's receipts and how to check them yourself. You approve each
+room first. The commands are the ones you type, so the test is as good as they are.
 
 ## Repositories
 
@@ -1000,6 +1016,53 @@ as you set them: choose a Ditto Router model per chat, or make one the default i
 Its tools are attached as MCP servers inside BitBull's fences (**Ditto tools for the agent**, on
 after Connect, off for a key pasted by hand), and **Manage connections** opens Ditto's Connections. Ask Ditto Review to review any branch's pull
 request from Repositories. See [docs/ROUTER.md](docs/ROUTER.md).
+
+## Cathedral: confidential sandboxes
+
+For running and checking code, repos and files you don't trust or were given, somewhere that
+isn't your computer. A Cathedral sandbox is a small rented room on an AMD SEV-SNP machine: it has
+none of your keys, none of your workspace and, unless you say otherwise, no network. It is billed
+by the second until it is deleted.
+
+**Set it up.** Get a key from [cathedral.computer](https://cathedral.computer) and give it a
+spending cap of its own there. Paste it in Settings → Integrations → Cathedral, then tick
+**Cathedral** in the settings of each project that should have it. It is off everywhere until you
+do both.
+
+**What BitBull does with it.**
+
+- **BitBull holds the key; the agent never does.** The agent gets tools (quote, create, run a
+  command, upload, download, receipts, delete) and BitBull makes every call.
+- **You approve every sandbox.** A card shows the size, hourly rate, lifetime, spend cap and
+  whether it has internet, and waits for you. Stopping the chat closes the card. Scheduled runs
+  and Telegram messages can't create one.
+- **A spend limit per sandbox**: `CATHEDRAL_MAX_SPEND_USD` in `.env` (default 0.50, at most
+  25.00). BitBull refuses a sandbox that could cost more, and refuses a key with no cap of its own
+  unless you set `CATHEDRAL_ALLOW_UNCAPPED_KEY=on`. Both live in `.env` only, where the agent
+  can't change them.
+- **Only named files go up.** One file at a time, by its path in the project's workspace, each
+  logged in Activity with its size and SHA-256. Anything that looks like a key, password or wallet
+  is refused by name (`.env`, `.ssh`, `*.pem`, `coldkey`, `wallet*.json` and the rest of the list
+  the linked-folder copy uses), as is anything under `.git`. A commit that contains such a file
+  isn't sent at all, and a folder copy leaves out whatever git ignores.
+- **Only its own rooms.** A project can run commands in, read from and delete only the sandboxes
+  it created.
+
+**What "confidential" covers.** Inside the room, the code runs in memory encrypted by AMD
+SEV-SNP, and each receipt is signed by a key the machine's attestation report commits to. It does
+not cover the way in: commands and files pass Cathedral's API in plaintext on their way to the
+room, so never send secrets. **Verify** reports Cathedral's own checks on the receipts; the AMD
+report, AMD's certificate chain and the approved build are checked only by Cathedral's offline
+verifier (`ctcli receipt verify`), which you run yourself.
+
+**Limits to know.** Sandboxes are tracked in memory: if BitBull restarts while one is running,
+BitBull no longer knows it, and it runs until its lifetime ends (the spend cap still holds), so
+delete it from Cathedral's side if you want it gone sooner. The name filter is cautious: a repo
+with source files named like secrets (`mnemonic.py`, a `credentials/` folder, a test `.pem`) is
+refused whole. QA Hound uses the same rooms for **Run it in a confidential sandbox** and the
+**clean-machine test**: see QA Hound. The agent's side is in
+`skills/cathedral-sandbox/SKILL.md`; the risks are R13 in
+[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md).
 
 ## 404: 3D as code
 

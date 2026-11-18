@@ -18,7 +18,7 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 const { isSecretName, secretPart } = await import("./secretNames.js");
 const { namedFile } = await import("./cathedral.js");
 const { skipped, snapshotTarget } = await import("./cleanMachine.js");
-const { cleanMachineCheck } = await import("./swarm.js");
+const { cleanMachineCheck, cleanTestStandIn } = await import("./swarm.js");
 type Certificate = import("./cleanMachine.js").Certificate;
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -125,4 +125,18 @@ test("clean-machine check: verify not available does not pass; verify passed doe
   assert.match(failed.text, /failed/);
   assert.equal(cleanMachineCheck(cert(true), head).ok, true);
   assert.equal(cleanMachineCheck(undefined, head, "no key").ok, false);
+});
+
+test("clean-machine stand-in for CI: passed at the head, verify passed, and the test command ran", () => {
+  const head = "a".repeat(40);
+  const cmd = (step: string, ok = true, state = "exited") => ({ step, command: "x", state, exitCode: ok ? 0 : 1, ok });
+  const cert = (commands: unknown[], over: Record<string, unknown> = {}) => ({ result: "pass", repo: { commit: head }, verify: { ok: true }, commands, ...over }) as unknown as Certificate;
+  assert.deepEqual(cleanTestStandIn(cert([cmd("install"), cmd("test")]), head), { steps: ["install", "test"] });
+  // an install or build alone says nothing about the change
+  assert.equal(cleanTestStandIn(cert([cmd("install"), cmd("build")]), head), undefined);
+  assert.equal(cleanTestStandIn(cert([cmd("install"), cmd("test", false, "not_run")]), head), undefined);
+  assert.equal(cleanTestStandIn(cert([cmd("test")], { verify: { ok: null } }), head), undefined);
+  assert.equal(cleanTestStandIn(cert([cmd("test")], { result: "fail" }), head), undefined);
+  assert.equal(cleanTestStandIn(cert([cmd("test")]), "b".repeat(40)), undefined);
+  assert.equal(cleanTestStandIn(undefined, head), undefined);
 });

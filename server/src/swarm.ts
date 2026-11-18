@@ -810,6 +810,18 @@ export function cleanMachineCheck(c: Certificate | undefined, headSha: string, e
   };
 }
 
+/**
+ * When a clean-machine certificate can stand in for a project with no CI: it passed at the pull
+ * request's head with Cathedral's verify passing, and one of the commands it ran was the test
+ * command (an install alone proves nothing about the change).
+ */
+export function cleanTestStandIn(c: Certificate | undefined, headSha: string): { steps: string[] } | undefined {
+  if (!c || !cleanMachineCheck(c, headSha).ok) return undefined;
+  const ran = c.commands.filter((x) => x.ok && x.state !== "not_run");
+  if (!ran.some((x) => x.step === "test")) return undefined;
+  return { steps: ran.map((x) => x.step) };
+}
+
 async function postToPr(s: Swarm, ws: string) {
   const { repo, gh, pr, files, filesWhy, localSha, dirty } = await resolvePr(s, ws);
   // no parsable findings block means the verdict is unknown: comment, never approve
@@ -832,7 +844,7 @@ async function postToPr(s: Swarm, ws: string) {
       headWhy = e instanceof Error ? e.message.slice(0, 120) : String(e);
     }
     checks.push(
-      ciCheck(head, pr.headSha, headWhy),
+      ciCheck(head, pr.headSha, headWhy, s.options.cleanMachine.enabled ? cleanTestStandIn(s.certificate, pr.headSha) : undefined),
       peopleCheck(files),
       plantedCheck(s.planted, s.plantedWhy),
       agreementCheck(s.reviewers.map((r) => ({ model: r.model, failed: r.status === "error", initial: r.initial, final: r.final }))),

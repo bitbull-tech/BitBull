@@ -460,12 +460,19 @@ export interface HeadChecks {
   runs: Array<{ name: string; status: string; conclusion: string | null }>;
   statuses: Array<{ context: string; state: string }>;
 }
-/** The project's own automated checks on the exact commit: there are some, they finished, they passed. */
-export function ciCheck(head: HeadChecks | undefined, sha: string, why?: string): Check {
+/**
+ * The project's own automated checks on the exact commit: there are some, they finished, they passed.
+ * `standIn` is BitBull's clean-machine test (swarm.ts cleanTestStandIn): it counts only where the
+ * project has no automated checks at all. A check that failed, is still running or couldn't be
+ * read is never overridden by it.
+ */
+export function ciCheck(head: HeadChecks | undefined, sha: string, why?: string, standIn?: { steps: string[] }): Check {
   const at = sha.slice(0, 7);
   if (!head) return { id: "ci", ok: false, text: `CI: the automated checks on ${at} couldn't be read${why ? ` (${why})` : ""}.` };
   const total = head.runs.length + head.statuses.length;
-  if (!total) return { id: "ci", ok: false, text: `CI: no automated checks (build, tests) ran on ${at}, so nothing but models has looked at it.` };
+  if (!total && standIn)
+    return { id: "ci", ok: true, text: `CI: the project has no automated checks on ${at}, so BitBull's clean-machine test stands in: ${standIn.steps.join(", ")} passed at that commit in a fresh confidential sandbox, with the commands you gave it.` };
+  if (!total) return { id: "ci", ok: false, text: `CI: no automated checks (build, tests) ran on ${at}, so nothing but models has looked at it. A clean-machine test with a test command (QA Hound window) can stand in.` };
   const running = head.runs.filter((r) => r.status !== "completed").map((r) => r.name).concat(head.statuses.filter((s) => s.state === "pending").map((s) => s.context));
   const failed = head.runs
     .filter((r) => r.status === "completed" && !["success", "neutral", "skipped"].includes(r.conclusion ?? ""))
