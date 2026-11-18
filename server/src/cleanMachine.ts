@@ -214,7 +214,7 @@ function paxPath(name: string): Buffer {
  * Write a tar of a folder (or one file) to `out`: regular files and folders only, never through a
  * link, skipping .git and .env files. Throws when it would be over the upload limit.
  */
-export function tarFolder(src: string, out: string): { files: number; bytes: number; skipped: number } {
+export function tarFolder(src: string, out: string, keep?: { files: Set<string>; dirs: Set<string> }): { files: number; bytes: number; skipped: number } {
   const fd = openSync(out, "wx", 0o600);
   let total = 0;
   let files = 0;
@@ -244,7 +244,8 @@ export function tarFolder(src: string, out: string): { files: number; bytes: num
       const p = path.join(abs, d.name);
       const r = rel ? `${rel}/${d.name}` : d.name;
       const st = lstatSync(p);
-      if (skipped(d.name) || st.isSymbolicLink() || !(st.isFile() || st.isDirectory())) {
+      const unlisted = keep && !(st.isDirectory() ? keep.dirs.has(r) : keep.files.has(r));
+      if (unlisted || skipped(d.name) || st.isSymbolicLink() || !(st.isFile() || st.isDirectory())) {
         skips++;
         continue;
       }
@@ -286,6 +287,29 @@ export interface Snapshot {
 const tempDir = () => mkdtempSync(path.join(tmpdir(), "bitbull-hound-"));
 const fileSha = (f: string) => createHash("sha256").update(readFileSync(f)).digest("hex");
 
+/** The commit holds a file that looks like a key or wallet: refused, never replaced by a folder copy. */
+class SecretInCommit extends Error {}
+
+/**
+ * Inside a repo, the files git would track (committed or new, not ignored) under `sub`, relative
+ * to `sub`, with the folders that hold them: so a folder copy never picks up gitignored secrets
+ * such as .dev.vars or secrets.toml.
+ */
+async function gitListed(repoDir: string, sub: string): Promise<{ files: Set<string>; dirs: Set<string> }> {
+  const out = await git(repoDir, ["ls-files", "-co", "--exclude-standard", "-z", "--", sub || "."], 60_000);
+  const files = new Set<string>();
+  const dirs = new Set<string>();
+  const prefix = sub ? `${sub}/` : "";
+  for (const f of out.split("\0").filter(Boolean)) {
+    if (prefix && !f.startsWith(prefix)) continue;
+    const rel = f.slice(prefix.length);
+    files.add(rel);
+    const parts = rel.split("/");
+    for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/"));
+  }
+  return { files, dirs };
+}
+
 /** `git archive` of HEAD (or of one path at HEAD), written outside the workspace. */
 async function archive(repoDir: string, out: string, sub: string, rev = "HEAD"): Promise<void> {
   // <rev>:<dir> roots the tar at that folder; a file keeps its path (a blob can't be archived alone)
@@ -297,7 +321,7 @@ async function archive(repoDir: string, out: string, sub: string, rev = "HEAD"):
   // a committed key, wallet or .env file would go to the room through Cathedral's API in plaintext: refuse
   const listed = (await git(repoDir, ["ls-tree", "-r", "--name-only", "-z", rev, ...(sub ? ["--", sub] : [])], 60_000)).split("\0").filter(Boolean);
   const secret = listed.find((f) => secretPart(f) !== null);
-  if (secret) throw new Error(`The commit holds ${secret}, which looks like a key, wallet or .env file; it is not sent to a sandbox. Remove it from the repo first.`);
+  if (secret) throw new SecretInCommit(`The commit holds ${secret}, which looks like a key, wallet or .env file; it is not sent to a sandbox. Remove it from the repo first.`);
   await git(repoDir, args, 300_000);
   if (statSync(out).size > MAX_SNAPSHOT_BYTES) throw new Error("The snapshot is over 200 MiB, the limit for one upload.");
 }
@@ -323,7 +347,11 @@ export async function snapshotTarget(ws: string, target: string): Promise<Snapsh
       try {
         await archive(repoDir, file, sub, st.commit);
         return { file, bytes: statSync(file).size, sha256: fileSha(file), source: { kind: "git", repo: st.rel, commit: st.commit, path: sub || ".", dirty: st.dirty }, cleanup };
-      } catch {
+      } catch (e) {
+        if (e instanceof SecretInCommit) {
+          cleanup();
+          return { error: e.message };
+        }
         // not committed at HEAD (a new folder, say): fall back to the folder as it is
         rmSync(file, { force: true });
       }
@@ -336,7 +364,17 @@ export async function snapshotTarget(ws: string, target: string): Promise<Snapsh
     }
     const realWs = realpathSync(ws);
     if (realAbs && !(realAbs === realWs || realAbs.startsWith(realWs + path.sep))) throw new Error("The target leads outside this workspace through a link; it is not copied.");
-    const t = tarFolder(abs, file);
+    // inside a repo, only what git would track: gitignored files (often local secrets) stay out
+    let keep: { files: Set<string>; dirs: Set<string> } | undefined;
+    if (repoDir && realAbs) {
+      const rel = path.relative(realpathSync(repoDir), realAbs).split(path.sep).join("/");
+      if (lstatSync(realAbs).isDirectory()) keep = await gitListed(repoDir, rel);
+      else {
+        const dirRel = path.posix.dirname(rel) === "." ? "" : path.posix.dirname(rel);
+        if (!(await gitListed(repoDir, dirRel)).files.has(path.posix.basename(rel))) throw new Error(`${target} is ignored by git; it is not copied.`);
+      }
+    }
+    const t = tarFolder(abs, file, keep);
     return { file, bytes: t.bytes, sha256: fileSha(file), source: { kind: "folder", skipped: t.skipped }, cleanup };
   } catch (e) {
     cleanup();

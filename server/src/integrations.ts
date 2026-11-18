@@ -65,7 +65,7 @@ export function integrations(): IntegrationDef[] {
       configured: !!ca.apiKey,
       notes:
         `Spend limit per sandbox: $${effectiveCathedralCap(ca.maxSpendUsd).toFixed(2)} (CATHEDRAL_MAX_SPEND_USD, .env only). ` +
-        "Off until you tick it in a project's settings. The agent never holds the key: BitBull makes every call, asks you before each sandbox (size, rate, lifetime, spend cap, internet), sends only files the agent names from the project's workspace and logs each one. Confidential means the code runs in memory encrypted by AMD SEV-SNP, with a receipt from the chip; commands and files still pass Cathedral's API in plaintext on the way in, so never send secrets.",
+        "Off until you tick it in a project's settings. The agent never holds the key: BitBull makes every call, asks you before each sandbox (size, rate, lifetime, spend cap, internet), sends only files the agent names from the project's workspace and logs each one. Confidential means your code runs in memory encrypted by AMD SEV-SNP, and each receipt proves it from the chip. Protection is what AMD SEV-SNP provides at the firmware version named in the receipt. Commands and files still pass Cathedral's API in plaintext on the way in, so never send secrets.",
     },
     {
       id: "atlas",

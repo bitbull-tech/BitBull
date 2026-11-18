@@ -18,8 +18,9 @@ const GLOBS: RegExp[] = [
   /^wallet.*\.json$/,
   /seed.*\.txt$/,
   /mnemonic/,
-  /^coldkey/,
-  /^hotkey/,
+  // Bittensor wallet files and folders (coldkey, coldkeypub.txt, hotkeys/), not code such as hotkey.py
+  /^(coldkey|hotkey)[^.]*$/,
+  /^(coldkey|hotkey).*\.(txt|json)$/,
 ];
 
 /** Templates that only show which settings exist; they stay. */
