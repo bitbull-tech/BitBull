@@ -229,6 +229,10 @@ powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\test-stack.ps1 -Dow
 powershell -ExecutionPolicy Bypass -File scripts\bitbull-wsl\test-stack.ps1 -Destroy   # stop and delete its data
 ```
 
+A bar across the top of a test BitBull says so, with the branch and commit it was built from (and
+the same bar appears on a live BitBull that was deployed from a branch other than `main`), so the
+two are never mistaken for each other.
+
 It uses the same `.env`, so the same access token unlocks it, but its chats, workspaces and
 settings are entirely separate (`~/bitbull-data-test` in the distro). `-Port` and `-Name` let you
 run more than one.
@@ -586,8 +590,8 @@ others and reports back.
 | **Test Dog** (hi-vis) | Writes and runs tests | yes |
 | **Dig Dog** (deerstalker) | Researches: code, docs, the web | no: read-only |
 
-**Set it up.** **Dog Pound** in the top bar of a project (or right-click the project, or the
-dog next to **Projects** for a new Dog Pound project). Tick **Use a Dog Pound in this project**
+**Set it up.** **Call the BitBull Pound** when you create a project (or on its home screen), or
+**Dog Pound** in the top bar of a project, or right-click the project. Tick **Use a Dog Pound in this project**
 and pick a model for each dog from its drop-down; a dog with no model isn't in the pound.
 **Mixed makers** fills them in with a different maker for planning, coding and reviewing, which
 is the point: models from one maker tend to miss the same things, and the window warns when the
@@ -1127,13 +1131,22 @@ agent clones the public [404 game recipe](https://github.com/404-Repo/404-game-r
 (the `404-game-recipe` skill), checks each object with the recipe's verifier and a game with its jam
 gate (the image ships Chromium for that), and a jam entry goes in as a pull request from your GitHub
 account, after asking you. Optional: 404's open model on your own RunPod GPU
-(`FOUR04_MODEL_URL`, `FOUR04_MODEL_KEY` in Settings → Integrations → 404).
+(`FOUR04_MODEL_URL`, `FOUR04_MODEL_KEY` in Settings → Integrations → 404). Tick **404** in a
+project's settings to use it there: the skill is only put in the workspaces of projects that do.
 
 ## GitHub
 
 Set `GITHUB_TOKEN` to a fine-grained token (`github_pat_…`, recommended, limited to the repos
 the agent needs) or a classic one (`ghp_…`). git gets it through a credential helper and the
 `gh` CLI through `GH_TOKEN`. Settings → Integrations shows who it signs in as.
+
+**Per project.** The agent gets the token only in projects that tick **GitHub** in their
+settings; a new project starts with every integration unticked, and chats outside a project have
+none. (Projects you already had keep GitHub and 404 ticked, so nothing that worked stops.) In a
+project without it, `git push` and `gh` in the agent's shell have no sign-in. This is about what
+the agent is handed, not a wall between projects: the token is still in BitBull's own process, so
+a fine-grained token limited to the repos you mean is what really bounds it. What you do yourself
+from BitBull's windows (Repositories, posting a QA Hound verdict) uses the token as before.
 
 See [docs/GAPS.md](docs/GAPS.md) for what's still missing compared with other coding agents, and [docs/STORAGE.md](docs/STORAGE.md) for the planned Hippius storage.
 

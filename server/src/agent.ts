@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { poundGuide, setPoundDeps } from "./pound.js";
+import { withheldEnv } from "./projectGates.js";
 import { config, shellAllowed, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type ProjectRow, type SessionRow } from "./db.js";
 import { archiveTurn } from "./ditto.js";
@@ -185,6 +186,7 @@ export async function* runTurn(
       plan: opts.plan,
       reviewSandbox: opts.reviewSandbox,
       noDelegate: opts.noDelegate,
+      withholdEnv: withheldEnv(session.project_id),
     })) {
       // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
       if (ev.type === "text" || ev.type === "thinking") ev.delta = redact(ev.delta);

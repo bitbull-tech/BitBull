@@ -42,6 +42,8 @@ export interface RunInput {
    * tool review_exec stays on (it runs commands only in the room that run created). Ignored otherwise.
    */
   reviewSandbox?: boolean;
+  /** Environment variables this chat's agent isn't given (projectGates.ts: GitHub in a project that hasn't ticked it). */
+  withholdEnv?: string[];
   /** One of a Dog Pound's dogs at work (pound.ts): it can't hand work on, so the pound's tools are off. */
   noDelegate?: boolean;
 }

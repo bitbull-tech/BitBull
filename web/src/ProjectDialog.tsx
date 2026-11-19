@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type IntegrationId, type IntegrationInfo, type Project, type ProjectInput } from './api'
 import { IconCheck, IconTrash, IconX } from './icons'
+import { POUND_ROLES } from './Pound'
 
 export const PROJECT_COLORS = ['indigo', 'teal', 'amber', 'rose', 'sky', 'violet', 'lime', 'slate'] as const
 
@@ -78,7 +79,7 @@ export function ProjectDialog({
         >
           <label>
             <span>Name</span>
-            <input autoFocus value={form.name} maxLength={80} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Subnet 59 miner" />
+            <input autoFocus value={form.name} maxLength={80} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="What shall we name your project?" />
           </label>
           <div className="field">
             <span>Colour</span>
@@ -96,6 +97,39 @@ export function ProjectDialog({
               ))}
             </div>
           </div>
+          <div className="field">
+            <span>The Pound</span>
+            {project ? (
+              <button type="button" className="pound-call" onClick={() => onOpenPound?.(project)}>
+                <span className="pound-call-dogs">
+                  {POUND_ROLES.map((r) => (
+                    <img key={r.id} src={r.head} width={38} height={38} alt="" draggable={false} />
+                  ))}
+                </span>
+                <span className="pound-call-text">
+                  <b>Call the BitBull Pound</b>
+                  <small>A team of dogs for this project, each on the model you choose: one plans and hands out the work, the others code, review, test and research.</small>
+                </span>
+              </button>
+            ) : (
+              <label className={`pound-call ${withPound ? 'on' : ''}`}>
+                <input type="checkbox" checked={withPound} onChange={(e) => setWithPound(e.target.checked)} />
+                <span className="pound-call-dogs">
+                  {POUND_ROLES.map((r) => (
+                    <img key={r.id} src={r.head} width={38} height={38} alt="" draggable={false} />
+                  ))}
+                </span>
+                <span className="pound-call-text">
+                  <b>Call the BitBull Pound</b>
+                  <small>
+                    {withPound
+                      ? 'The pound is coming: when you create the project you pick a model for each dog.'
+                      : 'A team of dogs for this project, each on the model you choose: one plans and hands out the work, the others code, review, test and research.'}
+                  </small>
+                </span>
+              </label>
+            )}
+          </div>
           <label>
             <span>Description</span>
             <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What this project is about" />
@@ -111,51 +145,18 @@ export function ProjectDialog({
           </label>
           <div className="field">
             <span>Integrations for this project</span>
+            <small className="muted">All off until you tick them. SayGM (models) and Ditto (memory) are the only things on everywhere.</small>
             <div className="int-list">
-              {available.filter((i) => !i.global).map((i) => (
+              {available.map((i) => (
                 <label key={i.id} className={`int-row ${i.configured ? '' : 'off'}`}>
                   <input type="checkbox" checked={form.integrations?.includes(i.id) ?? false} onChange={() => toggle(i.id)} />
                   <div>
                     <b>{i.name}</b>
-                    <small>{i.configured ? (i.hasMcp ? 'Configured · MCP tools available' : 'Configured') : 'Not set up yet: see Settings → Integrations'}</small>
+                    <small>{i.configured ? (i.hasMcp ? 'Set up · its tools are available when ticked' : 'Set up · off in this project until ticked') : 'Not set up yet: see Settings → Integrations'}</small>
                   </div>
                 </label>
               ))}
-              {available
-                .filter((i) => i.global)
-                .map((i) => (
-                  <label key={i.id} className={`int-row ${i.configured ? '' : 'off'}`} title="Global: configured once in .env, available in every project">
-                    <input type="checkbox" checked={i.configured} disabled />
-                    <div>
-                      <b>{i.name}</b>
-                      <small>{i.configured ? 'On for every project (keys in .env)' : 'Not configured: add keys in .env (see Settings → Integrations)'}</small>
-                    </div>
-                  </label>
-                ))}
             </div>
-          </div>
-          <div className="field">
-            <span>Dog Pound</span>
-            {project ? (
-              <div className="int-row">
-                <div>
-                  <b>A team of dogs, each on the model you choose</b>
-                  <small>Alpha Dog plans and hands out the work; Code Dog, Review Dog, Test Dog and Dig Dog do it, each on its own model.</small>
-                </div>
-                <span className="grow" />
-                <button type="button" className="btn sm" onClick={() => onOpenPound?.(project)}>
-                  Open the Dog Pound
-                </button>
-              </div>
-            ) : (
-              <label className="int-row">
-                <input type="checkbox" checked={withPound} onChange={(e) => setWithPound(e.target.checked)} />
-                <div>
-                  <b>Start with a Dog Pound</b>
-                  <small>A team of dogs for this project, each on the model you choose: one plans and hands out the work, others code, review, test and research. You pick the models next.</small>
-                </div>
-              </label>
-            )}
           </div>
           <div className="field">
             <span>Memory</span>

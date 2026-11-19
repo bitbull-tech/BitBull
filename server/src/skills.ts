@@ -4,6 +4,7 @@ import path from "node:path";
 import { config, paths, ROOT } from "./config.js";
 import { projects, workspaceFor } from "./db.js";
 import { backupSkill, dittoEnabled } from "./ditto.js";
+import { withheldSkills } from "./projectGates.js";
 
 /**
  * Skills live in the repo (/skills/<name>/SKILL.md) so they're versioned in Git.
@@ -107,7 +108,7 @@ function managedBefore(target: string): string[] {
  *
  * Returns the skills that could not be refreshed (their old copy is still in place).
  */
-export function mirrorSkillsInto(workspace: string): string[] {
+export function mirrorSkillsInto(workspace: string, without: string[] = []): string[] {
   mkdirSync(workspace, { recursive: true });
   const claude = path.join(workspace, ".claude");
   const target = path.join(claude, "skills");
@@ -117,7 +118,8 @@ export function mirrorSkillsInto(workspace: string): string[] {
   const real = realpathSync(target);
   if (real !== path.join(root, ".claude", "skills")) throw new Error(`${target} is not inside its workspace`);
 
-  const wanted = existsSync(config.skillsDir) ? listSkills().map((s) => s.dir).filter((n) => SAFE_NAME.test(n)) : [];
+  // `without`: skills this workspace's project hasn't switched on (projectGates.ts); one mirrored before is removed below
+  const wanted = existsSync(config.skillsDir) ? listSkills().map((s) => s.dir).filter((n) => SAFE_NAME.test(n) && !without.includes(n)) : [];
   const failed: string[] = [];
   // leftovers of an interrupted copy
   for (const d of readdirSync(target)) if (/^\.[^/]+\.new$/.test(d)) remove(path.join(target, d));
@@ -156,12 +158,13 @@ process.env.BITBULL_TOOLS = path.join(ROOT, "tools");
 process.env.ATLAS_WORKFLOWS_DIR = config.integrations.atlas.workflowsDir;
 
 export async function syncSkills({ backup = true } = {}) {
-  const spaces = [paths.workspace, ...projects.list().map((p) => workspaceFor(p))];
+  // each workspace with the skills its project hasn't switched on left out (the general one has no project)
+  const spaces: Array<[string, string[]]> = [[paths.workspace, withheldSkills(null)], ...projects.list().map((p): [string, string[]] => [workspaceFor(p), withheldSkills(p.id)])];
   // one workspace that can't be refreshed must not stop the others, or the server from starting
   let behind = 0;
-  for (const w of spaces) {
+  for (const [w, without] of spaces) {
     try {
-      if (mirrorSkillsInto(w).length) behind++;
+      if (mirrorSkillsInto(w, without).length) behind++;
     } catch (e) {
       behind++;
       console.warn(`[skills] couldn't refresh the skills in ${w}: ${e instanceof Error ? e.message : e}`);

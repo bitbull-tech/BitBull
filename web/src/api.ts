@@ -360,6 +360,8 @@ export interface AppConfig {
   ditto: { enabled: boolean; archive: string; router: boolean; signupUrl: string; connectionsUrl: string }
   /** what a fresh install still needs (absent on older servers) */
   setup?: { saygm: boolean; ditto: boolean }
+  /** what this BitBull was built from (absent when it wasn't deployed by the scripts) */
+  build?: { branch?: string; commit?: string; dirty?: boolean; stack?: string }
 }
 
 export type TurnStatus = 'running' | 'done' | 'error' | 'aborted' | 'interrupted'

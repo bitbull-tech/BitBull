@@ -40,7 +40,7 @@ export function integrations(): IntegrationDef[] {
     {
       id: "github",
       name: "GitHub",
-      blurb: "Clone, pull, push and open PRs from the agent's shell (git + gh CLI).",
+      blurb: "Clone, pull, push and open PRs from the agent's shell (git + gh CLI), in the projects that tick it.",
       docs: "https://github.com/settings/personal-access-tokens",
       env: [
         { key: "GITHUB_TOKEN", label: `Token (${githubTokenKind()})`, secret: true, value: g.token },
@@ -48,7 +48,6 @@ export function integrations(): IntegrationDef[] {
         { key: "GIT_USER_EMAIL", label: "Commit author email", value: g.userEmail },
       ],
       configured: !!g.token,
-      global: true,
       notes:
         "Fine-grained tokens (github_pat_…) are recommended: grant only the repositories the agent works on, with Contents read/write (plus Pull requests if it should open PRs). Classic tokens (ghp_…) also work; give them the repo scope. The token reaches git through a credential helper and gh through GH_TOKEN; it is never written into a repository.",
     },
@@ -104,9 +103,8 @@ export function integrations(): IntegrationDef[] {
         { key: "FOUR04_MODEL_URL", label: "Open model endpoint (optional)", value: f.modelUrl },
         { key: "FOUR04_MODEL_KEY", label: "Open model key (optional)", secret: true, value: f.modelKey },
       ],
-      // no 404 MCP and no 404 key: always ready, through the 404-game-recipe skill
+      // no 404 MCP and no 404 key: ready wherever a project ticks it, through the 404-game-recipe skill
       configured: true,
-      global: true,
       notes:
         "Nothing to sign up for. The agent clones the public recipe (404-Repo/404-game-recipe), follows GAME.md for a game or 404.md for assets, checks every object with harness/verify.mjs, and runs the jam gate (harness/jam.mjs) against your own deployed URL. Jam entries go in as a pull request to 404-Repo/404-game-jam from your GitHub account (the GitHub card above). By default the agent writes the geometry itself: no account, key or GPU. Optional: the open model behind the leader of the 404 generation competition, deployed from 404's RunPod template on your own GPU; put its endpoint and VLLM_API_KEY here and stop the pod when you finish (it bills by the hour). For images and sound, Atlas (above) is what the jam used.",
     },

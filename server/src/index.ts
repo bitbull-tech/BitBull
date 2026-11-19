@@ -62,6 +62,7 @@ import { probeModel } from "./modelProbe.js";
 import { checkQuote } from "./houndChecks.js";
 import { lockVault, unlockVault, VAULT_KEYS, vaultExists, vaultFile, vaultKeys, vaultSet, vaultUnlocked } from "./vault.js";
 import { listSkills, mirrorSkillsInto, syncSkills } from "./skills.js";
+import { migrateGates, withheldSkills, writeGates } from "./projectGates.js";
 
 assertConfig();
 
@@ -104,9 +105,10 @@ const buildInfo = (() => {
     const raw = readFileSync(path.join(process.cwd(), "build-info.json"), "utf8");
     const j = JSON.parse(raw) as Record<string, unknown>;
     const str = (k: string) => (typeof j[k] === "string" ? (j[k] as string).slice(0, 80) : undefined);
-    return { commit: str("commit"), branch: str("branch"), committed: str("committed"), dirty: j.dirty === true, deployedAt: str("deployedAt") };
+    // `stack`: "test" on a test stack (test-stack.ps1), so the page can say it isn't the live BitBull
+    return { commit: str("commit"), branch: str("branch"), committed: str("committed"), dirty: j.dirty === true, deployedAt: str("deployedAt"), stack: str("stack") };
   } catch {
-    return { commit: undefined, branch: undefined, committed: undefined, dirty: false, deployedAt: undefined };
+    return { commit: undefined, branch: undefined, committed: undefined, dirty: false, deployedAt: undefined, stack: undefined };
   }
 })();
 
@@ -140,6 +142,8 @@ app.get("/api/config", async (c) =>
     engines: Object.values(engines).map((e) => ({ id: e.id, label: e.label })),
     defaultEngine: config.agent.defaultEngine,
     defaultModel: config.agent.defaultModel,
+    // which branch and commit this BitBull was built from: the page says so when it isn't the live one on main
+    build: { branch: buildInfo.branch, commit: buildInfo.commit, dirty: buildInfo.dirty, stack: buildInfo.stack },
     // what a fresh install still needs: shown as "Finish setting up" on the home screen
     setup: { saygm: !!config.saygm.apiKey, ditto: dittoEnabled() },
     ditto: {
@@ -748,7 +752,8 @@ app.get("/api/projects", (c) => c.json({ projects: projects.list().map(projectOu
 app.post("/api/projects", async (c) => {
   const body = ProjectSchema.parse(await c.req.json());
   const p = projects.create(body);
-  mirrorSkillsInto(workspaceFor(p));
+  mirrorSkillsInto(workspaceFor(p), withheldSkills(p.id));
+  writeGates();
   console.log(`[projects] created "${p.name}" -> ${p.dir}`);
   return c.json({ project: projectOut(p) }, 201);
 });
@@ -759,6 +764,15 @@ app.patch("/api/projects/:id", async (c) => {
   const { archived } = z.object({ archived: z.boolean().optional() }).parse(raw);
   if (archived !== undefined && !projects.setArchived(c.req.param("id"), archived)) return c.json({ error: "not found" }, 404);
   const p = Object.keys(body).length ? projects.update(c.req.param("id"), body) : projects.get(c.req.param("id"));
+  if (p && body.integrations) {
+    // what the agent is given in this project follows its ticks straight away (projectGates.ts)
+    writeGates();
+    try {
+      mirrorSkillsInto(workspaceFor(p), withheldSkills(p.id));
+    } catch (e) {
+      console.warn("[skills]", e instanceof Error ? e.message : e);
+    }
+  }
   return p ? c.json({ project: projectOut(p) }) : c.json({ error: "not found" }, 404);
 });
 
@@ -790,6 +804,7 @@ app.post("/api/projects/:id/ditto-sync", async (c) => {
 /** Deletes the project record only: its chats become unfiled and its workspace folder stays on disk. */
 app.delete("/api/projects/:id", (c) => {
   projects.delete(c.req.param("id"));
+  writeGates();
   return c.json({ ok: true });
 });
 
@@ -1632,6 +1647,11 @@ if (existsSync(config.webDist)) {
 // ---------- boot ----------
 resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
+{
+  const kept = migrateGates();
+  if (kept) console.log(`[gates] GitHub and 404 are per project now; ${kept} existing project(s) keep both`);
+  writeGates();
+}
 await syncSkills().catch((e) => console.warn("[skills]", e instanceof Error ? e.message : e));
 // Ditto Router: have its models ready for the model list and OpenCode's config
 if (config.router.key) await routerModels().catch((e) => console.warn("[router]", e instanceof Error ? e.message : e));

@@ -811,6 +811,24 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       <div className="scrim" onClick={() => setNavOpen(false)} />
 
       <main className="main">
+        {(() => {
+          // Which code this is: said out loud whenever it isn't the live BitBull on main, so a test
+          // stack or a branch being tried is never mistaken for the real one.
+          const b = cfg.build
+          const branch = b?.branch && b.branch !== 'unknown' ? b.branch : ''
+          if (!b || (b.stack !== 'test' && (!branch || branch === 'main'))) return null
+          return (
+            <div className={`build-bar ${b.stack === 'test' ? 'test' : ''}`} role="status">
+              <b>{b.stack === 'test' ? 'Test BitBull' : 'BitBull'}</b>
+              <span className="build-bar-text">
+                running branch <code>{branch || 'unknown'}</code>
+                {b.commit && b.commit !== 'unknown' ? <> at <code>{b.commit}</code></> : null}
+                {b.dirty ? ', with uncommitted changes' : ''}
+                {b.stack === 'test' ? '. Its chats, files and settings are its own; the live BitBull is separate.' : '. This is not main.'}
+              </span>
+            </div>
+          )
+        })()}
         <CompatBanner
           onOpenSettings={() => setSettingsOpen(true)}
           onHowToUpdate={() => {
@@ -906,6 +924,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             onPickModel={setModel}
             models={models}
             onOpenChat={(id) => void openById(id)}
+            onOpenPound={currentProject ? () => setPoundFor({ project: currentProject }) : undefined}
           />
           {resOpen ? (
             <ResourcesPanel

@@ -126,6 +126,29 @@ Set-Content -LiteralPath $cmdFile -Encoding ASCII -Value "@tar -cf - --exclude=n
 & cmd.exe /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "copy failed ($LASTEXITCODE)" }
 
+# Record what this build came from (as deploy.ps1 does), marked as a test stack: the page shows
+# "Test BitBull, running branch X" across the top, and the launcher can read the commit.
+$sha = (& git -C $Repo rev-parse --short HEAD 2>$null)
+$branch = (& git -C $Repo rev-parse --abbrev-ref HEAD 2>$null)
+$when = (& git -C $Repo log -1 --format=%cI 2>$null)
+$dirty = [bool]((& git -C $Repo status --porcelain 2>$null) | Where-Object { $_ })
+if (-not $sha) { $sha = "unknown"; $branch = "unknown"; $when = "" }
+$info = [ordered]@{
+  commit     = "$sha"
+  branch     = "$branch"
+  committed  = "$when"
+  dirty      = $dirty
+  deployedAt = (Get-Date).ToUniversalTime().ToString("o")
+  stack      = "test"
+} | ConvertTo-Json -Compress
+$infoFile = Join-Path $env:TEMP "bitbull-$Name-build-info.json"
+[System.IO.File]::WriteAllText($infoFile, $info)
+$infoCmd = Join-Path $env:TEMP "bitbull-$Name-build-info.cmd"
+Set-Content -LiteralPath $infoCmd -Encoding ASCII -Value "@type `"$infoFile`" | wsl.exe -d $Distro --exec sh -c `"cat > $dir/build-info.json`""
+& cmd.exe /c $infoCmd
+if ($LASTEXITCODE -ne 0) { throw "could not write build-info.json ($LASTEXITCODE)" }
+Write-Host ("  building from {0} on {1}{2}" -f $sha, $branch, $(if ($dirty) { " (uncommitted changes)" } else { "" }))
+
 Write-Host "==> Building and starting the $Name stack on 127.0.0.1:$Port" -ForegroundColor Cyan
 # Docker here runs with userns-remap, so the data folder must belong to the remapped uid
 # that container uid 1000 (node) appears as - exactly what provision.sh does for ~/bitbull-data.

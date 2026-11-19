@@ -225,6 +225,20 @@ a key that can spend money and a destination files and commands can be sent to.
 - **Receipts.** `verify` reports Cathedral's own checks. The AMD SEV-SNP report, AMD's certificate
   chain and the approved build are checked only by the offline verifier (`ctcli receipt verify`).
 
+### R15: Integrations per project (GitHub, 404)
+`server/src/projectGates.ts`, `agent/opencode-plugin/bitbull-guard.js`. GitHub's token and the 404
+skill used to be given to the agent in every chat; now only in projects that tick them.
+- **What is withheld.** On the Claude engine the run's environment has no `GITHUB_TOKEN` /
+  `GH_TOKEN`. On OpenCode (one process for every chat) the guard plugin blanks both in any shell
+  whose folder isn't a listed workspace; the git credential helper then has nothing to give.
+- **Not a wall.** Within R1 the agent shares the server's uid: the token is in the OpenCode
+  process's environment, and the list of workspaces (`agent-gates.json`) is in the data folder,
+  which the agent's shell can write. This keeps the token out of the way of projects that don't
+  use it. A fine-grained token scoped to named repos is the real limit.
+- **Fails closed.** A list that can't be read gives no project the token.
+- **Owner actions are unchanged.** Repositories and QA Hound's pull request posting are BitBull's
+  own calls with the token, started by the owner.
+
 ### R14: The Dog Pound (only in projects that switch it on)
 `server/src/pound.ts`, the `pound_delegate` and `pound_wait` tools on BitBull's MCP route. One chat
 (the Alpha Dog) hands tasks to other models, which BitBull runs as turns of their own.

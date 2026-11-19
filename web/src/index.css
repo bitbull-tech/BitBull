@@ -1587,3 +1587,22 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .pound-run-word { display: inline-flex; align-items: center; white-space: nowrap; }
 .topbar-title .crumb > .pdot, .topbar-title .crumb > .crumb-sep { flex: none; }
 .crumb-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Which branch this BitBull runs (App.tsx): shown whenever it isn't the live one on main */
+.build-bar { display: flex; align-items: baseline; gap: 8px; padding: 5px 18px; font-size: 12.5px; background: color-mix(in srgb, var(--warn) 16%, var(--bg)); border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); color: var(--text); min-width: 0; }
+.build-bar b { flex: none; }
+.build-bar-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-bar code { font-family: var(--mono); font-size: 12px; }
+.pound-call { display: flex !important; flex-direction: row !important; align-items: center; gap: 12px !important; width: 100%; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pound-call:hover { border-color: var(--accent); }
+.pound-call.on { border-color: var(--accent); background: var(--accent-soft); }
+.pound-call > input { flex: none; accent-color: var(--accent); }
+.pound-call-dogs { display: flex; flex: none; }
+.pound-call-dogs img { border-radius: 50%; border: 2px solid var(--panel); background: var(--panel); object-fit: cover; margin-left: -10px; }
+.pound-call-dogs img:first-child { margin-left: 0; }
+.pound-call-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pound-call-text b { font-size: 14px; }
+.pound-call-text small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+@media (max-width: 520px) { .pound-call-dogs img:nth-child(n+4) { display: none; } }
+.pound-card b { display: inline-flex; align-items: center; gap: 7px; }
+.pound-card b img { border-radius: 50%; object-fit: cover; flex: none; }
+.pound-call-text small { font-weight: 400; }

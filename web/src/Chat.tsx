@@ -1,5 +1,5 @@
 import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
-import { PoundStrip } from './Pound'
+import { POUND_ROLES, PoundStrip } from './Pound'
 import { HoundFindings, houndProject, parseHoundBlock } from './HoundFindings'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -106,6 +106,7 @@ export function Chat({
   onPickModel,
   models,
   onOpenChat,
+  onOpenPound,
 }: {
   session: Session | null
   project: Project | null
@@ -121,6 +122,8 @@ export function Chat({
   models?: Model[]
   /** open another chat by id (a Dog Pound dog's) */
   onOpenChat?: (sessionId: string) => void
+  /** open this project's Dog Pound */
+  onOpenPound?: () => void
 }) {
   houndProject.id = project?.id ?? 'general'
   const [msgs, setMsgs] = useState<ViewMessage[]>([])
@@ -473,6 +476,14 @@ export function Chat({
             {onPickModel && <ModelAdvisor current={model} onUse={onPickModel} />}
             <div className="suggest-label">Try a starting point</div>
             <div className="suggest">
+              {project && onOpenPound && (
+                <button className="suggest-card pound-card" onClick={onOpenPound}>
+                  <b>
+                    <img src={POUND_ROLES[0].head} width={22} height={22} alt="" draggable={false} /> Call the BitBull Pound
+                  </b>
+                  <span>Give each job in this project its own model: one dog plans and hands out the work, others code, review, test and research.</span>
+                </button>
+              )}
               {(project ? PROJECT_SUGGESTIONS : SUGGESTIONS).map((s) => (
                 <button
                   key={s.title}

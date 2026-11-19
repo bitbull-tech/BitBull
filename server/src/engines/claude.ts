@@ -131,7 +131,7 @@ export const claudeEngine: AgentEngine = {
         ...(bitbullMcp ? { bitbull: { type: "http" as const, ...bitbullMcp } } : {}),
       },
       env: {
-        ...cleanEnv(),
+        ...Object.fromEntries(Object.entries(cleanEnv()).filter(([k]) => !(input.withholdEnv ?? []).includes(k))),
         ...gatewayEnv,
         ANTHROPIC_DEFAULT_HAIKU_MODEL: smallModel,
         ANTHROPIC_SMALL_FAST_MODEL: smallModel,
