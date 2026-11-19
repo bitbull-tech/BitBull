@@ -233,6 +233,14 @@ It uses the same `.env`, so the same access token unlocks it, but its chats, wor
 settings are entirely separate (`~/bitbull-data-test` in the distro). `-Port` and `-Name` let you
 run more than one.
 
+**From the desktop app.** Set the launcher's **port** to 8788 (anything other than 8787) and
+press **Save**: the launcher is then on the test stack and says so. **Start** and **Deploy** copy
+the folder in, build it and start it; **Stop**, **Logs** and **Open** work on the test BitBull.
+**Update**, **Back up** and **Start at login** belong to the live one and are greyed out. Set the
+port back to 8787 and Save to return to the live BitBull. (Before this, those buttons always
+worked on the live stack whatever the port said, so pressing Deploy there put the checked-out
+branch into your live BitBull.) This needs the app rebuilt once: `cd desktop && npm run build`.
+
 ## On a Mac
 
 macOS 13 (Ventura) or later, Apple Silicon or Intel. The same three containers as on Windows run

@@ -338,6 +338,13 @@ fn free_path(dir: &std::path::Path, name: &std::path::Path) -> PathBuf {
 fn show_bitbull(app: &AppHandle) -> Result<(), String> {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
     if let Some(w) = app.get_webview_window("bitbull") {
+        // The window outlives a change of port (it hides to the tray): if it is showing another
+        // stack's BitBull, take it to the one the launcher is on now, instead of the old one.
+        if let (Ok(want), Ok(have)) = (s.bitbull_url().parse::<tauri::Url>(), w.url()) {
+            if have.port_or_known_default() != want.port_or_known_default() {
+                let _ = w.navigate(want);
+            }
+        }
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
