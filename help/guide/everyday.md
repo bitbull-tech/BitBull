@@ -162,6 +162,14 @@ Set `GITHUB_TOKEN` to a fine-grained token (`github_pat_…`, recommended, limit
 the agent needs) or a classic one (`ghp_…`). git gets it through a credential helper and the
 `gh` CLI through `GH_TOKEN`. Settings → Integrations shows who it signs in as.
 
+**Per project.** The agent gets the token only in projects that tick **GitHub** in their
+settings; a new project starts with every integration unticked, and chats outside a project have
+none. (Projects you already had keep GitHub and 404 ticked, so nothing that worked stops.) In a
+project without it, `git push` and `gh` in the agent's shell have no sign-in. This is about what
+the agent is handed, not a wall between projects: the token is still in BitBull's own process, so
+a fine-grained token limited to the repos you mean is what really bounds it. What you do yourself
+from BitBull's windows (Repositories, posting a QA Hound verdict) uses the token as before.
+
 See [docs/GAPS.md](https://github.com/bitbull-tech/BitBull/blob/main/docs/GAPS.md) for what's still missing compared with other coding agents, and [docs/STORAGE.md](https://github.com/bitbull-tech/BitBull/blob/main/docs/STORAGE.md) for the planned Hippius storage.
 
 ## 404: 3D as code
@@ -170,7 +178,8 @@ agent clones the public [404 game recipe](https://github.com/404-Repo/404-game-r
 (the `404-game-recipe` skill), checks each object with the recipe's verifier and a game with its jam
 gate (the image ships Chromium for that), and a jam entry goes in as a pull request from your GitHub
 account, after asking you. Optional: 404's open model on your own RunPod GPU
-(`FOUR04_MODEL_URL`, `FOUR04_MODEL_KEY` in Settings → Integrations → 404).
+(`FOUR04_MODEL_URL`, `FOUR04_MODEL_KEY` in Settings → Integrations → 404). Tick **404** in a
+project's settings to use it there: the skill is only put in the workspaces of projects that do.
 
 ## Make it yours (white-labelling)
 Name, tagline, logos and every colour come from `brand.json` in the data folder, with the

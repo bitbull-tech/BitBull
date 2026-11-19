@@ -143,9 +143,11 @@ others and reports back.
 | **Test Dog** (hi-vis) | Writes and runs tests | yes |
 | **Dig Dog** (deerstalker) | Researches: code, docs, the web | no: read-only |
 
-**Set it up.** **Dog Pound** in the top bar of a project (or right-click the project, or the
-dog next to **Projects** for a new Dog Pound project). Tick **Use a Dog Pound in this project**
-and pick a model for each dog from its drop-down; a dog with no model isn't in the pound.
+**Set it up.** **Call the BitBull Pound** when you create a project (or on its home screen), or
+**Dog Pound** in the top bar of a project, or right-click the project. Tick **Use a Dog Pound in this project**
+and tick the dogs you want, each with a model from its drop-down; an unticked dog isn't in the
+pound, and its model is remembered for when you tick it again. The Alpha Dog is always in: it
+starts on your default model.
 **Mixed makers** fills them in with a different maker for planning, coding and reviewing, which
 is the point: models from one maker tend to miss the same things, and the window warns when the
 Code Dog and the Review Dog share one. The Review Dog's QA Hound benchmark result is shown when
