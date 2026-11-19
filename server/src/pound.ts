@@ -46,8 +46,10 @@ export const ROLE_INFO: Record<Role, { label: string; does: string; access: "rea
 
 export interface PoundConfig {
   enabled: boolean;
-  /** role → model id; "" = not in this pound (for alpha: the chat's own model) */
+  /** role → model id; "" = no model chosen (for alpha: the chat's own model) */
   models: Record<Role, string>;
+  /** dogs left out of the pound for now; their model is remembered. Never the Alpha Dog. */
+  off: WorkRole[];
   /** each dog's work as a chat of its own in the sidebar; off = kept out of the way in the Archive */
   separateChats: boolean;
   /** BitBull runs the Review Dog on every Code Dog's work before handing it back */
@@ -57,7 +59,7 @@ export interface PoundConfig {
 const KEY = "pound";
 const MODEL_ID = /^[\w.:/@+-]{1,160}$/;
 
-export const emptyPound = (): PoundConfig => ({ enabled: false, models: { alpha: "", coder: "", reviewer: "", tester: "", researcher: "" }, separateChats: true, autoReview: true });
+export const emptyPound = (): PoundConfig => ({ enabled: false, models: { alpha: "", coder: "", reviewer: "", tester: "", researcher: "" }, off: [], separateChats: true, autoReview: true });
 
 /** Whatever was stored or sent, as a config: unknown keys dropped, odd values back to the default. */
 export function cleanPound(raw: unknown): PoundConfig {
@@ -69,6 +71,7 @@ export function cleanPound(raw: unknown): PoundConfig {
   if (typeof j.autoReview === "boolean") out.autoReview = j.autoReview;
   const m = j.models && typeof j.models === "object" ? (j.models as Record<string, unknown>) : {};
   for (const r of ROLES) if (typeof m[r] === "string" && MODEL_ID.test(m[r] as string)) out.models[r] = m[r] as string;
+  if (Array.isArray(j.off)) out.off = WORK_ROLES.filter((r) => (j.off as unknown[]).includes(r));
   return out;
 }
 
@@ -98,7 +101,7 @@ export function setPound(projectId: string, raw: unknown): PoundConfig {
 }
 
 /** The dogs this project can hand work to: switched on, with a model chosen. */
-export const activeRoles = (c: PoundConfig): WorkRole[] => (c.enabled ? WORK_ROLES.filter((r) => !!c.models[r]) : []);
+export const activeRoles = (c: PoundConfig): WorkRole[] => (c.enabled ? WORK_ROLES.filter((r) => !!c.models[r] && !c.off.includes(r)) : []);
 
 /** The model a new chat in this project starts on: the Alpha Dog's, when the pound is on and one is chosen. */
 export const alphaModel = (projectId?: string | null): string | undefined => {
@@ -299,7 +302,7 @@ export function startJob(input: { parentId: string; role: string; task: string }
     try {
       const first = await runDog(job, role, cfg.models[role], dogPrompt(role, task), parent, cfg);
       // The review is BitBull's, not the Alpha Dog's to skip: a Code Dog's work goes to the Review Dog first.
-      if (role === "coder" && first.status === "done" && cfg.autoReview && cfg.models.reviewer && !job.stopped) {
+      if (role === "coder" && first.status === "done" && cfg.autoReview && activeRoles(cfg).includes("reviewer") && !job.stopped) {
         const extra = [
           "",
           `The Code Dog (${first.model}) was given that task and reports what follows. The report is its own account, not evidence: read the files it names, in context, and review the change itself.`,

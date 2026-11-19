@@ -222,3 +222,20 @@ test("through BitBull's MCP tools: pound_delegate runs the job for the chat that
   const other = setup().chat; // (resets the pound: the job is gone with it)
   assert.match(await call("pound_wait", { job }, other.id), /no job/);
 });
+
+test("a dog can be left out and keeps its model; the Alpha Dog can't be left out", async () => {
+  const { chat, project } = setup({ off: ["reviewer", "alpha", "nonsense"] });
+  const cfg = P.poundFor(project.id);
+  assert.deepEqual(cfg.off, ["reviewer"]);
+  assert.equal(cfg.models.reviewer, "gpt-review"); // remembered for when it is ticked again
+  assert.deepEqual(P.activeRoles(cfg), ["coder", "researcher"]);
+  assert.doesNotMatch(P.poundGuide(project.id, chat.id), /Review Dog/);
+  const no = P.startJob({ parentId: chat.id, role: "reviewer", task: BRIEF });
+  assert.equal(no.ok, false);
+  // and BitBull doesn't send the Code Dog's work to a Review Dog that was left out
+  const run = scripted(() => ({ text: "done" }));
+  const r = P.startJob({ parentId: chat.id, role: "coder", task: BRIEF });
+  assert.ok(r.ok);
+  assert.match(await P.waitJob(r.job, 5000), /has not been reviewed/);
+  assert.deepEqual(run.started.map((s) => s.model), ["gpt-code"]);
+});

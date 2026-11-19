@@ -546,6 +546,8 @@ export interface PoundConfig {
   enabled: boolean
   /** '' = not in this pound (for alpha: whatever model the chat is on) */
   models: Record<PoundRole, string>
+  /** dogs left out for now (their model is remembered); never the Alpha Dog */
+  off?: Exclude<PoundRole, 'alpha'>[]
   separateChats: boolean
   autoReview: boolean
 }

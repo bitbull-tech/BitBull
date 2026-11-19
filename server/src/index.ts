@@ -741,7 +741,8 @@ const ProjectSchema = z.object({
   description: z.string().max(2000).optional(),
   instructions: z.string().max(20000).optional(),
   color: z.string().max(20).optional(),
-  integrations: z.array(z.enum(["atlas", "four04", "leadpoet", "cathedral"])).optional(),
+  // every integration is a per-project tick now, GitHub and 404 included (projectGates.ts)
+  integrations: z.array(z.enum(["atlas", "four04", "github", "leadpoet", "cathedral"])).optional(),
   dittoSync: z.boolean().optional(),
 });
 const projectOut = (p: ReturnType<typeof projects.get>) =>
@@ -1158,7 +1159,7 @@ app.put("/api/projects/:id/pound", async (c) => {
   if (!p) return c.json({ error: "project not found" }, 404);
   const body = await c.req.json().catch(() => ({}));
   const pound = setPound(p.id, body);
-  record({ level: "info", source: "config", message: `Dog Pound ${pound.enabled ? "on" : "off"} for ${p.name}${pound.enabled ? `: ${ROLES.filter((r) => pound.models[r]).map((r) => `${ROLE_INFO[r].label} ${pound.models[r]}`).join(", ") || "no models chosen"}` : ""}` });
+  record({ level: "info", source: "config", message: `Dog Pound ${pound.enabled ? "on" : "off"} for ${p.name}${pound.enabled ? `: ${ROLES.filter((r) => pound.models[r] && (r === "alpha" || !pound.off.includes(r))).map((r) => `${ROLE_INFO[r].label} ${pound.models[r]}`).join(", ") || "no models chosen"}` : ""}` });
   return c.json({ pound });
 });
 /** What this chat's dogs are doing and what they have cost. */

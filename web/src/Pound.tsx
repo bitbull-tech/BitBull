@@ -28,7 +28,7 @@ export const POUND_ROLES: Array<{ id: PoundRole; label: string; does: string; he
 ]
 const roleOf = (id: PoundRole) => POUND_ROLES.find((r) => r.id === id) ?? POUND_ROLES[0]
 
-const EMPTY: PoundConfig = { enabled: false, models: { alpha: '', coder: '', reviewer: '', tester: '', researcher: '' }, separateChats: true, autoReview: true }
+const EMPTY: PoundConfig = { enabled: false, models: { alpha: '', coder: '', reviewer: '', tester: '', researcher: '' }, off: [], separateChats: true, autoReview: true }
 
 const cost = (m: Model) => (m.price ? m.price.input + m.price.output : 0)
 /** The priciest model of a family: a rough stand-in for "its strongest", which the owner can change. */
@@ -43,7 +43,7 @@ export function mixedPreset(models: Model[], fallback: string): PoundConfig['mod
   return { alpha: a, coder: o, reviewer: g, tester: o, researcher: g }
 }
 
-function ModelSelect({ models, value, onChange, none }: { models: Model[]; value: string; onChange: (id: string) => void; none: string }) {
+function ModelSelect({ models, value, onChange, none, disabled }: { models: Model[]; value: string; onChange: (id: string) => void; none?: string; disabled?: boolean }) {
   const groups = useMemo(() => {
     const by = new Map<string, Model[]>()
     for (const m of models) by.set(makerOf(m), [...(by.get(makerOf(m)) ?? []), m])
@@ -51,8 +51,8 @@ function ModelSelect({ models, value, onChange, none }: { models: Model[]; value
   }, [models])
   const known = !value || models.some((m) => m.id === value)
   return (
-    <select className="pound-select" value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{none}</option>
+    <select className="pound-select" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      {none !== undefined && <option value="">{none}</option>}
       {!known && <option value={value}>{value} (not on offer right now)</option>}
       {groups.map(([maker, list]) => (
         <optgroup key={maker} label={maker}>
@@ -93,7 +93,12 @@ export function PoundDialog({
   useEffect(() => {
     void api
       .pound(project.id)
-      .then((r) => setCfg(startWith === 'mixed' && !r.pound.enabled ? { ...r.pound, enabled: true, models: mixedPreset(models, defaultModel) } : r.pound))
+      .then((r) => {
+        const p = { ...r.pound, off: r.pound.off ?? [] }
+        if (startWith === 'mixed' && !p.enabled) return setCfg({ ...p, enabled: true, models: mixedPreset(models, defaultModel) })
+        // the Alpha Dog is always in the pound, on the default model until you choose another
+        setCfg(p.models.alpha ? p : { ...p, models: { ...p.models, alpha: defaultModel } })
+      })
       .catch(() => setCfg(startWith === 'mixed' ? { ...EMPTY, enabled: true, models: mixedPreset(models, defaultModel) } : EMPTY))
     void api.houndBench().then(setBench).catch(() => {})
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -104,6 +109,15 @@ export function PoundDialog({
 
   const infoOf = (id: string) => models.find((m) => m.id === id)
   const set = (role: PoundRole, id: string) => setCfg((c) => (c ? { ...c, models: { ...c.models, [role]: id } } : c))
+  const isOff = (role: PoundRole) => role !== 'alpha' && !!cfg?.off?.includes(role)
+  /** Tick or untick a dog. Ticking one with no model yet gives it the Alpha Dog's, to be changed. */
+  const toggleDog = (role: Exclude<PoundRole, 'alpha'>, on: boolean) =>
+    setCfg((c) => {
+      if (!c) return c
+      const off = (c.off ?? []).filter((r) => r !== role)
+      if (!on) return { ...c, off: [...off, role] }
+      return { ...c, off, models: c.models[role] ? c.models : { ...c.models, [role]: c.models.alpha || defaultModel } }
+    })
 
   const save = async () => {
     if (!cfg) return
@@ -120,13 +134,13 @@ export function PoundDialog({
   }
 
   const sameFamily = (() => {
-    if (!cfg?.models.coder || !cfg.models.reviewer) return false
+    if (!cfg?.models.coder || !cfg.models.reviewer || isOff('coder') || isOff('reviewer')) return false
     const a = infoOf(cfg.models.coder)
     const b = infoOf(cfg.models.reviewer)
     return !!a && !!b && makerOf(a) === makerOf(b)
   })()
   const grade = (id: string) => bench?.results.find((r) => r.model === id)
-  const working = cfg ? POUND_ROLES.filter((r) => r.id !== 'alpha' && cfg.models[r.id]).length : 0
+  const working = cfg ? POUND_ROLES.filter((r) => r.id !== 'alpha' && cfg.models[r.id] && !isOff(r.id)).length : 0
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -160,7 +174,7 @@ export function PoundDialog({
             <div className={`pound-rows ${cfg.enabled ? '' : 'off'}`}>
               <div className="pound-presets">
                 <span className="muted small">Fill in:</span>
-                <button type="button" className="btn sm" disabled={!cfg.enabled} onClick={() => setCfg({ ...cfg, models: mixedPreset(models, defaultModel) })} title="A different maker for planning, coding and reviewing">
+                <button type="button" className="btn sm" disabled={!cfg.enabled} onClick={() => setCfg({ ...cfg, off: [], models: mixedPreset(models, defaultModel) })} title="A different maker for planning, coding and reviewing">
                   Mixed makers
                 </button>
                 <button
@@ -169,13 +183,13 @@ export function PoundDialog({
                   disabled={!cfg.enabled}
                   onClick={() => {
                     const m = cfg.models.alpha || defaultModel
-                    setCfg({ ...cfg, models: { alpha: m, coder: m, reviewer: m, tester: m, researcher: m } })
+                    setCfg({ ...cfg, off: [], models: { alpha: m, coder: m, reviewer: m, tester: m, researcher: m } })
                   }}
                   title="Every dog on the Alpha Dog's model"
                 >
                   All on one model
                 </button>
-                <button type="button" className="btn sm" disabled={!cfg.enabled} onClick={() => setCfg({ ...cfg, models: { ...EMPTY.models } })}>
+                <button type="button" className="btn sm" disabled={!cfg.enabled} onClick={() => setCfg({ ...cfg, off: ['coder', 'reviewer', 'tester', 'researcher'], models: { ...EMPTY.models, alpha: cfg.models.alpha || defaultModel } })} title="Untick every dog but the Alpha Dog">
                   Clear
                 </button>
               </div>
@@ -183,7 +197,19 @@ export function PoundDialog({
                 const id = cfg.models[r.id]
                 const g = r.id === 'reviewer' && id ? grade(id) : undefined
                 return (
-                  <div key={r.id} className={`pound-row ${id || r.id === 'alpha' ? '' : 'out'}`}>
+                  <div key={r.id} className={`pound-row ${r.id === 'alpha' || (id && !isOff(r.id)) ? '' : 'out'}`}>
+                    {r.id === 'alpha' ? (
+                      <input type="checkbox" className="pound-tick" checked disabled aria-label="Alpha Dog is always in the pound" title="The Alpha Dog is always in the pound: it is the chat you talk to" />
+                    ) : (
+                      <input
+                        type="checkbox"
+                        className="pound-tick"
+                        checked={!!id && !isOff(r.id)}
+                        aria-label={`Use the ${r.label}`}
+                        title={`Use the ${r.label} in this project`}
+                        onChange={(e) => toggleDog(r.id as Exclude<PoundRole, 'alpha'>, e.target.checked)}
+                      />
+                    )}
                     <img className="pound-head" src={r.head} width={64} height={64} alt="" draggable={false} />
                     <div className="pound-who">
                       <b>{r.label}</b>
@@ -192,7 +218,13 @@ export function PoundDialog({
                     <div className="pound-pick">
                       <div className="pound-pick-line">
                         {id ? <ModelDog id={id} family={infoOf(id)?.family} size={22} /> : <span className="pound-nodog" />}
-                        <ModelSelect models={models} value={id} onChange={(v) => set(r.id, v)} none={r.id === 'alpha' ? 'Whatever model the chat is on' : 'Not in this pound'} />
+                        <ModelSelect
+                          models={models}
+                          value={id}
+                          disabled={r.id !== 'alpha' && (!id || isOff(r.id))}
+                          onChange={(v) => set(r.id, v)}
+                          none={r.id === 'alpha' || id ? undefined : 'Tick this dog to choose its model'}
+                        />
                       </div>
                       {g && (
                         <small className={g.grade ? 'pound-ok' : 'pound-warn'}>
@@ -200,6 +232,7 @@ export function PoundDialog({
                           {g.grade ? ' (passed)' : ' (not passed)'}
                         </small>
                       )}
+                      {r.id !== 'alpha' && (!id || isOff(r.id)) && <small className="muted">Not in the pound. Tick it to use it.</small>}
                       {r.id === 'reviewer' && sameFamily && <small className="pound-warn">Same maker as the Code Dog: they tend to miss the same things. A different maker reviews better.</small>}
                       {r.id === 'alpha' && id && <small className="muted">New chats in this project start on this model.</small>}
                     </div>
