@@ -6,13 +6,18 @@ export const PROJECT_COLORS = ['indigo', 'teal', 'amber', 'rose', 'sky', 'violet
 
 export function ProjectDialog({
   project,
+  pound,
+  onOpenPound,
   onClose,
   onSaved,
   onDeleted,
 }: {
   project: Project | null
+  /** a new project that starts with a Dog Pound (the tick can still be cleared) */
+  pound?: boolean
+  onOpenPound?: (p: Project) => void
   onClose: () => void
-  onSaved: (p: Project) => void
+  onSaved: (p: Project, withPound: boolean) => void
   onDeleted: (id: string) => void
 }) {
   const [form, setForm] = useState<ProjectInput>({
@@ -23,6 +28,7 @@ export function ProjectDialog({
     integrations: project?.integrations ?? [],
     dittoSync: project?.dittoSync ?? false,
   })
+  const [withPound, setWithPound] = useState(!!pound)
   const [available, setAvailable] = useState<IntegrationInfo[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +52,7 @@ export function ProjectDialog({
     setError(null)
     try {
       const r = project ? await api.updateProject(project.id, form) : await api.createProject(form)
-      onSaved(r.project)
+      onSaved(r.project, !project && withPound)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save')
     } finally {
@@ -58,7 +64,7 @@ export function ProjectDialog({
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal narrow" role="dialog" aria-label={project ? 'Edit project' : 'New project'}>
         <header className="modal-head">
-          <h2>{project ? 'Project settings' : 'New project'}</h2>
+          <h2>{project ? 'Project settings' : pound ? 'New Dog Pound project' : 'New project'}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <IconX />
           </button>
@@ -127,6 +133,29 @@ export function ProjectDialog({
                   </label>
                 ))}
             </div>
+          </div>
+          <div className="field">
+            <span>Dog Pound</span>
+            {project ? (
+              <div className="int-row">
+                <div>
+                  <b>A team of dogs, each on the model you choose</b>
+                  <small>Alpha Dog plans and hands out the work; Code Dog, Review Dog, Test Dog and Dig Dog do it, each on its own model.</small>
+                </div>
+                <span className="grow" />
+                <button type="button" className="btn sm" onClick={() => onOpenPound?.(project)}>
+                  Open the Dog Pound
+                </button>
+              </div>
+            ) : (
+              <label className="int-row">
+                <input type="checkbox" checked={withPound} onChange={(e) => setWithPound(e.target.checked)} />
+                <div>
+                  <b>Start with a Dog Pound</b>
+                  <small>A team of dogs for this project, each on the model you choose: one plans and hands out the work, others code, review, test and research. You pick the models next.</small>
+                </div>
+              </label>
+            )}
           </div>
           <div className="field">
             <span>Memory</span>

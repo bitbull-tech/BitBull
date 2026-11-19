@@ -9,6 +9,8 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
   chat picks up where it left off
 - Light and dark, with colour schemes for the background and sidebar (Settings → Appearance), and
   white-labelled from one `brand.json` — name, logo and every colour
+- **Dog Pound**: a team of dogs per project, each on the model you pick for its job: one plans
+  and hands out the work, others code, review, test and research; the review can't be skipped
 - **QA Hound**: unleash multiple LLMs on a repo, folder or file to review it, challenge each other
   and summarise a verdict and recommendations
 - Engine per chat: **OpenCode** (native for every model) or **Claude Agent SDK**
@@ -561,6 +563,52 @@ spending), a short test plan and a 7-day launch plan. Once you approve it, it is
 `TEAM.md` in the project, and from then on work you ask for there runs through the team. Each
 role runs on one of the subagents above, so it keeps their limits: read-only roles can't change
 anything. The `team-architect` skill holds the method.
+
+## The Dog Pound: a model for each job
+
+A project can have a **Dog Pound**: a team of dogs, each running on the model you choose for its
+job. You talk to the Alpha Dog as you would to any chat; it plans the work, hands tasks to the
+others and reports back.
+
+| Dog | Job | Can it change files? |
+|---|---|---|
+| **Alpha Dog** (black suit) | Plans, splits the work up, hands it out, reports to you. It is the chat itself | yes |
+| **Code Dog** (blue hoodie) | Writes the change | yes |
+| **Review Dog** (judge's wig) | Scrutinises the change | no: read-only |
+| **Test Dog** (hi-vis) | Writes and runs tests | yes |
+| **Dig Dog** (deerstalker) | Researches: code, docs, the web | no: read-only |
+
+**Set it up.** **Dog Pound** in the top bar of a project (or right-click the project, or the
+dog next to **Projects** for a new Dog Pound project). Tick **Use a Dog Pound in this project**
+and pick a model for each dog from its drop-down; a dog with no model isn't in the pound.
+**Mixed makers** fills them in with a different maker for planning, coding and reviewing, which
+is the point: models from one maker tend to miss the same things, and the window warns when the
+Code Dog and the Review Dog share one. The Review Dog's QA Hound benchmark result is shown when
+it has one. New chats in the project start on the Alpha Dog's model.
+
+**How the work flows.** The Alpha Dog's model decides what to hand out. The review is not its to
+skip: with **Review every Code Dog's work** on (the default), BitBull itself sends each piece of
+the Code Dog's work to the Review Dog and hands both reports back together. If the review finds
+something, the Alpha Dog sends the fix back to the Code Dog. A strip above the message box shows
+which dogs this chat has put to work, on which model, for how long and at what cost; click one to
+open its chat. **Each dog works in a chat of its own** (on by default) lists those chats in the
+sidebar as "Code Dog · …"; off, you see only the Alpha Dog's chat and the others' are kept in
+the Archive.
+
+**What it is under the hood.** Each dog is a turn of its own that BitBull starts on OpenCode,
+which serves every model, so "Claude plans, GPT codes, Gemini reviews" works whichever engine the
+Alpha Dog's chat is on. (Subagents, below, run inside the chat's own engine and share one model
+setting for the whole install.) The read-only dogs run in plan mode, enforced by the engine: no
+edits, no shell, no MCP tools. The others work in the project's workspace with its usual limits.
+A dog can't hand work on. Reports come back to the Alpha Dog fenced as another model's account,
+not as instructions.
+
+**Limits.** Each dog is a model run and costs what that model costs; a coding task with a review
+is two. One chat can have four dogs working at once. A dog stops at its time limit (25 minutes
+for the Code Dog, 20 for the Test Dog, 12 for the others) and when you stop the chat. Two dogs
+given the same files will tread on each other: the Alpha Dog is told not to, but nothing locks
+files. If BitBull restarts mid-task the task is lost (the dog's chat stays). "Build an agent
+team" and `TEAM.md` still work as before and are not yet joined up with the pound.
 
 ## Network access
 
@@ -1134,6 +1182,7 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/projects/:id/download` | `?path=` (repeat for several): one file as itself; a folder or several paths as one .zip (up to 5,000 files / 512 MB) |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
+| `GET/PUT` | `/api/projects/:id/pound` | A project's Dog Pound: `{enabled, models:{alpha,coder,reviewer,tester,researcher}, separateChats, autoReview}`. `GET /api/sessions/:id/pound` lists the jobs a chat has handed out |
 | `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA Hound run (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
 | `GET/POST` | `/api/vault`, `/api/vault/unlock {key}`, `/api/vault/lock` | Vault state; unlock with the 64-hex key (migrates secrets out of settings.local.json); lock |

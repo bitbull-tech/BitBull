@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { poundGuide, setPoundDeps } from "./pound.js";
 import { config, shellAllowed, type EngineId } from "./config.js";
 import { messages, projects, sessions, workspaceFor, type ProjectRow, type SessionRow } from "./db.js";
 import { archiveTurn } from "./ditto.js";
@@ -31,8 +32,9 @@ export const anyUnattended = () => unattended.size > 0;
 // when the tool can't tell which chat is asking, one unattended turn anywhere is enough to refuse
 setUnattendedCheck((sid) => (sid ? unattended.has(sid) : unattended.size > 0));
 setRunningSessions(() => [...running.keys()]);
+setPoundDeps({ unattended: (sid) => unattended.has(sid) });
 
-function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) {
+function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId, sessionId?: string) {
   const parts = [existsSync(config.promptFile) ? readFileSync(config.promptFile, "utf8") : ""];
   parts.push(
     shellAllowed()
@@ -58,6 +60,9 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId) 
           ? `\n\nDitto sync is ON for this project: Ditto is the project's record. Before answering questions about it, search Ditto. At the end of any turn that produced a durable fact, decision, preference, lesson or change of status, save it to Ditto with save_memory (one concise memory each, source "bitbull", "Project: ${project.name}"), merging with related memories rather than duplicating. Material in uploads/claude-import/ (docs/, memory/) is the project's history from Claude.ai: treat it as already part of the record once a sync has run.`
           : ""),
     );
+    // the project's Dog Pound, for the chat that hands the work out (never for one of its dogs)
+    const pound = poundGuide(project.id, sessionId);
+    if (pound) parts.push(pound);
   }
   return parts.join("\n");
 }
@@ -102,7 +107,7 @@ export async function* runTurn(
   prompt: string,
   model: string,
   attachments: string[] = [],
-  opts: { plan?: boolean; unattended?: boolean; reviewSandbox?: boolean } = {},
+  opts: { plan?: boolean; unattended?: boolean; reviewSandbox?: boolean; noDelegate?: boolean } = {},
 ): AsyncGenerator<AgentEvent & { messageId?: string }> {
   if (running.has(session.id)) {
     yield { type: "error", message: "This session is already running a turn." };
@@ -172,13 +177,14 @@ export async function* runTurn(
       engineSessionId,
       model,
       prompt: restore + prompt + attachNote,
-      systemPrompt: systemPrompt(project, session.engine),
+      systemPrompt: systemPrompt(project, session.engine, session.id),
       signal: ctrl.signal,
       cwd,
       mcp,
       bitbullSessionId: session.id,
       plan: opts.plan,
       reviewSandbox: opts.reviewSandbox,
+      noDelegate: opts.noDelegate,
     })) {
       // Never let a credential reach the UI, the chat history or Ditto, whatever printed it
       if (ev.type === "text" || ev.type === "thinking") ev.delta = redact(ev.delta);

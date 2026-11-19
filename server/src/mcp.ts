@@ -146,6 +146,54 @@ function build(sessionHint: string | undefined) {
     },
   );
 
+  /** Which chat is handing work out: the engine says so, else the only running chat that isn't one of the pound's own dogs. */
+  const poundCaller = async () => {
+    const pound = await import("./pound.js");
+    if (sessionHint && sessions.get(sessionHint)) return { pound, sid: sessionHint };
+    const live = runningSessions().filter((id) => !pound.isDogChat(id));
+    return { pound, sid: live.length === 1 ? live[0] : undefined };
+  };
+  server.registerTool(
+    "pound_delegate",
+    {
+      title: "Hand a task to one of the Dog Pound's dogs",
+      description:
+        "Only in a project with a Dog Pound (your instructions list its dogs). Hands one task to another dog, which runs on the model the owner chose for that job, in this project's workspace: " +
+        "coder (writes the change), reviewer (scrutinises, read-only), tester (writes and runs tests), researcher (reads code, docs and the web, read-only). " +
+        "The dog has not seen this chat: the brief must stand on its own (the goal, the files or area it owns, what to leave alone, how to check the result). " +
+        "A coder's work is reviewed by the reviewer before it comes back, when the pound has one. The call waits for the report (a few minutes); if the dog is still working it returns a job id for pound_wait. " +
+        "Several calls at once run side by side; never give two dogs the same files.",
+      inputSchema: {
+        role: z.enum(["coder", "reviewer", "tester", "researcher"]).describe("Which dog"),
+        task: z.string().describe("The brief, complete on its own"),
+      },
+    },
+    async ({ role, task }) => {
+      const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+      const { pound, sid } = await poundCaller();
+      if (!sid) return text("BitBull couldn't tell which chat is asking (several are running at once), so nothing was handed out. Try again, or do the work yourself.");
+      const r = pound.startJob({ parentId: sid, role, task });
+      if (!r.ok) return text(r.text);
+      return text(await pound.waitJob(r.job));
+    },
+  );
+  server.registerTool(
+    "pound_wait",
+    {
+      title: "Wait for a Dog Pound job",
+      description: "Get the result of a pound_delegate call that was still running: pass its job id. Waits a few minutes at most; call again if it is still working.",
+      inputSchema: { job: z.string().describe("The job id pound_delegate gave, e.g. job_1a2b3c4d") },
+    },
+    async ({ job }) => {
+      const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
+      const { pound, sid } = await poundCaller();
+      const j = pound.getJob(job.trim());
+      // a job belongs to the chat that handed it out
+      if (!j || (sid && j.parentId !== sid)) return text(`There is no job "${job}" for this chat (results are kept for a few hours).`);
+      return text(await pound.waitJob(j));
+    },
+  );
+
   server.registerTool(
     "ditto_review",
     {

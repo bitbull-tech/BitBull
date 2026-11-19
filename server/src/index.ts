@@ -55,6 +55,7 @@ import { linksAvailable, listLinks } from "./links.js";
 import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote, findRepos } from "./repos.js";
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
 import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
+import { alphaModel, jobsFor, poundFor, ROLE_INFO, ROLES, setPound } from "./pound.js";
 import { benchState, startBench } from "./houndBench.js";
 import { disconnect as saygmDisconnect, finishConnect as saygmFinish, SAYGM_CALLBACK, saygmConnectState, startConnect as saygmConnect } from "./saygmConnect.js";
 import { probeModel } from "./modelProbe.js";
@@ -835,7 +836,8 @@ app.post("/api/sessions", async (c) => {
     .parse(await c.req.json().catch(() => ({})));
   const s = sessions.create({
     engine: (body.engine ?? config.agent.defaultEngine) as EngineId,
-    model: body.model ?? config.agent.defaultModel,
+    // a chat in a project with a Dog Pound starts on the Alpha Dog's model unless one was asked for
+    model: body.model ?? alphaModel(body.projectId) ?? config.agent.defaultModel,
     title: body.title,
     projectId: body.projectId && projects.get(body.projectId) ? body.projectId : null,
   });
@@ -1130,6 +1132,23 @@ app.post("/api/swarm", async (c) => {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
   }
 });
+// The Dog Pound: a project's dogs and the model each runs on (pound.ts)
+app.get("/api/projects/:id/pound", (c) => {
+  const p = projects.get(c.req.param("id"));
+  if (!p) return c.json({ error: "project not found" }, 404);
+  return c.json({ pound: poundFor(p.id), roles: ROLES.map((id) => ({ id, ...ROLE_INFO[id] })) });
+});
+app.put("/api/projects/:id/pound", async (c) => {
+  const p = projects.get(c.req.param("id"));
+  if (!p) return c.json({ error: "project not found" }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const pound = setPound(p.id, body);
+  record({ level: "info", source: "config", message: `Dog Pound ${pound.enabled ? "on" : "off"} for ${p.name}${pound.enabled ? `: ${ROLES.filter((r) => pound.models[r]).map((r) => `${ROLE_INFO[r].label} ${pound.models[r]}`).join(", ") || "no models chosen"}` : ""}` });
+  return c.json({ pound });
+});
+/** What this chat's dogs are doing and what they have cost. */
+app.get("/api/sessions/:id/pound", (c) => c.json({ jobs: jobsFor(c.req.param("id")) }));
+
 // The model benchmark behind "approval-grade" (houndBench.ts)
 app.get("/api/hound/bench", (c) => c.json(benchState()));
 app.post("/api/hound/bench", async (c) => {

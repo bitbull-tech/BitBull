@@ -1,4 +1,5 @@
 import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
+import { PoundStrip } from './Pound'
 import { HoundFindings, houndProject, parseHoundBlock } from './HoundFindings'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -104,6 +105,7 @@ export function Chat({
   onTurnDone,
   onPickModel,
   models,
+  onOpenChat,
 }: {
   session: Session | null
   project: Project | null
@@ -117,6 +119,8 @@ export function Chat({
   onPickModel?: (id: string) => void
   /** every model on offer, for "try again on another model" */
   models?: Model[]
+  /** open another chat by id (a Dog Pound dog's) */
+  onOpenChat?: (sessionId: string) => void
 }) {
   houndProject.id = project?.id ?? 'general'
   const [msgs, setMsgs] = useState<ViewMessage[]>([])
@@ -515,6 +519,7 @@ export function Chat({
       </div>
 
       <div className="composer-wrap">
+        {session && project && <PoundStrip sessionId={session.id} busy={busy} onOpen={onOpenChat} />}
         {notice && (
           <div className="notice">
             {notice}

@@ -8,6 +8,7 @@ import { SwarmTheatre } from './SwarmTheatre'
 import { onThisPc, vaultKeyFromThisPc } from './linkHelper'
 import { IconChevronRight, IconBranch, IconFolder, IconFolderMove, IconMenu, IconMoon, IconMore, IconPencil, IconPlus, IconSearch, IconSettings, IconSun, IconTrash, IconX, IconChip, IconArchive, IconUnarchive, IconCheck, IconHelp, IconClock, IconBars } from './icons'
 import { ProjectDialog } from './ProjectDialog'
+import { PoundDialog, POUND_ROLES } from './Pound'
 import { FilesDialog } from './FilesDialog'
 import { HelpDialog, showHelpPage } from './HelpDialog'
 import { SchedulesDialog } from './SchedulesDialog'
@@ -235,7 +236,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [helpOpen, setHelpOpen] = useState(false)
   const [schedulesOpen, setSchedulesOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
-  const [projectDialog, setProjectDialog] = useState<Project | 'new' | null>(null)
+  const [projectDialog, setProjectDialog] = useState<Project | 'new' | 'new-pound' | null>(null)
+  // the Dog Pound of a project (Pound.tsx); 'mixed' = just created as a Dog Pound project
+  const [poundFor, setPoundFor] = useState<{ project: Project; startWith?: 'mixed' } | null>(null)
   // Files dialog: a project, or 'general' for the workspace of unfiled chats
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
   const [filesDir, setFilesDir] = useState('')
@@ -349,6 +352,12 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   }, [])
 
   const newChat = (projectId: string | null = null) => {
+    // a project with a Dog Pound starts its chats on the Alpha Dog's model
+    if (projectId)
+      void api
+        .pound(projectId)
+        .then((r) => r.pound.enabled && r.pound.models.alpha && setModel(r.pound.models.alpha))
+        .catch(() => {})
     setActiveId(null)
     setDraftProjectId(projectId)
     if (projectId) setExpand(projectId, true)
@@ -384,6 +393,13 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     if (s) openSession(s)
   }
 
+  /** A chat by id, which may not be in the list yet (a Dog Pound dog's chat, made by the server). */
+  const openById = async (id: string) => {
+    const s = (await guard(api.session(id)))?.session
+    if (!s) return
+    await refreshSessions()
+    openSession(s)
+  }
   const openSession = (s: Session) => {
     setActiveId(s.id)
     setViewKey(s.id)
@@ -681,6 +697,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         <nav className="sessions">
           <div className="section-head">
             <span>Projects</span>
+            <button className="icon-btn sm pound-new" title="New Dog Pound project: a team of dogs, each on the model you choose for the job" onClick={() => setProjectDialog('new-pound')}>
+              <img src={POUND_ROLES[0].head} width={18} height={18} alt="New Dog Pound project" draggable={false} />
+            </button>
             <button className="icon-btn sm" title="New project" onClick={() => setProjectDialog('new')}>
               <IconPlus size={14} />
             </button>
@@ -809,7 +828,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             {currentProject && (
               <button className="crumb" onClick={() => setProjectDialog(currentProject)} title="Project settings">
                 <span className={`pdot pc-${currentProject.color}`} />
-                {currentProject.name}
+                <span className="crumb-name">{currentProject.name}</span>
                 <span className="crumb-sep">/</span>
               </button>
             )}
@@ -863,6 +882,11 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               <IconSearch size={14} /> QA Hound
             </button>
           )}
+          {currentProject && (
+            <button className="btn files-btn pound-btn" aria-label="Dog Pound" title="Dog Pound: this project's team of dogs and the model each one runs on" onClick={() => setPoundFor({ project: currentProject })}>
+              <img src={POUND_ROLES[0].head} width={16} height={16} alt="" draggable={false} /> <span className="pound-btn-label">Dog Pound</span>
+            </button>
+          )}
           <ModelPicker models={models} value={model} onChange={setModel} />
         </header>
         <div className="chat-row">
@@ -881,6 +905,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             }}
             onPickModel={setModel}
             models={models}
+            onOpenChat={(id) => void openById(id)}
           />
           {resOpen ? (
             <ResourcesPanel
@@ -1026,6 +1051,9 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           <button onClick={() => (setCtx(null), newChat(ctx.p.id))}>
             <IconPlus size={14} /> New chat in {ctx.p.name}
           </button>
+          <button onClick={() => (setCtx(null), setPoundFor({ project: ctx.p }))}>
+            <img className="ctx-dog" src={POUND_ROLES[0].head} width={14} height={14} alt="" draggable={false} /> Dog Pound
+          </button>
           <button onClick={() => (setCtx(null), setReposFor(ctx.p))}>
             <IconBranch size={14} /> Repositories
           </button>
@@ -1085,14 +1113,32 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
           </button>
         </div>
       )}
+      {poundFor && (
+        <PoundDialog
+          project={poundFor.project}
+          models={models}
+          defaultModel={model || cfg.defaultModel}
+          startWith={poundFor.startWith}
+          onClose={() => setPoundFor(null)}
+          onSaved={(p) => {
+            // chats not started yet in this project go on the Alpha Dog's model
+            if (p.enabled && p.models.alpha && !active && draftProjectId === poundFor.project.id) setModel(p.models.alpha)
+            setPoundFor(null)
+          }}
+        />
+      )}
       {projectDialog && (
         <ProjectDialog
-          project={projectDialog === 'new' ? null : projectDialog}
+          project={projectDialog === 'new' || projectDialog === 'new-pound' ? null : projectDialog}
+          pound={projectDialog === 'new-pound'}
+          onOpenPound={(p) => (setProjectDialog(null), setPoundFor({ project: p }))}
           onClose={() => setProjectDialog(null)}
-          onSaved={(p) => {
+          onSaved={(p, withPound) => {
+            const isNew = projectDialog === 'new' || projectDialog === 'new-pound'
             setProjectDialog(null)
             void refreshProjects()
-            if (projectDialog === 'new') newChat(p.id)
+            if (isNew) newChat(p.id)
+            if (isNew && withPound) setPoundFor({ project: p, startWith: 'mixed' })
           }}
           onDeleted={(id) => {
             setProjectDialog(null)

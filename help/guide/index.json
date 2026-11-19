@@ -49,8 +49,8 @@
   },
   {
     "slug": "qa-hound",
-    "title": "QA Hound and subagents",
-    "description": "Set several models on a repo to review it and argue it out.",
+    "title": "QA Hound, Dog Pound and subagents",
+    "description": "Set several models on a repo to review it, give each job in a project its own model, and run untrusted code in a Cathedral sandbox.",
     "order": 9
   },
   {

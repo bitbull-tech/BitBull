@@ -225,6 +225,30 @@ a key that can spend money and a destination files and commands can be sent to.
 - **Receipts.** `verify` reports Cathedral's own checks. The AMD SEV-SNP report, AMD's certificate
   chain and the approved build are checked only by the offline verifier (`ctcli receipt verify`).
 
+### R14: The Dog Pound (only in projects that switch it on)
+`server/src/pound.ts`, the `pound_delegate` and `pound_wait` tools on BitBull's MCP route. One chat
+(the Alpha Dog) hands tasks to other models, which BitBull runs as turns of their own.
+- **No new reach.** A dog is an ordinary turn in the same project workspace, behind the same
+  sandbox, egress proxy and key-hiding as any chat. Read-only dogs (Review, Dig) run in plan mode:
+  no edits, no shell, no MCP tools, enforced by the engine rather than by their prompt.
+- **More models read the workspace.** Whatever is in the project's workspace is sent to each
+  chosen model's provider, as it already is for the chat's own model. Choosing a model for a dog
+  is choosing to send it that project's files.
+- **Injection travels in reports.** A dog that read a hostile file can write a report meant to
+  steer the Alpha Dog. Reports are fenced and labelled as another model's account, and the tag
+  can't be closed from inside; that lowers the risk, it doesn't remove it. The Alpha Dog has the
+  tools of an ordinary chat, no more.
+- **No handing on.** In a dog's turn the pound's tools and OpenCode's `task` are off, and
+  `startJob` refuses a chat it knows to be a dog. That knowledge is in memory: after a restart a
+  dog's old chat is an ordinary chat.
+- **Who is asking.** On OpenCode the tool call carries no chat id, so BitBull takes the only
+  running chat that isn't a dog; with several running it refuses. Within R1, an agent that reads
+  the startup token could call the tool as another chat of the same install.
+- **Spend.** Bounded by four running jobs per chat and a time limit per dog, not by a budget.
+  Unattended runs (schedules, Telegram) can use a project's pound, and the dogs inherit
+  "unattended", so they can't raise approval cards either.
+- **Two writers.** Nothing locks files between dogs working at once.
+
 ## If you fork or change `.env` / `allowlist.txt`
 
 - `ALLOW_NO_AUTH=true` removes **all** authentication — combine it with a tunnel or a

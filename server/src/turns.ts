@@ -15,6 +15,7 @@ import { turnEvents, turns, type SessionRow, type TurnStatus } from "./db.js";
 import type { AgentEvent } from "./engines/types.js";
 import { record } from "./activity.js";
 import { cancelCreates } from "./cathedral.js";
+import { cancelPound } from "./pound.js";
 
 export type { TurnStatus };
 export interface TurnRecord {
@@ -138,7 +139,7 @@ function finish(t: LiveTurn, status: TurnStatus) {
  */
 export function startTurn(
   session: SessionRow,
-  input: { prompt: string; model: string; attachments?: string[]; plan?: boolean; /** nobody is at the screen (schedule, Telegram) */ unattended?: boolean; /** QA Hound reviewer allowed its run's sealed room (RunInput.reviewSandbox) */ reviewSandbox?: boolean },
+  input: { prompt: string; model: string; attachments?: string[]; plan?: boolean; /** nobody is at the screen (schedule, Telegram) */ unattended?: boolean; /** QA Hound reviewer allowed its run's sealed room (RunInput.reviewSandbox) */ reviewSandbox?: boolean; /** a Dog Pound dog at work: it can't hand work on */ noDelegate?: boolean },
 ): { turnId: string; status: TurnStatus; created: boolean } {
   const existing = activeBySession.get(session.id);
   if (existing) return { turnId: existing, status: "running", created: false };
@@ -162,7 +163,7 @@ export function startTurn(
   void (async () => {
     let status: TurnStatus = "done";
     try {
-      for await (const ev of runTurn(session, input.prompt, input.model, input.attachments ?? [], { plan: input.plan, unattended: input.unattended, reviewSandbox: input.reviewSandbox })) {
+      for await (const ev of runTurn(session, input.prompt, input.model, input.attachments ?? [], { plan: input.plan, unattended: input.unattended, reviewSandbox: input.reviewSandbox, noDelegate: input.noDelegate })) {
         if (ev.type === "error") status = "error";
         emit(t, ev);
       }
@@ -190,6 +191,7 @@ export function abortTurn(sessionId: string) {
   }
   abortRun(sessionId);
   cancelCreates(sessionId);
+  cancelPound(sessionId);
   return !!id;
 }
 

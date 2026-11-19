@@ -1524,3 +1524,66 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .probe.gateway { border-left-color: var(--ok); }
 .probe.bitbull, .probe.key { border-left-color: var(--bad); }
 .probe ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ---------- Dog Pound (Pound.tsx) ---------- */
+.pound-modal { width: min(760px, 96vw); }
+.pound-for { font-weight: 400; font-size: 0.8em; }
+.pound-body { display: flex; flex-direction: column; gap: 12px; }
+.pound-lede { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.5; }
+.pound-rows { display: flex; flex-direction: column; gap: 10px; }
+.pound-rows.off { opacity: 0.5; pointer-events: none; }
+.pound-presets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.btn.sm { padding: 4px 9px; font-size: 12.5px; }
+.pound-row { display: grid; grid-template-columns: 64px minmax(120px, 1fr) minmax(0, 1.6fr); gap: 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.pound-row.out { background: transparent; }
+.pound-row.out .pound-head { filter: grayscale(1); opacity: 0.55; }
+.pound-head { border-radius: 12px; background: var(--panel); border: 1px solid var(--line); object-fit: cover; }
+.pound-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pound-who small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.pound-pick { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pound-pick small { font-size: 11.5px; line-height: 1.35; }
+.pound-pick-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pound-nodog { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 1px dashed var(--line-2); }
+.pound-select { flex: 1; min-width: 0; padding: 7px 8px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+.pound-ok { color: var(--ok); }
+.pound-warn { color: var(--warn); }
+.pound-new img, .pound-btn img, .ctx-dog { border-radius: 50%; object-fit: cover; }
+.pound-btn { display: inline-flex; align-items: center; gap: 6px; }
+.pound-strip { border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); margin-bottom: 8px; overflow: hidden; }
+.pound-strip-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; background: none; border: 0; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.pound-strip-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 8px; max-height: 132px; overflow-y: auto; }
+.pound-run { display: flex; align-items: center; gap: 8px; flex: none; padding: 5px 9px 5px 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.pound-run:hover { border-color: var(--muted); }
+.pound-run img { border-radius: 8px; object-fit: cover; }
+.pound-run-text, .pound-run-state { display: flex; flex-direction: column; gap: 1px; }
+.pound-run-text small { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pound-run-state { align-items: flex-end; color: var(--text-2); }
+.pound-run-state small { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+.pound-run.error .pound-run-state { color: var(--bad); }
+.pound-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px; animation: pound-pulse 1.2s ease-in-out infinite; }
+.pound-run-state { flex-direction: column; }
+@keyframes pound-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .pound-dot { animation: none; } }
+@media (max-width: 620px) { .pound-row { grid-template-columns: 48px 1fr; } .pound-row .pound-pick { grid-column: 1 / -1; } .pound-head { width: 48px; height: 48px; } }
+.pound-body .int-row { display: flex; }
+.pound-body .int-row input { flex: none; }
+/* The top bar never lets its buttons sit on top of the title: the title keeps room and shortens with
+   an ellipsis, and when there is no room left the buttons go to a second line. */
+.topbar { flex-wrap: wrap; row-gap: 6px; }
+.topbar-title { flex: 1 1 180px; min-width: 150px; overflow: hidden; align-items: center; }
+.topbar-title .crumb { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-title .title-btn { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 1500px) { .pound-btn-label { display: none; } .pound-btn { padding: 0 8px; } }
+.pound-who b, .pound-run-text b { overflow-wrap: anywhere; }
+.pound-run { max-width: 100%; min-width: 0; }
+.pound-run-text { min-width: 0; }
+.pound-run-text small { max-width: 160px; }
+.pound-run-text small > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pound-run-text small > img { flex: none; }
+.pound-run-state { flex: none; white-space: nowrap; }
+.pound-strip-head { min-width: 0; }
+.pound-strip-head .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pound-select { text-overflow: ellipsis; }
+.pound-run-word { display: inline-flex; align-items: center; white-space: nowrap; }
+.topbar-title .crumb > .pdot, .topbar-title .crumb > .crumb-sep { flex: none; }
+.crumb-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

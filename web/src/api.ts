@@ -538,6 +538,30 @@ export interface ModelProbe {
   side: 'gateway' | 'bitbull' | 'key' | 'network' | 'unclear'
 }
 
+/** The Dog Pound (server/src/pound.ts): a project's dogs and the model each one runs on */
+export type PoundRole = 'alpha' | 'coder' | 'reviewer' | 'tester' | 'researcher'
+export interface PoundConfig {
+  enabled: boolean
+  /** '' = not in this pound (for alpha: whatever model the chat is on) */
+  models: Record<PoundRole, string>
+  separateChats: boolean
+  autoReview: boolean
+}
+export interface PoundRoleInfo {
+  id: PoundRole
+  label: string
+  does: string
+  access: 'read' | 'write'
+}
+export interface PoundJob {
+  id: string
+  role: PoundRole
+  task: string
+  startedAt: number
+  finishedAt: number | null
+  runs: Array<{ role: PoundRole; label: string; model: string; sessionId: string; status: 'running' | 'done' | 'error' | 'stopped'; costUsd: number; ms: number; error?: string }>
+}
+
 /** QA Hound's model benchmark (server/src/houndBench.ts): which models may be behind an approval */
 export interface HoundBench {
   version: number
@@ -755,6 +779,9 @@ export const api = {
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
   swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),
   houndBench: () => req<HoundBench>('/api/hound/bench'),
+  pound: (projectId: string) => req<{ pound: PoundConfig; roles: PoundRoleInfo[] }>(`/api/projects/${projectId}/pound`),
+  savePound: (projectId: string, pound: PoundConfig) => req<{ pound: PoundConfig }>(`/api/projects/${projectId}/pound`, { method: 'PUT', body: JSON.stringify(pound) }),
+  poundJobs: (sessionId: string) => req<{ jobs: PoundJob[] }>(`/api/sessions/${sessionId}/pound`),
   startHoundBench: (model: string) => req<HoundBench & { ok: boolean; message: string }>('/api/hound/bench', { method: 'POST', body: JSON.stringify({ model }) }),
   houndQuotes: (projectId: string, items: Array<{ path: string; line?: number; quote?: string }>) =>
     req<{ results: Array<{ evidence: 'verified' | 'mismatch' | 'none'; line?: number }> }>(`/api/projects/${projectId}/hound/quotes`, { method: 'POST', body: JSON.stringify({ items }) }),

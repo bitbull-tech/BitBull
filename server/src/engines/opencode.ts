@@ -438,7 +438,7 @@ function channel<T>() {
  * The per-prompt tools map. question needs an interactive answer this UI can't give yet;
  * integrations are off unless the project enables them.
  */
-export function promptTools(o: { plan?: boolean; reviewSandbox?: boolean; enabledMcp: string[]; integrationIds: string[]; routerMcp: string[] }): Record<string, boolean> {
+export function promptTools(o: { plan?: boolean; reviewSandbox?: boolean; noDelegate?: boolean; enabledMcp: string[]; integrationIds: string[]; routerMcp: string[] }): Record<string, boolean> {
   const enabled = new Set(o.enabledMcp);
   return {
     question: false,
@@ -464,6 +464,8 @@ export function promptTools(o: { plan?: boolean; reviewSandbox?: boolean; enable
     // "cathedral_*": false above. Only when the project has Cathedral switched on.
     // Everywhere else it is off, including ordinary chats in a Cathedral project.
     cathedral_review_exec: !!(o.plan && o.reviewSandbox && enabled.has("cathedral")),
+    // A Dog Pound dog works on its own task and can't hand it on (pound.ts refuses too, when it can tell who asks).
+    ...(o.noDelegate ? { bitbull_pound_delegate: false, bitbull_pound_wait: false, task: false } : {}),
   };
 }
 
@@ -674,6 +676,7 @@ export const opencodeEngine: AgentEngine = {
           tools: promptTools({
             plan: input.plan,
             reviewSandbox: input.reviewSandbox,
+            noDelegate: input.noDelegate,
             enabledMcp: Object.keys(input.mcp),
             integrationIds: integrations().map((i) => i.id),
             routerMcp: s.mcp.map((m) => m.name),
