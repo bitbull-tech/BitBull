@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { config, paths, type EngineId } from "./config.js";
-import { messages, projects, sessions, workspaceFor, type SessionRow } from "./db.js";
+import { db, messages, projects, sessions, workspaceFor, type SessionRow } from "./db.js";
 import { abortTurn, activeTurnId, collectTurn, snapshot, startTurn } from "./turns.js";
-import { record } from "./activity.js";
-import type { AgentEvent, Usage } from "./engines/types.js";
+import { record, redact } from "./activity.js";
+import { isTransientFailure, type AgentEvent, type Usage } from "./engines/types.js";
+import { familyOf } from "./models.js";
 import { estimateCost } from "./models.js";
 import { findRepos, inspectRepo } from "./repos.js";
 import { headChecks, openPrFor, parseGithubRemote, postReview, prFiles, type GhRepo, type OpenPr } from "./github.js";
@@ -65,6 +66,15 @@ export interface SwarmReviewer {
   /** its own recommendation: before reading the other reviewer, and after the challenge round */
   initial?: Verdict;
   final?: Verdict;
+  /** its report was carried over from the run this one picks up from (not paid for twice) */
+  kept?: boolean;
+}
+
+/** One line of a run's own log: what happened and when, in words the owner can act on. */
+export interface RunLine {
+  at: number;
+  level: "info" | "warn" | "error";
+  text: string;
 }
 
 export interface Swarm {
@@ -88,6 +98,13 @@ export interface Swarm {
   stopped?: string;
   /** the owner pressed Stop: reviewers are halted and no verdict is written */
   stopAsked?: boolean;
+  /** what happened, in order: stages, retries, what failed and why (also in the Activity log) */
+  log: RunLine[];
+  /** the run this one picks up from, and the one that picked up from this */
+  resumedFrom?: string;
+  resumedBy?: string;
+  /** when it failed: what kind of failure, in a word the UI can act on */
+  cause?: "network" | "model" | "budget" | "time" | "stopped" | "restart" | "other";
   verdict?: Verdict;
   /** the handler's findings, each shown or held back with the reason */
   findings?: Finding[];
@@ -134,7 +151,117 @@ const REVIEWER_SHARE = 0.75;
 const REVIEWER_TIME = 0.8;
 
 const swarms = new Map<string, Swarm>();
-const KEEP_MS = 6 * 60 * 60 * 1000;
+/** Runs are kept (reports and all) so one that failed can be picked up again, also after a restart. */
+const KEEP_MS = 14 * 24 * 60 * 60 * 1000;
+const KEEP_RUNS = 40;
+const RUN_KEY = "hound_run:";
+
+function saveRun(s: Swarm) {
+  try {
+    const { changed: _c, ...rest } = s;
+    const row = { ...rest, reviewers: s.reviewers.map(({ turnId: _t, ...r }) => r) };
+    db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(RUN_KEY + s.id, JSON.stringify(row));
+  } catch (e) {
+    console.warn(`[swarm] couldn't save run ${s.id}: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+/** At start-up: bring saved runs back. One that was still going when BitBull stopped is marked as cut off, ready to pick up. */
+export function loadRuns(): number {
+  let rows: Array<{ key: string; value: string }> = [];
+  try {
+    rows = db.prepare("SELECT key, value FROM meta WHERE key LIKE ?").all(`${RUN_KEY}%`) as Array<{ key: string; value: string }>;
+  } catch {
+    return 0;
+  }
+  const all: Swarm[] = [];
+  for (const row of rows) {
+    try {
+      const s = JSON.parse(row.value) as Swarm;
+      if (!s?.id || !Array.isArray(s.reviewers)) throw new Error("not a run");
+      s.log = Array.isArray(s.log) ? s.log : [];
+      if (s.phase !== "done" && s.phase !== "error") {
+        s.phase = "error";
+        s.cause = "restart";
+        s.error = "BitBull was restarted while this review was running.";
+        s.finishedAt ??= Date.now();
+        for (const r of s.reviewers) {
+          if (r.status === "done" || r.status === "error") continue;
+          r.status = r.report ? "done" : "error";
+          if (!r.report) r.error ??= "cut off by the restart";
+        }
+        s.log.push({ at: Date.now(), level: "error", text: "Cut off: BitBull was restarted while this review was running. Reports already written are kept; pick up again to finish." });
+        saveRun(s);
+      }
+      all.push(s);
+    } catch {
+      db.prepare("DELETE FROM meta WHERE key = ?").run(row.key);
+    }
+  }
+  all.sort((a, b) => b.startedAt - a.startedAt);
+  const cutoff = Date.now() - KEEP_MS;
+  all.forEach((s, i) => {
+    if (i >= KEEP_RUNS || s.startedAt < cutoff) db.prepare("DELETE FROM meta WHERE key = ?").run(RUN_KEY + s.id);
+    else swarms.set(s.id, s);
+  });
+  return swarms.size;
+}
+
+/** Say it in the run's own log and in the Activity log. */
+function note(s: Swarm, level: RunLine["level"], text: string) {
+  const line = redact(text).slice(0, 600);
+  s.log.push({ at: Date.now(), level, text: line });
+  if (s.log.length > 300) s.log.splice(0, s.log.length - 300);
+  record({ level, source: "swarm", sessionId: s.sessionId, message: `QA Hound: ${line}` });
+}
+
+/** Can BitBull reach its model gateway right now? Any answer at all counts; no answer does not. */
+let reach: () => Promise<boolean> = async () => {
+  try {
+    await fetch(`${config.saygm.openaiBaseUrl}/models`, { method: "GET", headers: { authorization: `Bearer ${config.saygm.apiKey}` }, signal: AbortSignal.timeout(8000) });
+    return true;
+  } catch {
+    return false;
+  }
+};
+/** How long a stage waits for the connection to come back before it is tried again, and how often it is tried. */
+let NET_WAIT_MS = 5 * 60_000;
+let NET_POLL_MS = 10_000;
+export const STAGE_RETRIES = 2;
+/** Tests: a stand-in for the network check, and no real waiting. */
+export function _setSwarmNet(fn: () => Promise<boolean>, waitMs = 50, pollMs = 5) {
+  reach = fn;
+  NET_WAIT_MS = waitMs;
+  NET_POLL_MS = pollMs;
+}
+async function waitForNetwork(until: number): Promise<boolean> {
+  const end = Math.min(until, Date.now() + NET_WAIT_MS);
+  for (;;) {
+    if (await reach()) return true;
+    if (Date.now() + NET_POLL_MS > end) return false;
+    await new Promise((r) => setTimeout(r, NET_POLL_MS));
+  }
+}
+
+/** What kind of failure this was, for the log and for what the window offers next. */
+export function causeOf(s: Pick<Swarm, "stopAsked" | "stopped">, error: string | undefined): NonNullable<Swarm["cause"]> {
+  if (s.stopAsked) return "stopped";
+  if (/budget/i.test(`${s.stopped ?? ""} ${error ?? ""}`)) return "budget";
+  if (/minute limit|time limit/i.test(`${s.stopped ?? ""} ${error ?? ""}`)) return "time";
+  if (/restart/i.test(error ?? "")) return "restart";
+  if (/\b(40[1-4])\b|refused the request|rejected the (api|endpoint) key|isn't allowed|doesn't know the model|isn't served/i.test(error ?? "")) return "model";
+  if (isTransientFailure(error)) return "network";
+  return "other";
+}
+const CAUSE_ADVICE: Record<NonNullable<Swarm["cause"]>, string> = {
+  network: "The connection to the model dropped and didn't come back in time. Nothing is wrong with the review itself: pick up again and it carries on from the reports already written.",
+  model: "A model refused the request (its key, your balance, or the model itself). Pick up again with a different model for that seat.",
+  budget: "The budget ran out. Pick up again: it gets a fresh budget for what is left to do.",
+  time: "The time limit ran out. Pick up again: it gets a fresh time limit for what is left to do.",
+  stopped: "You stopped it. Pick up again when you want it finished.",
+  restart: "BitBull was restarted mid-review. Pick up again: the reports already written are kept.",
+  other: "Pick up again with the same models, or change the one that failed.",
+};
 
 /**
  * The owner's Stop. The run's own watcher (every two seconds) halts whatever is running; nothing
@@ -171,6 +298,30 @@ export function countFindings(report: string | undefined): { total: number; seri
 export function getSwarm(id: string) {
   return swarms.get(id);
 }
+/**
+ * Pick a failed run up again: same target, areas and settings, with a fresh budget and time limit.
+ * A reviewer seat that keeps its model keeps the report it had finished; a seat given another
+ * model, or whose reviewer failed, runs again. The verdict can go to another model too.
+ */
+export function resumeSwarm(id: string, pick: { models?: string[]; primaryModel?: string } = {}): Swarm {
+  const from = swarms.get(id);
+  if (!from) throw new Error("That review isn't on record any more (they are kept for two weeks). Start a new one.");
+  if (from.phase !== "error") throw new Error(from.phase === "done" ? "That review finished: there is nothing to pick up." : "That review is still running.");
+  if (from.resumedBy && swarms.get(from.resumedBy)) throw new Error("That review has already been picked up.");
+  const session = sessions.get(from.sessionId);
+  if (!session) throw new Error("The chat that review was started from has been deleted. Start a new one.");
+  const models = from.reviewers.map((r, i) => (pick.models?.[i] ?? "").trim() || r.model);
+  if (new Set(models).size !== models.length) throw new Error("The two reviewers must be different models.");
+  const primaryModel = (pick.primaryModel ?? "").trim() || from.primaryModel;
+  // the verdict is a turn in that chat, on that chat's engine
+  if (session.engine === "claude" && primaryModel !== session.model && familyOf(primaryModel) !== "anthropic" && !primaryModel.startsWith("ditto-router/"))
+    throw new Error(`The verdict is written in a chat that runs on the Claude engine, which can't use ${primaryModel}. Choose a Claude model for the verdict.`);
+  return startSwarm({ sessionId: from.sessionId, target: from.target, models, focus: from.focus, options: from.options }, { from, primaryModel });
+}
+
+/** A run that failed and hasn't been picked up yet can be. */
+export const resumable = (s: Swarm) => s.phase === "error" && !s.resumedBy;
+
 export function listSwarms(sessionId?: string) {
   return [...swarms.values()].filter((s) => !sessionId || s.sessionId === sessionId).sort((a, b) => b.startedAt - a.startedAt);
 }
@@ -256,6 +407,8 @@ export function publicSwarm(s: Swarm) {
   const { changed: _changed, ...rest } = s;
   return {
     ...rest,
+    resumable: resumable(s),
+    advice: s.phase === "error" ? CAUSE_ADVICE[s.cause ?? "other"] : undefined,
     reviewers: s.reviewers.map(({ report, rebuttal, filesRead, ...r }) => {
       // initial and final (its own recommendation in each round) go out with the rest
       const live = liveEffort(r.turnId);
@@ -304,6 +457,12 @@ function textOf(events: Awaited<ReturnType<typeof collectTurn>>["events"]) {
   return text.trim();
 }
 
+/** Why a turn failed: its last real error, or failing that the last retry notice. */
+function lastError(events: Awaited<ReturnType<typeof collectTurn>>["events"]): string | undefined {
+  const errs = events.map((e) => e.event).filter((e): e is Extract<AgentEvent, { type: "error" }> => e.type === "error");
+  return (errs.filter((e) => !e.transient).at(-1) ?? errs.at(-1))?.message;
+}
+
 async function runIn(
   session: SessionRow,
   prompt: string,
@@ -317,8 +476,7 @@ async function runIn(
   const { turnId } = startTurn(session, { prompt, model, plan: true, reviewSandbox });
   onTurn?.(turnId);
   const { events, status } = await collectTurn(turnId);
-  const errors = events.filter((e) => e.event.type === "error").map((e) => (e.event as { message: string }).message);
-  return { text: textOf(events), ok: status === "done", error: errors.at(-1), effort: effortOf(events) };
+  return { text: textOf(events), ok: status === "done", error: lastError(events), effort: effortOf(events) };
 }
 
 /** startTurn returns the in-flight turn when a chat is busy — wait for a free slot (bounded). */
@@ -504,7 +662,14 @@ function finalPrompt(s: Swarm) {
   ].join("\n\n");
 }
 
-export function startSwarm(input: { sessionId: string; target: string; models: string[]; focus?: Focus[]; options?: Partial<Record<keyof HoundOptions, unknown>> }): Swarm {
+/** Picking a failed run up again: what it had finished is carried over, and only the rest is run. */
+export interface Carry {
+  from: Swarm;
+  /** the model for the verdict, when it is to change */
+  primaryModel?: string;
+}
+
+export function startSwarm(input: { sessionId: string; target: string; models: string[]; focus?: Focus[]; options?: Partial<Record<keyof HoundOptions, unknown>> }, carry?: Carry): Swarm {
   const session = sessions.get(input.sessionId);
   if (!session) throw new Error("unknown session");
   const project = session.project_id ? projects.get(session.project_id) : null;
@@ -536,32 +701,52 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
     projectId: session.project_id,
     target,
     focus,
-    primaryModel: session.model,
-    reviewers: models.map((model) => ({
-      model,
-      sessionId: sessions.create({
-        title: `QA Hound · ${path.basename(target) || target} · ${model}`,
-        engine: "opencode" as EngineId, // native for every SayGM model; the Claude engine is Anthropic-shape only
+    primaryModel: carry?.primaryModel || session.model,
+    reviewers: models.map((model, i): SwarmReviewer => {
+      // Picking up: a seat that keeps its model keeps the report it had finished, and its chat.
+      const old = carry?.from.reviewers[i];
+      if (old && old.model === model && old.report && old.status !== "error" && sessions.get(old.sessionId)) {
+        return { model, sessionId: old.sessionId, status: "done", toolCalls: old.toolCalls, filesRead: old.filesRead, report: old.report, initial: old.initial, final: old.initial, kept: true };
+      }
+      return {
         model,
-        projectId: session.project_id,
-      }).id,
-      status: "pending",
-      toolCalls: 0,
-      filesRead: [],
-    })),
+        sessionId: sessions.create({
+          title: `QA Hound · ${path.basename(target) || target} · ${model}`,
+          engine: "opencode" as EngineId, // native for every SayGM model; the Claude engine is Anthropic-shape only
+          model,
+          projectId: session.project_id,
+        }).id,
+        status: "pending",
+        toolCalls: 0,
+        filesRead: [],
+      };
+    }),
     phase: "review",
     startedAt: Date.now(),
     options,
     spentUsd: 0,
+    log: [],
+    resumedFrom: carry?.from.id,
   };
+  // The challenge round stands only if nothing it was about has changed: every seat kept, each with its rebuttal.
+  if (carry && s.reviewers.every((r) => r.kept) && carry.from.reviewers.every((r) => r.rebuttal)) {
+    s.reviewers.forEach((r, i) => ((r.rebuttal = carry.from.reviewers[i].rebuttal), (r.final = carry.from.reviewers[i].final)));
+  }
   swarms.set(s.id, s);
-  setTimeout(() => swarms.delete(s.id), KEEP_MS).unref();
-  record({
-    level: "info",
-    source: "swarm",
-    sessionId: session.id,
-    message: `QA Hound started on ${target}: ${models.join(" vs ")} · ${focus.join(", ")} · budget $${s.options.budgetUsd.toFixed(2)}, ${s.options.maxMinutes} min`,
-  });
+  if (carry) {
+    carry.from.resumedBy = s.id;
+    saveRun(carry.from);
+    const kept = s.reviewers.filter((r) => r.kept).map((r) => r.model);
+    note(
+      s,
+      "info",
+      `Picking up the review of ${target}. ${kept.length ? `Kept: the report${kept.length === 1 ? "" : "s"} from ${kept.join(" and ")}${s.reviewers.every((r) => r.rebuttal) ? ", and the challenge round" : ""}.` : "Nothing could be kept: both seats start again."} ` +
+        `Still to do: ${[s.reviewers.some((r) => !r.report) ? `review (${s.reviewers.filter((r) => !r.report).map((r) => r.model).join(", ")})` : "", s.reviewers.length > 1 && !s.reviewers.every((r) => r.rebuttal) ? "challenge" : "", `verdict (${s.primaryModel})`].filter(Boolean).join(", ")}. Fresh budget $${s.options.budgetUsd.toFixed(2)}, ${s.options.maxMinutes} min.`,
+    );
+  } else {
+    note(s, "info", `Started on ${target}: ${models.join(" vs ")} · ${focus.join(", ")} · budget $${s.options.budgetUsd.toFixed(2)}, ${s.options.maxMinutes} min. Verdict by ${s.primaryModel}.`);
+  }
+  saveRun(s);
 
   // Spend and time, enforced while turns run: every turn's running cost is read from its event
   // log (usage events as it goes, done at the end); over the line, the turns are stopped.
@@ -608,6 +793,34 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
   const timer = setInterval(() => void tick(), 2000);
   timer.unref();
 
+  const deadline = () => s.startedAt + o.maxMinutes * 60_000;
+  /**
+   * One reviewer turn. If it failed because the connection dropped (a locked screen, Wi-Fi, a VPN,
+   * the gateway restarting), wait for the connection to come back and give it the brief again, in
+   * the same chat. Anything else that fails, fails: a model that refuses is not asked twice.
+   */
+  const attempt = async (r: SwarmReviewer, rs: SessionRow, prompt: string, what: string) => {
+    const go = (p: string) => runIn(rs, p, r.model, (id) => (track(id, r.model), (r.turnId = id)), !!openRoom(s));
+    let out = await go(prompt);
+    for (let n = 1; n <= STAGE_RETRIES && !out.ok && !s.stopped && isTransientFailure(out.error); n++) {
+      // what the failed try did still counts as work done
+      forgetTally(r.turnId);
+      r.turnId = undefined;
+      r.toolCalls += out.effort.tools;
+      r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
+      note(s, "warn", `${r.model} lost its connection during the ${what} (${(out.error ?? "no reply").slice(0, 200)}). Waiting for the connection to come back, then trying again (${n} of ${STAGE_RETRIES}).`);
+      const t0 = Date.now();
+      if (!(await waitForNetwork(deadline()))) {
+        note(s, "error", `Still no connection to the model gateway after ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s, so ${r.model}'s ${what} was not tried again.`);
+        break;
+      }
+      if (s.stopped) break;
+      note(s, "info", `The connection is back after ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s. ${r.model} starts its ${what} again.`);
+      out = await go(`The connection dropped before you finished, so here is the brief again. Start over and complete it.\n\n${prompt}`);
+    }
+    return out;
+  };
+
   // sessions of the planted-defect test, so the budget and time limit stop them too
   const side: string[] = [];
   // Cathedral rooms for this run: the reviewers' confidential sandbox, and the clean-machine test
@@ -622,6 +835,8 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
     s.sandbox = pub;
     if (reviewRoom.sandboxId && !reviewRoom.deleted) s.sandboxError ??= reviewRoom.error ?? "the room was not deleted; it ends at its lifetime";
   };
+  let verdictError: string | undefined;
+  let verdictFailed = false;
   void (async () => {
     try {
       // The clean-machine test runs beside the review (no model needed). Its commands get no more
@@ -700,10 +915,12 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       // 1. independent reviews, in parallel
       await Promise.all(
         s.reviewers.map(async (r) => {
+          if (r.report) return; // carried over from the run this one picks up
           const rs = sessions.get(r.sessionId)!;
           r.status = "reviewing";
+          const t0 = Date.now();
           const others = s.reviewers.filter((x) => x !== r).map((x) => x.model);
-          const out = await runIn(rs, reviewPrompt(s, others), r.model, (id) => (track(id, r.model), (r.turnId = id)), !!openRoom(s));
+          const out = await attempt(r, rs, reviewPrompt(s, others), "review");
           forgetTally(r.turnId);
           r.turnId = undefined; // its totals are folded in below; don't count the same turn twice
           r.toolCalls += out.effort.tools;
@@ -715,21 +932,31 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
           if (!out.text || (!out.ok && !s.stopped)) {
             r.status = "error";
             r.error = out.error ?? "no output";
-            record({ level: "warn", source: "swarm", sessionId: session.id, message: `Reviewer ${r.model} failed in the review round: ${r.error}` });
+            note(s, "error", `${r.model} failed in the review round after ${Math.round((Date.now() - t0) / 1000)} s: ${r.error.slice(0, 300)}`);
+          } else {
+            const f = countFindings(r.report);
+            note(s, "info", `${r.model} finished its review in ${Math.round((Date.now() - t0) / 1000)} s: ${f ? `${f.total} finding${f.total === 1 ? "" : "s"}` : "no findings table"}${r.initial ? `, says ${r.initial}` : ""} (${r.filesRead.length} files read, ${r.toolCalls} tool calls).`);
           }
+          saveRun(s);
         }),
       );
       if (plantedRun) s.planted = await plantedRun;
       // 2. challenge round: each reads the others (skipped with a single reviewer)
       const alive = s.reviewers.filter((r) => r.status !== "error");
       await tick();
-      if (alive.length > 1 && !s.stopped) {
+      if (alive.length > 1 && !s.stopped && alive.every((r) => r.rebuttal)) {
+        note(s, "info", "The challenge round from before stands: nothing it was about has changed.");
+        for (const r of alive) r.status = "done";
+      } else if (alive.length > 1 && !s.stopped) {
         s.phase = "challenge";
+        note(s, "info", `Challenge round: ${alive.map((r) => r.model).join(" and ")} read each other's reports.`);
+        saveRun(s);
         await Promise.all(
           alive.map(async (r) => {
             const rs = sessions.get(r.sessionId)!;
             r.status = "challenging";
-            const out = await runIn(rs, challengePrompt(s, r, alive.filter((x) => x !== r)), r.model, (id) => (track(id, r.model), (r.turnId = id)), !!openRoom(s));
+            r.rebuttal = undefined;
+            const out = await attempt(r, rs, challengePrompt(s, r, alive.filter((x) => x !== r)), "challenge round");
             forgetTally(r.turnId);
             r.turnId = undefined;
             r.toolCalls += out.effort.tools;
@@ -737,7 +964,11 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
             r.rebuttal = out.text;
             r.final = parsePosition(out.text);
             r.status = out.text && (out.ok || s.stopped) ? "done" : "error";
-            if (r.status === "error") r.error = out.error ?? "no output";
+            if (r.status === "error") {
+              r.error = out.error ?? "no output";
+              note(s, "error", `${r.model} failed in the challenge round: ${r.error.slice(0, 300)}`);
+            } else note(s, "info", `${r.model} finished the challenge round${r.final ? `: says ${r.final}` : ""}.`);
+            saveRun(s);
           }),
         );
       } else {
@@ -752,49 +983,76 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       if (s.spentUsd >= o.budgetUsd * 0.95) throw new Error(`the $${o.budgetUsd.toFixed(2)} budget was used up before the verdict`);
       // 3. the primary handler's verdict, in the chat the swarm came from
       s.phase = "final";
+      note(s, "info", `Verdict: ${s.primaryModel} weighs ${s.reviewers.filter((r) => r.report).length === 1 ? "the report" : "both reports"}.`);
+      saveRun(s);
       const primary = sessions.get(session.id);
       if (!primary) throw new Error("the originating chat was deleted");
-      // startTurn piggy-backs on a busy chat's in-flight turn: wait for a free slot, or the
-      // verdict would silently never run (2026-11 audit). Bounded; the swarm stays resumable.
-      // The idle→start gap can still admit a user turn, so retry until the turn is truly ours.
-      let turnId = "";
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (!(await waitForIdle(primary.id, 10 * 60 * 1000))) throw new Error("the originating chat stayed busy; the verdict was not run");
-        const started = startTurn(primary, { prompt: finalPrompt(s), model: s.primaryModel });
-        if (started.created) {
-          turnId = started.turnId;
+      let status: Awaited<ReturnType<typeof collectTurn>>["status"] = "error";
+      let events: Awaited<ReturnType<typeof collectTurn>>["events"] = [];
+      for (let n = 0; ; n++) {
+        // startTurn piggy-backs on a busy chat's in-flight turn: wait for a free slot, or the
+        // verdict would silently never run (2026-11 audit). Bounded; the swarm stays resumable.
+        // The idle→start gap can still admit a user turn, so retry until the turn is truly ours.
+        let turnId = "";
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (!(await waitForIdle(primary.id, 10 * 60 * 1000))) throw new Error("the originating chat stayed busy; the verdict was not run");
+          const started = startTurn(primary, { prompt: n ? `The connection dropped before the verdict was finished, so here is the request again. Write the whole verdict.\n\n${finalPrompt(s)}` : finalPrompt(s), model: s.primaryModel });
+          if (started.created) {
+            turnId = started.turnId;
+            break;
+          }
+        }
+        if (!turnId) throw new Error("the originating chat stayed busy; the verdict was not run");
+        // the request is recorded as a user message so the chat reads naturally and history replays it
+        if (!n) messages.add({ session_id: primary.id, role: "user", content: `QA Hound on \`${target}\` (${models.join(" vs ")}): summarise and recommend.`, model: null, tools_json: null, usage_json: null });
+        s.finalTurnId = turnId;
+        track(turnId, s.primaryModel);
+        ({ status, events } = await collectTurn(turnId));
+        await tick();
+        const why = lastError(events);
+        if (status === "done" || s.stopped || n >= STAGE_RETRIES || !isTransientFailure(why)) {
+          if (status !== "done") verdictError = why;
           break;
         }
+        // The verdict is one model call at the end of a long run: a dropped connection here must not waste the reviews.
+        note(s, "warn", `The verdict lost its connection (${(why ?? "no reply").slice(0, 200)}). Waiting for the connection to come back, then trying again (${n + 1} of ${STAGE_RETRIES}).`);
+        const t0 = Date.now();
+        if (!(await waitForNetwork(deadline()))) {
+          note(s, "error", `Still no connection to the model gateway after ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s, so the verdict was not tried again.`);
+          verdictError = why;
+          break;
+        }
+        note(s, "info", `The connection is back after ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s. Writing the verdict again.`);
       }
-      if (!turnId) throw new Error("the originating chat stayed busy; the verdict was not run");
-      // the request is recorded as a user message so the chat reads naturally and history replays it
-      messages.add({ session_id: primary.id, role: "user", content: `QA Hound on \`${target}\` (${models.join(" vs ")}): summarise and recommend.`, model: null, tools_json: null, usage_json: null });
-      s.finalTurnId = turnId;
-      track(turnId, s.primaryModel);
-      const { status, events } = await collectTurn(turnId);
-      await tick();
       const parsed = parseFindings(textOf(events), s.options);
       s.verdict = parsed.verdict;
       // every finding's quote is looked up in the file it names; one that isn't there is held back
       s.findings = parsed.findings && verifyFindings(ws, rootsFor(ws, target), parsed.findings);
       if (s.findings) s.checks = [quotesCheck(s.findings)];
       s.phase = status === "done" ? "done" : "error";
-      if (status !== "done") s.error = s.stopped ? `verdict cut short: ${s.stopped}` : `final turn ${status}`;
+      if (status !== "done") {
+        s.error = s.stopped ? `The verdict was cut short: ${s.stopped}.` : `The verdict was not finished${verdictError ? `: ${verdictError.slice(0, 300)}` : ` (the turn ${status})`}.`;
+        s.cause = causeOf(s, verdictError ?? s.error);
+        note(s, "error", `${s.error} ${CAUSE_ADVICE[s.cause]}`);
+        verdictFailed = true;
+      } else note(s, "info", `Verdict written${s.verdict ? `: ${s.verdict}` : ""}${s.findings ? `, ${s.findings.filter((f) => f.shown).length} findings shown` : ""}.`);
       if (s.options.pr) await postToPr(s, ws).catch((e) => (s.prError = e instanceof Error ? e.message : String(e)));
     } catch (e) {
       s.phase = "error";
       s.error = e instanceof Error ? e.message : String(e);
-      record({ level: "error", source: "swarm", sessionId: session.id, message: `QA Hound failed: ${s.error}` });
+      // every reviewer failing is "why did they fail", not "nothing to summarise"
+      s.cause = causeOf(s, [s.error, ...s.reviewers.map((r) => r.error ?? "")].join(" "));
+      note(s, "error", `No verdict: ${s.error} ${CAUSE_ADVICE[s.cause]}`);
       // Never silence: if no verdict was written, the chat the review started from says so and
       // says where the reviewers' work is. (A verdict turn that started writes its own reply.)
-      if (!s.finalTurnId && sessions.get(session.id)) {
+      if (sessions.get(session.id)) {
         const wrote = s.reviewers.filter((r) => r.report);
-        messages.add({ session_id: session.id, role: "user", content: `QA Hound on \`${target}\` (${models.join(" vs ")}): summarise and recommend.`, model: null, tools_json: null, usage_json: null });
+        if (!s.finalTurnId) messages.add({ session_id: session.id, role: "user", content: `QA Hound on \`${target}\` (${models.join(" vs ")}): summarise and recommend.`, model: null, tools_json: null, usage_json: null });
         messages.add({
           session_id: session.id,
           role: "assistant",
           content:
-            `**QA Hound did not reach a verdict.** ${s.error}\n\n` +
+            `**QA Hound did not reach a verdict.** ${s.error}\n\n${CAUSE_ADVICE[s.cause ?? "other"]} Open **QA Hound** in the top bar of this chat and choose **Pick up again**: you can keep the same models or change any of them.\n\n` +
             (wrote.length
               ? `${wrote.length === 1 ? "One reviewer" : `${wrote.length} reviewers`} had written a report before that. They are in ${wrote.length === 1 ? "its chat" : "their chats"} in the sidebar: ${wrote.map((r) => `"QA Hound · ${path.basename(target) || target} · ${r.model}"`).join(" and ")}. Ask me here to summarise them, or run QA Hound again.`
               : `No reviewer finished a report. Check the models chosen and the Activity log, then run it again.`),
@@ -804,6 +1062,17 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
         });
       }
     } finally {
+      // a verdict turn that failed has written its own error in the chat; say what to do about it there too
+      if (verdictFailed && sessions.get(session.id)) {
+        messages.add({
+          session_id: session.id,
+          role: "assistant",
+          content: `**QA Hound's verdict was not finished.** ${s.error}\n\n${CAUSE_ADVICE[s.cause ?? "other"]} The reviewers' reports are kept. Open **QA Hound** in the top bar of this chat and choose **Pick up again**: only the verdict is run, on the same model or another.`,
+          model: s.primaryModel,
+          tools_json: null,
+          usage_json: null,
+        });
+      }
       removePlanted(ws, s.id);
       // rooms always go, whatever ended the run (both never throw)
       await closeSandbox().catch(() => {});
@@ -811,6 +1080,7 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       clearInterval(timer);
       await tick().catch(() => {});
       s.finishedAt = Date.now();
+      saveRun(s);
       record({
         level: "info",
         source: "swarm",

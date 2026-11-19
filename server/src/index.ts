@@ -54,7 +54,7 @@ import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, fini
 import { linksAvailable, listLinks } from "./links.js";
 import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote, findRepos } from "./repos.js";
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
-import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm, stopSwarm } from "./swarm.js";
+import { FOCUS, getSwarm, listSwarms, loadRuns, publicSwarm, resumeSwarm, startSwarm, stopSwarm } from "./swarm.js";
 import { alphaModel, jobsFor, poundFor, ROLE_INFO, ROLES, setPound } from "./pound.js";
 import { benchState, startBench } from "./houndBench.js";
 import { disconnect as saygmDisconnect, finishConnect as saygmFinish, SAYGM_CALLBACK, saygmConnectState, startConnect as saygmConnect } from "./saygmConnect.js";
@@ -1194,6 +1194,23 @@ app.get("/api/swarm/:id", (c) => {
   const s = getSwarm(c.req.param("id"));
   return s ? c.json({ swarm: publicSwarm(s) }) : c.json({ error: "not found" }, 404);
 });
+/**
+ * Pick a failed run up again: what it finished is kept, the rest is run, on the same models or
+ * others ({models?: [seat 1, seat 2], primaryModel?}). A new run with a fresh budget and time limit.
+ */
+app.post("/api/swarm/:id/resume", async (c) => {
+  const from = getSwarm(c.req.param("id"));
+  if (!from) return c.json({ error: "That review isn't on record any more. Start a new one." }, 404);
+  if (activeTurnId(from.sessionId)) return c.json({ error: "That chat is running a turn; wait for it to finish, then pick up again." }, 409);
+  const body = z
+    .object({ models: z.array(z.string().max(160)).max(2).optional(), primaryModel: z.string().max(160).optional() })
+    .parse(await c.req.json().catch(() => ({})));
+  try {
+    return c.json({ swarm: publicSwarm(resumeSwarm(from.id, body)) }, 201);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
 /** Stop a run that is going: the reviewers are halted and no verdict is written. */
 app.post("/api/swarm/:id/stop", (c) => {
   const s = getSwarm(c.req.param("id"));
@@ -1657,6 +1674,10 @@ if (existsSync(config.webDist)) {
 // ---------- boot ----------
 resetStaleTurns();
 resumeMirror((projectId) => (projectId ? workspaceOf(projectId) : paths.workspace));
+{
+  const runs = loadRuns();
+  if (runs) console.log(`[swarm] ${runs} QA Hound run(s) on record (kept two weeks; a failed one can be picked up again)`);
+}
 {
   const kept = migrateGates();
   if (kept) console.log(`[gates] GitHub and 404 are per project now; ${kept} existing project(s) keep both`);

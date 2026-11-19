@@ -9,7 +9,7 @@ import { bitbullMcpServer } from "../mcp.js";
 import { LINKS_ROOT, linksAvailable } from "../links.js";
 import { allIntegrationMcps, integrations } from "../integrations.js";
 import { chatModels, fromRouter, routerRefusal, type ModelApi, type ModelInfo } from "../models.js";
-import type { AgentEngine, AgentEvent, RunInput, Usage } from "./types.js";
+import { isTransientFailure, type AgentEngine, type AgentEvent, type RunInput, type Usage } from "./types.js";
 import {
   cachedRouterReview,
   ROUTER_HEADERS,
@@ -383,6 +383,9 @@ const ROUTER_ERRORS: Record<string, string> = {
  * Turn the gateway's terse HTTP errors into something actionable. Returns null for errors that
  * may be transient (network blips), which OpenCode is allowed to retry.
  */
+/** How many times a model call is retried when the failure is the connection or a busy model. */
+export const NET_RETRIES = 7;
+
 export function gatewayHint(message: string, model: string, gateway?: ModelInfo["gateway"]): string | null {
   const router = gateway === "ditto-router";
   const routerCode = router ? Object.keys(ROUTER_ERRORS).find((c) => message.includes(c)) : undefined;
@@ -594,9 +597,15 @@ export const opencodeEngine: AgentEngine = {
           const st = p.status;
           if (st?.type === "retry") {
             const hint = gatewayHint(String(st.message ?? ""), input.model, info.gateway);
-            out.push({ type: "error", message: hint ?? `Model call failed, OpenCode retrying (attempt ${st.attempt}): ${st.message}` });
-            // Billing/auth/model errors won't fix themselves: stop instead of retrying
-            if (hint || st.attempt >= 2) s.client.session.abort({ path: { id: sid }, query: dir }).catch((e) => console.warn("[opencode] abort failed:", e));
+            // Billing/auth/model errors won't fix themselves: stop at once. A dropped connection or a
+            // busy model usually does: let OpenCode keep trying (it waits longer each time) for a
+            // good while before giving up. Anything else gets two goes, as before.
+            const transient = !hint && isTransientFailure(String(st.message ?? ""));
+            const giveUp = !!hint || st.attempt >= (transient ? NET_RETRIES : 2);
+            if (hint) out.push({ type: "error", message: hint });
+            else if (giveUp) out.push({ type: "error", message: `The model call failed ${st.attempt} times and BitBull stopped trying: ${st.message}` });
+            else out.push({ type: "error", transient: true, message: `The model call didn't get through (attempt ${st.attempt}${transient ? ` of ${NET_RETRIES}` : ""}); trying again: ${st.message}` });
+            if (giveUp) s.client.session.abort({ path: { id: sid }, query: dir }).catch((e) => console.warn("[opencode] abort failed:", e));
           }
           break;
         }

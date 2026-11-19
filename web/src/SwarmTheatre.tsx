@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Swarm, type SwarmRooms } from './api'
+import { api, type Model, type Swarm, type SwarmRooms } from './api'
 import { IconX } from './icons'
 import { dogFor } from './dogs'
 
@@ -313,13 +313,99 @@ const SAYS: Record<NonNullable<Swarm['verdict']>, string> = { use: 'use it', 'fi
 const clock = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s` : `${sec}s`)
 const STATUS: Record<Swarm['reviewers'][number]['status'], string> = { pending: 'waiting for the brief', reviewing: 'reviewing', challenging: 'cross-examining', done: 'case closed', error: 'failed' }
 
+const CAUSE_TITLE: Record<NonNullable<Swarm['cause']>, string> = {
+  network: 'The connection dropped',
+  model: 'A model refused',
+  budget: 'The budget ran out',
+  time: 'The time limit ran out',
+  stopped: 'You stopped it',
+  restart: 'BitBull was restarted',
+  other: 'It didn’t finish',
+}
+const hhmmss = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+/** A seat's model, from every model on offer (and the current one, even if it has since gone). */
+function SeatSelect({ models, value, onChange }: { models: Model[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      {!models.some((m) => m.id === value) && <option value={value}>{value}</option>}
+      {models.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.name}
+          {m.gateway === 'ditto-router' ? ' · Ditto Router' : ''}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/**
+ * A run that failed: what went wrong, and picking it up again. A seat that keeps its model keeps
+ * the report it had finished; change a seat's model and that seat runs again.
+ */
+function PickUp({ s, models, onResumed }: { s: Swarm; models: Model[]; onResumed: (next: Swarm) => void }) {
+  const [seats, setSeats] = useState(s.reviewers.map((r) => r.model))
+  const [judge, setJudge] = useState(s.primaryModel)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const plan = s.reviewers.map((r, i) => {
+    const same = seats[i] === r.model
+    const has = r.hasReport && r.status !== 'error'
+    return same && has ? 'keeps its report' : same ? 'runs again (it didn’t finish)' : 'runs again on the new model'
+  })
+  const allKept = plan.every((p) => p === 'keeps its report')
+  const go = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const r = await api.resumeSwarm(s.id, { models: seats, primaryModel: judge })
+      onResumed(r.swarm)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="theatre-pickup">
+      <div className="pickup-head">
+        <b>{CAUSE_TITLE[s.cause ?? 'other']}</b>
+        <span>{s.advice}</span>
+      </div>
+      <div className="pickup-seats">
+        {s.reviewers.map((r, i) => (
+          <label key={r.sessionId}>
+            <span>{persona(r.model)}</span>
+            <SeatSelect models={models} value={seats[i]} onChange={(v) => setSeats((cur) => cur.map((x, k) => (k === i ? v : x)))} />
+            <small className={plan[i] === 'keeps its report' ? 'ok' : ''}>{plan[i]}</small>
+          </label>
+        ))}
+        <label>
+          <span>The verdict</span>
+          <SeatSelect models={models} value={judge} onChange={setJudge} />
+          <small>{allKept && s.reviewers.every((r) => r.hasRebuttal || s.reviewers.length < 2) ? 'the only thing left to run' : 'runs after the reviewers'}</small>
+        </label>
+      </div>
+      {err && <p className="error small">{err}</p>}
+      <div className="pickup-actions">
+        <span className="muted small">It starts with a fresh budget (${s.options.budgetUsd.toFixed(2)}) and time limit ({s.options.maxMinutes} min) for what is left to do.</span>
+        <button className="btn primary" disabled={busy || new Set(seats).size !== seats.length} onClick={() => void go()}>
+          {busy ? 'Starting…' : 'Pick up again'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function SwarmTheatre({
   swarm,
+  models = [],
   onUpdate,
   onClose,
   onOpenSession,
 }: {
   swarm: Swarm
+  /** every model on offer, for "pick up again" with a different one */
+  models?: Model[]
   onUpdate: (s: Swarm | null) => void
   onClose: () => void
   onOpenSession?: (id: string) => void
@@ -377,8 +463,10 @@ export function SwarmTheatre({
   const cut = s.target.replace(/\/+$/, '').lastIndexOf('/')
   const name = s.target.replace(/\/+$/, '').slice(cut + 1) || s.target
   const folder = cut >= 0 ? s.target.slice(0, cut + 1) : ''
-  const stepAt = s.phase === 'done' ? 3 : s.phase === 'error' ? -1 : STEPS.findIndex((x) => x.id === s.phase)
   const single = s.reviewers.length < 2
+  // where a failed run stopped: the first stage whose work isn't all there
+  const failedAt = !s.reviewers.some((r) => r.hasReport && r.status !== 'error') ? 0 : !single && !s.reviewers.every((r) => r.hasRebuttal) && s.reviewers.filter((r) => r.status !== 'error').length > 1 ? 1 : 2
+  const stepAt = s.phase === 'done' ? 3 : s.phase === 'error' ? failedAt : STEPS.findIndex((x) => x.id === s.phase)
   const shown = s.findings?.filter((f) => f.shown) ?? []
   const serious = shown.filter((f) => f.severity === 'critical' || f.severity === 'high').length
 
@@ -407,13 +495,13 @@ export function SwarmTheatre({
         <ol className="theatre-steps" aria-label="Stages">
           {STEPS.map((st, i) => {
             const skipped = st.id === 'challenge' && single
-            const state = skipped ? 'skipped' : stepAt > i ? 'done' : stepAt === i ? 'now' : 'todo'
+            const state = skipped ? 'skipped' : stepAt > i ? 'done' : stepAt === i ? (s.phase === 'error' ? 'failed' : 'now') : 'todo'
             return (
               <li key={st.id} className={state} aria-current={state === 'now' ? 'step' : undefined}>
-                <span className="step-dot">{state === 'done' ? '✓' : i + 1}</span>
+                <span className="step-dot">{state === 'done' ? '✓' : state === 'failed' ? '!' : i + 1}</span>
                 <span className="step-text">
                   <b>{st.label}</b>
-                  <small>{skipped ? 'needs two reviewers' : st.hint}</small>
+                  <small>{skipped ? 'needs two reviewers' : state === 'failed' ? 'stopped here' : st.hint}</small>
                 </span>
               </li>
             )
@@ -470,7 +558,7 @@ export function SwarmTheatre({
                   <span className="model-id" title={r.model}>{r.model}</span>
                   <span className={`status ${r.status}`}>
                     {busy && <span className="pound-dot" />}
-                    {STATUS[r.status]}
+                    {r.kept && r.status === 'done' ? 'report kept from before' : STATUS[r.status]}
                   </span>
                   <div className="bubble" data-quip={!r.note && !r.error} title={r.note ?? undefined}>
                     <span className="bubble-text">{r.error ? <span className="error">{r.error}</span> : said}</span>
@@ -521,6 +609,19 @@ export function SwarmTheatre({
           </div>
         )}
 
+        {s.phase === 'error' && s.resumable && (
+          <PickUp
+            key={s.id}
+            s={s}
+            models={models}
+            onResumed={(next) => {
+              setS(next)
+              onUpdate(next)
+            }}
+          />
+        )}
+        {s.phase === 'error' && s.resumedBy && <p className="muted small theatre-hint">This run was picked up again; the new one carries on from it.</p>}
+
         <div className="theatre-foot">
           <span className="muted small">
             Chief Inspector {surname(s.primaryModel)} presiding · {clock(elapsed)} · {s.focus.length} area{s.focus.length === 1 ? '' : 's'}
@@ -566,6 +667,27 @@ export function SwarmTheatre({
             </ul>
             {s.options.pr && s.options.prApprove && s.checks.some((c) => !c.ok) && <span className="muted">Not all passed, so the pull request was not approved.</span>}
           </div>
+        )}
+        {s.log && s.log.length > 0 && (
+          <details className="theatre-log" open={s.phase === 'error' || s.log.some((l) => l.level !== 'info')}>
+            <summary>
+              What happened{' '}
+              <span className="muted small">
+                {s.log.length} line{s.log.length === 1 ? '' : 's'}
+                {s.log.some((l) => l.level === 'warn') ? ` · ${s.log.filter((l) => l.level === 'warn').length} retried` : ''}
+                {s.resumedFrom ? ' · picked up from an earlier run' : ''}
+              </span>
+            </summary>
+            <ol>
+              {s.log.map((l, i) => (
+                <li key={i} className={l.level}>
+                  <span className="mono">{hhmmss(l.at)}</span>
+                  <span>{l.text}</span>
+                </li>
+              ))}
+            </ol>
+            <span className="muted small">The same lines are in the Activity log, with the engines’ own messages around them.</span>
+          </details>
         )}
         <RoomsPanel s={s as Swarm & SwarmRooms} />
       </div>

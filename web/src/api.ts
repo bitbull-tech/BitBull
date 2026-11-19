@@ -372,7 +372,7 @@ export type AgentEvent =
   | { type: 'tool_start'; id: string; name: string; input?: unknown; parent?: string }
   | { type: 'tool_end'; id: string; output?: string; isError?: boolean }
   | { type: 'done'; engineSessionId: string; usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number }; messageId?: string }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; /** the engine is retrying; the turn has not failed */ transient?: boolean }
   /** running cost while a turn goes on (QA Hound budgets) */
   | { type: 'usage'; usage: { inputTokens?: number; outputTokens?: number; costUsd?: number } }
   /** The stream ended because the turn did — not because the connection dropped. */
@@ -489,6 +489,8 @@ export interface Swarm {
     /** its own recommendation: before reading the other reviewer, and after the challenge round */
     initial?: 'use' | 'fix-first' | 'do-not-use'
     final?: 'use' | 'fix-first' | 'do-not-use'
+    /** its report was carried over from the run this one picks up from */
+    kept?: boolean
   }[]
   phase: 'review' | 'challenge' | 'final' | 'done' | 'error'
   finalTurnId?: string
@@ -502,6 +504,15 @@ export interface Swarm {
   stopped?: string
   /** you pressed Stop */
   stopAsked?: boolean
+  /** what happened, in order */
+  log?: Array<{ at: number; level: 'info' | 'warn' | 'error'; text: string }>
+  resumedFrom?: string
+  resumedBy?: string
+  cause?: 'network' | 'model' | 'budget' | 'time' | 'stopped' | 'restart' | 'other'
+  /** it failed and can be picked up again */
+  resumable?: boolean
+  /** what to do about the failure */
+  advice?: string
   verdict?: 'use' | 'fix-first' | 'do-not-use'
   findings?: HoundFinding[]
   pr?: { url: string; event: string; number: number; note?: string }
@@ -793,6 +804,7 @@ export const api = {
   startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus']; options?: Partial<HoundOptions> }) =>
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
   swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),
+  resumeSwarm: (id: string, pick: { models?: string[]; primaryModel?: string }) => req<{ swarm: Swarm }>(`/api/swarm/${id}/resume`, { method: 'POST', body: JSON.stringify(pick) }),
   stopSwarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}/stop`, { method: 'POST' }),
   houndBench: () => req<HoundBench>('/api/hound/bench'),
   pound: (projectId: string) => req<{ pound: PoundConfig; roles: PoundRoleInfo[] }>(`/api/projects/${projectId}/pound`),

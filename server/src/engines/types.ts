@@ -12,7 +12,20 @@ export type AgentEvent =
   | { type: "done"; engineSessionId: string; usage?: Usage }
   // running total so far, while the turn is still going (lets QA Hound enforce a budget mid-turn)
   | { type: "usage"; usage: Usage }
-  | { type: "error"; message: string };
+  // transient: the engine is trying the model call again (a dropped connection, a busy model);
+  // the turn is still going and has not failed. Without it, the turn has failed.
+  | { type: "error"; message: string; transient?: boolean };
+
+/**
+ * A failure that is about the connection or a busy model, not about the request: worth trying
+ * again, and worth more patience than two attempts. (A locked screen, a laptop that dropped Wi-Fi
+ * for ten seconds, a VPN reconnecting, a gateway restarting.)
+ */
+export function isTransientFailure(message: string | undefined): boolean {
+  return /socket connection was closed|cannot connect to api|unable to connect|connection (error|reset|refused|closed|terminated)|econnreset|econnrefused|etimedout|enotfound|eai_again|enetunreach|ehostunreach|epipe|fetch failed|network|timed? ?out|\b(408|425|429|500|502|503|504|520|522|524|529)\b|overloaded|temporarily|unavailable|model_cooling|rate.?limit|try again/i.test(
+    message ?? "",
+  );
+}
 
 export interface Usage {
   inputTokens?: number;

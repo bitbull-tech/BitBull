@@ -553,7 +553,9 @@ export function SwarmPill({ swarm, onUpdate, onFinalTurn, onOpen }: { swarm: Swa
           ? 'verdict'
           : swarm.phase === 'done'
             ? 'done'
-            : 'failed'
+            : swarm.resumable
+              ? 'failed · pick up again'
+              : 'failed'
   const detail = swarm.reviewers.map((r) => `${r.model}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n')
   return (
     <span className={`pill swarm-pill ${swarm.phase === 'error' ? 'bad' : swarm.phase === 'done' ? 'ok' : 'run'}`} title={`QA Hound on ${swarm.target}\n${detail}${swarm.error ? `\n${swarm.error}` : ''}`}>

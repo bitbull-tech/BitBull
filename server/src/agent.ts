@@ -213,7 +213,7 @@ export async function* runTurn(
         if (ev.isError) act({ level: "warn", source: ev.parent ? "subagent" : "tool", message: `${t?.name ?? "tool"} failed: ${short(ev.output)}`, detail: ev.output });
         else if (t && /^(task|agent)$/i.test(t.name)) act({ level: "info", source: "subagent", message: `Subagent ${(t.input as { subagent_type?: string })?.subagent_type ?? ""} finished`, detail: ev.output });
       }
-      if (ev.type === "error") act({ level: "error", source: session.engine, message: ev.message });
+      if (ev.type === "error") act({ level: ev.transient ? "warn" : "error", source: session.engine, message: ev.message });
       if (ev.type === "done") {
         usage = ev.usage;
         if (ev.engineSessionId) engineSessionId = ev.engineSessionId;

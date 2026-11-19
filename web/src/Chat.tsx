@@ -283,6 +283,8 @@ export function Chat({
           tools: m.tools.map((t) => (t.id === ev.id ? { ...t, output: ev.output, isError: ev.isError, done: true } : t)),
         }))
       case 'error':
+        // a retry notice: it is in the Activity log as a warning; the reply itself has not failed
+        if (ev.transient) return
         return patchLast((m) => ({ ...m, error: (m.error ? m.error + '\n' : '') + ev.message }))
       case 'done':
         return patchLast((m) => ({ ...m, usage: ev.usage, streaming: false, id: ev.messageId ?? m.id }))

@@ -993,6 +993,22 @@ go into it first. The verdict is written in that chat; one opened just for the r
 "QA Hound · <target> · verdict" so it sits with the reviewers' chats, and if a run ends without a
 verdict that chat says why and where the reviewers' reports are.
 
+**When the connection drops.** A long review should not be lost to a few seconds without network
+(a locked screen, Wi-Fi, a VPN reconnecting, the model gateway restarting). A model call that
+fails for that kind of reason is retried up to seven times with growing pauses, and shows as a
+warning in Activity rather than an error. If a stage still fails for that reason, QA Hound waits
+(up to five minutes) for the model gateway to answer again and then gives that reviewer, or the
+verdict, its brief again; at most twice per stage. A model that refuses (key, balance, unknown
+model) is not asked twice. If the run still can't finish, it says what kind of failure it was
+(connection, model, budget, time, stopped, restart) in the inquiry window, in the chat and in
+Activity, and the window offers **Pick up again**: each reviewer seat and the verdict has a model
+drop-down. A seat left on its model keeps the report it had finished, so nothing is paid for
+twice; a seat you change, or whose reviewer never finished, runs again; if a report changes the
+challenge round is run again. It starts with a fresh budget and time limit. Runs are saved with
+their reports for two weeks, so this also works after BitBull restarts, and reopening the chat
+brings back a run that is still going or failed in the last day. **What happened** in the window
+is the run's own log: each stage, each retry and how long the connection was away.
+
 **Sources** (two ticks in the QA Hound window). **Cite a source for every factual claim** makes
 the reviewers and the verdict put a file and line, or the web page they opened, after each fact,
 and mark what they can't source as "unsourced". **Flag unsourced claims in the document** lists

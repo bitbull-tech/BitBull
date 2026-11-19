@@ -164,7 +164,8 @@ export function startTurn(
     let status: TurnStatus = "done";
     try {
       for await (const ev of runTurn(session, input.prompt, input.model, input.attachments ?? [], { plan: input.plan, unattended: input.unattended, reviewSandbox: input.reviewSandbox, noDelegate: input.noDelegate })) {
-        if (ev.type === "error") status = "error";
+        // a retry notice is not a failure: the engine is still at it
+        if (ev.type === "error" && !ev.transient) status = "error";
         emit(t, ev);
       }
     } catch (err) {

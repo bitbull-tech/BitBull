@@ -389,6 +389,26 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const active = sessions.find((s) => s.id === activeId) ?? null
   const currentProjectId = active ? active.project_id : draftProjectId
   const currentProject = projects.find((p) => p.id === currentProjectId) ?? null
+
+  // A QA Hound run belongs to its chat, not to this page: opening the chat (after a reload, a
+  // restart, or from another window) brings back a run that is still going, or one that failed in
+  // the last day and can be picked up again. Once per chat per page load, so dismissing it sticks.
+  const swarmChecked = useRef(new Set<string>())
+  useEffect(() => {
+    const id = active?.id
+    if (!id || swarmChecked.current.has(id)) return
+    swarmChecked.current.add(id)
+    void api
+      .swarms(id)
+      .then((r) => {
+        const latest = r.swarms[0]
+        if (!latest) return
+        const running = latest.phase !== 'done' && latest.phase !== 'error'
+        const recentFailure = !!latest.resumable && Date.now() - (latest.finishedAt ?? latest.startedAt) < 24 * 60 * 60_000
+        if (running || recentFailure) setSwarm((cur) => (cur && cur.sessionId === id ? cur : latest))
+      })
+      .catch(() => {})
+  }, [active?.id])
   const modelInfo = models.find((m) => m.id === model)
   useEffect(() => {
     const open = () => setBrowsingModels(true)
@@ -1068,6 +1088,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       {theatre && swarm && (
         <SwarmTheatre
           swarm={swarm}
+          models={models}
           onUpdate={(x) => {
             setSwarm(x)
             if (!x) setTheatre(false)
