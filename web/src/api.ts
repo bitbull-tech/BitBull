@@ -484,6 +484,11 @@ export interface Swarm {
     note?: string
     /** how much it actually opened — a report with almost no evidence behind it reads the same */
     effort?: { tools: number; files: number }
+    /** what its own report lists, once it has one */
+    found?: { total: number; serious: number }
+    /** its own recommendation: before reading the other reviewer, and after the challenge round */
+    initial?: 'use' | 'fix-first' | 'do-not-use'
+    final?: 'use' | 'fix-first' | 'do-not-use'
   }[]
   phase: 'review' | 'challenge' | 'final' | 'done' | 'error'
   finalTurnId?: string
@@ -495,6 +500,8 @@ export interface Swarm {
   spentUsd: number
   /** why it stopped early (budget or time) */
   stopped?: string
+  /** you pressed Stop */
+  stopAsked?: boolean
   verdict?: 'use' | 'fix-first' | 'do-not-use'
   findings?: HoundFinding[]
   pr?: { url: string; event: string; number: number; note?: string }
@@ -515,6 +522,10 @@ export interface HoundOptions {
   pr: boolean
   prBlocking: Severity
   prApprove: boolean
+  /** every factual claim the reviewers and the verdict make carries its source, or is marked unsourced */
+  citeSources?: boolean
+  /** factual claims in the target that give no source are listed as findings */
+  flagUnsourced?: boolean
 }
 export interface HoundFinding {
   severity: Severity
@@ -782,6 +793,7 @@ export const api = {
   startSwarm: (body: { sessionId: string; target: string; models: string[]; focus: Swarm['focus']; options?: Partial<HoundOptions> }) =>
     req<{ swarm: Swarm }>('/api/swarm', { method: 'POST', body: JSON.stringify(body) }),
   swarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}`),
+  stopSwarm: (id: string) => req<{ swarm: Swarm }>(`/api/swarm/${id}/stop`, { method: 'POST' }),
   houndBench: () => req<HoundBench>('/api/hound/bench'),
   pound: (projectId: string) => req<{ pound: PoundConfig; roles: PoundRoleInfo[] }>(`/api/projects/${projectId}/pound`),
   savePound: (projectId: string, pound: PoundConfig) => req<{ pound: PoundConfig }>(`/api/projects/${projectId}/pound`, { method: 'PUT', body: JSON.stringify(pound) }),

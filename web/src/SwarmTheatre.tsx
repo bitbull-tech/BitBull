@@ -102,7 +102,23 @@ const QUIPS = [
   'Curious. The test passes, yet proves nothing.',
   'The game is afoot.',
 ]
-const quip = (model: string, phase: string) => QUIPS[hash(model + phase) % QUIPS.length]
+/** The same, for a document rather than code: a roadmap, a spec, a plan. */
+const DOC_QUIPS = [
+  'A most singular document.',
+  'One does not guess. One reads the page.',
+  'A date with no owner is a wish.',
+  'What the plan leaves out is the first clue.',
+  'Data first; theories after.',
+  'Curious. Every milestone depends on the one after it.',
+  'The confident paragraph is the one to check.',
+  'The game is afoot.',
+]
+/** One file of prose (a roadmap, a spec, notes), as far as its name says. */
+export const isDocument = (target: string) => /\.(md|markdown|txt|rst|adoc|docx?|pdf|rtf|odt|csv|tsv)$/i.test(target.trim())
+const quip = (model: string, phase: string, target: string) => {
+  const list = isDocument(target) ? DOC_QUIPS : QUIPS
+  return list[hash(model + phase) % list.length]
+}
 
 /* ---------------- the detective ---------------- */
 
@@ -269,6 +285,34 @@ function RoomsPanel({ s }: { s: Swarm & SwarmRooms }) {
   )
 }
 
+const STEPS: Array<{ id: 'review' | 'challenge' | 'final'; label: string; hint: string }> = [
+  { id: 'review', label: 'Review', hint: 'each works the case alone' },
+  { id: 'challenge', label: 'Challenge', hint: 'each tries to knock the other’s report down' },
+  { id: 'final', label: 'Verdict', hint: 'the Chief Inspector weighs both' },
+]
+const NEXT: Record<Swarm['phase'], string> = {
+  review: 'Next: they read each other’s reports and challenge them.',
+  challenge: 'Next: the Chief Inspector weighs both files and writes the verdict in the chat.',
+  final: 'Next: the verdict lands in the chat this started from.',
+  done: '',
+  error: '',
+}
+const FOCUS_NAME: Record<Swarm['focus'][number], string> = {
+  'attack-vectors': 'Attack vectors',
+  correctness: 'Correctness',
+  'code-quality': 'Code quality',
+  performance: 'Performance',
+  'user-experience': 'User experience',
+}
+const VERDICT: Record<NonNullable<Swarm['verdict']>, { text: string; cls: string }> = {
+  use: { text: 'Use it as it is', cls: 'ok' },
+  'fix-first': { text: 'Fix first', cls: 'warn' },
+  'do-not-use': { text: 'Do not use', cls: 'bad' },
+}
+const SAYS: Record<NonNullable<Swarm['verdict']>, string> = { use: 'use it', 'fix-first': 'fix first', 'do-not-use': 'do not use' }
+const clock = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s` : `${sec}s`)
+const STATUS: Record<Swarm['reviewers'][number]['status'], string> = { pending: 'waiting for the brief', reviewing: 'reviewing', challenging: 'cross-examining', done: 'case closed', error: 'failed' }
+
 export function SwarmTheatre({
   swarm,
   onUpdate,
@@ -282,6 +326,15 @@ export function SwarmTheatre({
 }) {
   const [s, setS] = useState(swarm)
   useEffect(() => setS(swarm), [swarm])
+  const [stopping, setStopping] = useState(false)
+  const running = s.phase !== 'done' && s.phase !== 'error'
+  // the clock ticks every second; the run itself is asked about every two
+  const [, setNow] = useState(0)
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => setNow((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [running])
 
   useEffect(() => {
     if (s.phase === 'done' || s.phase === 'error') return
@@ -303,29 +356,103 @@ export function SwarmTheatre({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const stop = async () => {
+    if (!confirm('Stop this review? The reviewers are halted and no verdict is written. What they have written so far stays in their chats.')) return
+    setStopping(true)
+    try {
+      const r = await api.stopSwarm(s.id)
+      setS(r.swarm)
+      onUpdate(r.swarm)
+    } catch {
+      setStopping(false)
+    }
+  }
+
   const cast = castFor(s.reviewers.map((r) => r.model))
-  const elapsed = Math.round((Date.now() - s.startedAt) / 1000)
-  const mins = Math.floor(elapsed / 60)
+  const elapsed = Math.max(0, Math.round(((s.finishedAt ?? Date.now()) - s.startedAt) / 1000))
+  const limitSec = (s.options?.maxMinutes ?? 0) * 60
+  const spent = s.spentUsd ?? 0
+  const budget = s.options?.budgetUsd ?? 0
+  const pct = (a: number, b: number) => (b > 0 ? Math.min(100, Math.round((100 * a) / b)) : 0)
+  const cut = s.target.replace(/\/+$/, '').lastIndexOf('/')
+  const name = s.target.replace(/\/+$/, '').slice(cut + 1) || s.target
+  const folder = cut >= 0 ? s.target.slice(0, cut + 1) : ''
+  const stepAt = s.phase === 'done' ? 3 : s.phase === 'error' ? -1 : STEPS.findIndex((x) => x.id === s.phase)
+  const single = s.reviewers.length < 2
+  const shown = s.findings?.filter((f) => f.shown) ?? []
+  const serious = shown.filter((f) => f.severity === 'critical' || f.severity === 'high').length
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal theatre" role="dialog" aria-label="QA Hound progress">
-        <header className="modal-head">
-          <h2>The inquiry · {s.target}</h2>
+        <header className="modal-head theatre-head">
+          <div className="theatre-title">
+            <h2 title={s.target}>
+              The inquiry · <span className="theatre-name">{name}</span>
+            </h2>
+            <div className="theatre-sub">
+              {folder && <span className="mono theatre-folder" title={s.target}>{folder}</span>}
+              {s.focus.map((f) => (
+                <span className="chip" key={f}>
+                  {FOCUS_NAME[f] ?? f}
+                </span>
+              ))}
+            </div>
+          </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <IconX />
           </button>
         </header>
-        <p className="theatre-phase">{PHASE_LINE[s.phase]}</p>
+
+        <ol className="theatre-steps" aria-label="Stages">
+          {STEPS.map((st, i) => {
+            const skipped = st.id === 'challenge' && single
+            const state = skipped ? 'skipped' : stepAt > i ? 'done' : stepAt === i ? 'now' : 'todo'
+            return (
+              <li key={st.id} className={state} aria-current={state === 'now' ? 'step' : undefined}>
+                <span className="step-dot">{state === 'done' ? '✓' : i + 1}</span>
+                <span className="step-text">
+                  <b>{st.label}</b>
+                  <small>{skipped ? 'needs two reviewers' : st.hint}</small>
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+
+        <div className={`theatre-now ${s.phase}`} role="status">
+          <span>{PHASE_LINE[s.phase]}</span>
+          {running && <span className="muted">{s.stopAsked || stopping ? 'Stopping…' : NEXT[s.phase]}</span>}
+          {s.error && <span className="error">{s.error}</span>}
+        </div>
+
         {s.options && (
-          <div className="theatre-meter" title="Spend so far against the run's hard budget (the reviewers stop at 75%, the rest is for the verdict)">
-            <div className="voice-meter">
-              <i style={{ width: `${Math.min(100, (100 * (s.spentUsd ?? 0)) / s.options.budgetUsd)}%` }} />
+          <div className="theatre-bars">
+            <div className="theatre-bar" title="How long it has run, against the time limit you set">
+              <span className="bar-label">Time</span>
+              <div className="voice-meter">
+                <i style={{ width: `${pct(elapsed, limitSec)}%` }} />
+              </div>
+              <span className="bar-num">
+                {clock(elapsed)} of {s.options.maxMinutes} min
+              </span>
             </div>
-            <span className="muted small">
-              ${(s.spentUsd ?? 0).toFixed(3)} of ${s.options.budgetUsd.toFixed(2)} · limit {s.options.maxMinutes} min
-              {s.stopped ? ` · stopped: ${s.stopped}` : ''}
-            </span>
+            <div className="theatre-bar" title="Spend so far against the run's hard budget (the reviewers stop at 75%, the rest is kept for the verdict)">
+              <span className="bar-label">Spend</span>
+              <div className="voice-meter">
+                <i style={{ width: `${pct(spent, budget)}%` }} />
+              </div>
+              <span className="bar-num">
+                ${spent.toFixed(spent < 0.1 ? 3 : 2)} of ${budget.toFixed(2)}
+              </span>
+            </div>
+            {running && (
+              <span className="muted small theatre-eta">
+                {spent === 0 && elapsed > 20 ? 'Spend shows once a model reports its usage. ' : ''}
+                {isDocument(s.target) ? 'One document is usually done in a few minutes.' : 'A repo or folder can take a good while; these are limits, not a forecast.'}
+                {s.stopped && !s.stopAsked ? ` Stopped early: ${s.stopped}.` : ''}
+              </span>
+            )}
           </div>
         )}
 
@@ -333,28 +460,42 @@ export function SwarmTheatre({
           {s.reviewers.map((r, slot) => {
             const busy = r.status === 'reviewing' || r.status === 'challenging'
             const verdict = r.status === 'done' ? 'pass' : r.status === 'error' ? 'fail' : undefined
-            const said = r.error
-              ? null
-              : r.note ?? (busy ? quip(r.model, r.status) : r.status === 'done' ? 'Case closed.' : 'Awaiting the brief.')
+            const said = r.error ? null : r.note ?? (busy ? quip(r.model, r.status, s.target) : r.status === 'done' ? 'Case closed.' : 'Awaiting the brief.')
+            const rec = r.final ?? r.initial
             return (
-              <div className="detective" key={r.sessionId}>
+              <div className={`detective ${r.status}`} key={r.sessionId}>
                 <Detective n={cast[slot]} slot={slot} model={r.model} busy={busy} verdict={verdict} />
-                <div className="bubble" data-quip={!r.note && !r.error}>
-                  {r.error ? <span className="error">{r.error}</span> : said}
-                </div>
                 <div className="who">
                   <b className="persona">{persona(r.model)}</b>
-                  <span className="model-id">{r.model}</span>
-                  <span className="muted">{r.status}</span>
-                  {r.effort && (
-                    <span className={thin(r.effort) && r.status === 'done' ? 'evidence thin' : 'evidence'}>
-                      {r.effort.files} file{r.effort.files === 1 ? '' : 's'} · {r.effort.tools} tool call{r.effort.tools === 1 ? '' : 's'}
-                      {thin(r.effort) && r.status === 'done' ? ' — too little to trust' : ''}
-                    </span>
-                  )}
+                  <span className="model-id" title={r.model}>{r.model}</span>
+                  <span className={`status ${r.status}`}>
+                    {busy && <span className="pound-dot" />}
+                    {STATUS[r.status]}
+                  </span>
+                  <div className="bubble" data-quip={!r.note && !r.error} title={r.note ?? undefined}>
+                    <span className="bubble-text">{r.error ? <span className="error">{r.error}</span> : said}</span>
+                  </div>
+                  <div className="facts">
+                    {r.effort && (
+                      <span className={thin(r.effort) && r.status === 'done' && !isDocument(s.target) ? 'evidence thin' : 'evidence'}>
+                        {r.effort.files} file{r.effort.files === 1 ? '' : 's'} read · {r.effort.tools} tool call{r.effort.tools === 1 ? '' : 's'}
+                        {thin(r.effort) && r.status === 'done' && !isDocument(s.target) ? ' — too little to trust' : ''}
+                      </span>
+                    )}
+                    {r.found && (
+                      <span className="found">
+                        <b>
+                          {r.found.total} finding{r.found.total === 1 ? '' : 's'}
+                        </b>
+                        {r.found.serious > 0 ? `, ${r.found.serious} serious` : ''}
+                        {rec ? ` · says ${SAYS[rec]}` : ''}
+                      </span>
+                    )}
+                    {!r.found && rec && <span className="found">Says {SAYS[rec]}</span>}
+                  </div>
                   {onOpenSession && (
                     <button className="link" onClick={() => onOpenSession(r.sessionId)}>
-                      read its working
+                      {r.hasReport ? 'read its report' : 'read its working'}
                     </button>
                   )}
                 </div>
@@ -363,28 +504,56 @@ export function SwarmTheatre({
           })}
         </div>
 
-        <div className="theatre-foot">
-          <span className="muted small">
-            Chief Inspector {surname(s.primaryModel)} presiding · {mins ? `${mins}m ${elapsed % 60}s` : `${elapsed}s`} · {s.focus.length} area
-            {s.focus.length === 1 ? '' : 's'}
-          </span>
-          {s.error && <span className="error small">{s.error}</span>}
-        </div>
-        {s.findings && (
-          <div className="theatre-findings small">
-            <b>{s.findings.filter((f) => f.shown).length} finding{s.findings.filter((f) => f.shown).length === 1 ? '' : 's'} shown</b>
-            {s.findings.some((f) => !f.shown) && <span className="muted"> · {s.findings.filter((f) => !f.shown).length} held back</span>}
-            {s.pr && (
-              <>
-                {' · '}
-                <a href={s.pr.url} target="_blank" rel="noreferrer">
-                  {s.pr.event === 'APPROVE' ? 'approved' : s.pr.event === 'REQUEST_CHANGES' ? 'changes requested' : 'commented'} on PR #{s.pr.number}
-                </a>
-              </>
-            )}
-            {s.prError && <span className="error"> · PR not posted: {s.prError}</span>}
+        {s.phase === 'done' && (
+          <div className={`theatre-verdict ${s.verdict ? VERDICT[s.verdict].cls : ''}`}>
+            <div>
+              <span className="muted small">The verdict</span>
+              <b>{s.verdict ? VERDICT[s.verdict].text : 'Delivered'}</b>
+              <span className="small">
+                {s.findings ? `${shown.length} finding${shown.length === 1 ? '' : 's'}${serious ? `, ${serious} serious` : ''}` : 'No findings list could be read from it'}
+                {s.findings?.some((f) => !f.shown) ? ` · ${s.findings.filter((f) => !f.shown).length} held back` : ''}
+                {s.stopped ? ` · partial: ${s.stopped}` : ''}
+              </span>
+            </div>
+            <button className="btn primary" onClick={() => (onOpenSession ? onOpenSession(s.sessionId) : onClose())}>
+              Read the full verdict
+            </button>
           </div>
         )}
+
+        <div className="theatre-foot">
+          <span className="muted small">
+            Chief Inspector {surname(s.primaryModel)} presiding · {clock(elapsed)} · {s.focus.length} area{s.focus.length === 1 ? '' : 's'}
+          </span>
+          <span className="grow" />
+          {s.phase === 'error' && onOpenSession && (
+            <button className="btn" onClick={() => onOpenSession(s.sessionId)} title="The chat this review was started from says why there is no verdict and where the reviewers' reports are">
+              Open the chat
+            </button>
+          )}
+          {running && (
+            <>
+              <button className="btn" onClick={onClose} title="Close this window. The review carries on, and the QA Hound button in the top bar shows how it is going.">
+                Keep working
+              </button>
+              <button className="btn danger" disabled={stopping || !!s.stopAsked} onClick={() => void stop()}>
+                {stopping || s.stopAsked ? 'Stopping…' : 'Stop'}
+              </button>
+            </>
+          )}
+        </div>
+        {running && <p className="muted small theatre-hint">Close this any time: the review carries on, the QA Hound button in the top bar shows progress, and the verdict arrives in the chat.</p>}
+
+        {s.pr || s.prError ? (
+          <div className="theatre-findings small">
+            {s.pr && (
+              <a href={s.pr.url} target="_blank" rel="noreferrer">
+                {s.pr.event === 'APPROVE' ? 'Approved' : s.pr.event === 'REQUEST_CHANGES' ? 'Changes requested' : 'Commented'} on PR #{s.pr.number}
+              </a>
+            )}
+            {s.prError && <span className="error">PR not posted: {s.prError}</span>}
+          </div>
+        ) : null}
         {s.checks && s.checks.length > 0 && (
           <div className="theatre-checks small">
             <b>What BitBull checked itself</b>

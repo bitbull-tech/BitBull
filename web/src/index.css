@@ -1614,3 +1614,68 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 /* a newer BitBull is running than this page was loaded from (App.tsx) */
 .build-bar.stale { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); border-bottom-color: color-mix(in srgb, var(--accent) 40%, var(--line)); align-items: center; }
 .build-bar.stale .btn { flex: none; padding: 2px 10px; font-size: 12px; }
+
+/* ---------- QA Hound: the inquiry window, second cut (SwarmTheatre.tsx) ---------- */
+.theatre { width: min(820px, 96vw); }
+.theatre-head { align-items: flex-start; gap: 12px; }
+.theatre-title { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.theatre-title h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theatre-name { font-weight: 700; }
+.theatre-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.theatre-folder { font-size: 11.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theatre .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); white-space: nowrap; }
+.theatre-steps { list-style: none; margin: 0; padding: 4px 18px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.theatre-steps li { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; color: var(--muted); }
+.theatre-steps .step-dot { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 1.5px solid var(--line-2); }
+.theatre-steps .step-text { display: flex; flex-direction: column; min-width: 0; }
+.theatre-steps .step-text b { font-size: 13px; }
+.theatre-steps .step-text small { font-size: 11px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theatre-steps li.now { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.theatre-steps li.now .step-dot { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.theatre-steps li.done { color: var(--text-2); }
+.theatre-steps li.done .step-dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.theatre-steps li.skipped { opacity: 0.55; border-style: dashed; }
+.theatre-now { display: flex; flex-direction: column; gap: 2px; padding: 10px 18px 2px; font-size: 13.5px; }
+.theatre-now .muted, .theatre-now .error { font-size: 12.5px; }
+.theatre-bars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; padding: 8px 18px 0; }
+.theatre-bar { display: grid; grid-template-columns: 44px minmax(40px, 1fr) auto; align-items: center; gap: 8px; min-width: 0; }
+.theatre-bar .bar-label { font-size: 11.5px; color: var(--muted); }
+.theatre-bar .bar-num { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.theatre-eta { grid-column: 1 / -1; }
+.theatre .theatre-room { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; padding: 14px 18px 10px; }
+.theatre .theatre-room .detective, .theatre .theatre-room.phase-challenge .detective:first-child, .theatre .theatre-room.phase-challenge .detective:last-child:not(:first-child) { transform: none; }
+.theatre .detective { flex: none; max-width: none; flex-direction: row; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); min-width: 0; }
+.theatre .detective.reviewing, .theatre .detective.challenging { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.theatre .sleuth { width: 104px; flex: none; }
+.theatre .detective .who { align-items: flex-start; text-align: left; gap: 3px; min-width: 0; flex: 1; }
+.theatre .detective .persona { font-size: 14px; }
+.theatre .detective .model-id { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theatre .detective .status { display: inline-flex; align-items: center; font-size: 12px; color: var(--text-2); }
+.theatre .detective .status.done { color: var(--ok); }
+.theatre .detective .status.error { color: var(--bad); }
+.theatre .detective .bubble { margin: 4px 0 2px; padding: 7px 10px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.4; width: 100%; max-width: none; min-height: 0; text-align: left; display: block; }
+.theatre .detective .bubble-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.theatre .detective .bubble::before { display: none; }
+.theatre .detective .facts { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.theatre .detective .found { color: var(--text); }
+.theatre-verdict { display: flex; align-items: center; gap: 14px; margin: 4px 18px 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--panel-2); }
+.theatre-verdict > div { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.theatre-verdict b { font-size: 18px; }
+.theatre-verdict.ok { border-color: var(--ok); }
+.theatre-verdict.ok b { color: var(--ok); }
+.theatre-verdict.warn { border-color: var(--warn); }
+.theatre-verdict.warn b { color: var(--warn); }
+.theatre-verdict.bad { border-color: var(--bad); }
+.theatre-verdict.bad b { color: var(--bad); }
+.theatre-verdict .btn { flex: none; }
+.theatre .theatre-foot { align-items: center; gap: 8px; padding: 2px 18px 8px; flex-wrap: wrap; }
+.theatre-hint { margin: 0; padding: 0 18px 14px; }
+@media (max-width: 620px) {
+  .theatre-steps { grid-template-columns: 1fr; }
+  .theatre-bars { grid-template-columns: 1fr; }
+  .theatre .sleuth { width: 76px; }
+  .theatre-verdict { flex-direction: column; align-items: stretch; }
+}
+.hound-sources { flex-direction: column; align-items: stretch; gap: 8px; }
+.hound-sources .check { align-items: flex-start; }
+.hound-sources .check input { margin-top: 3px; flex: none; }

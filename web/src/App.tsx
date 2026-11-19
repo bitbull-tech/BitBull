@@ -554,7 +554,13 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
               <div key={p.id} className="project">
                 <div
                   className={`project-row ${currentProjectId === p.id ? 'current' : ''}`}
-                  onClick={() => setExpand(p.id, !expanded[p.id])}
+                  onClick={() => {
+                    // Clicking a project goes into it: a new chat there, so the top bar, Files, Repos and
+                    // QA Hound all mean this project. (It used to only unfold the list, and what you
+                    // started next quietly landed in whichever chat was still open.) Already in it: fold or unfold.
+                    if (currentProjectId !== p.id && !archived) newChat(p.id)
+                    else setExpand(p.id, !expanded[p.id])
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     setCtx({ p, x: Math.min(e.clientX, window.innerWidth - 220), y: Math.min(e.clientY, window.innerHeight - 200) })
@@ -1067,7 +1073,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             if (!x) setTheatre(false)
           }}
           onOpenSession={(id) => {
-            setActiveId(id)
+            // by id: the reviewers' chats and a freshly named verdict chat may not be in the list yet
+            void openById(id)
             setTheatre(false)
           }}
           onClose={() => setTheatre(false)}

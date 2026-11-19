@@ -268,3 +268,41 @@ test("sign-in, key and CI files always go to a person; a key in the change is ca
   assert.match(check(s, "secrets").text, /`src\/util\.ts:2`/);
   assert.doesNotMatch(posted[0].body, /a1B2a1B2/);
 });
+
+test("a reviewer's findings are counted from its report's table; Stop is only for a run that is going", async () => {
+  const { countFindings, stopSwarm } = await import("./swarm.js");
+  const report = [
+    "## Summary", "Fine overall.", "",
+    "## Findings", "",
+    "| Severity | Area | Location | What | Evidence | Fix |",
+    "|---|---|---|---|---|---|",
+    "| **High** | correctness | roadmap.md:12 | Q2 depends on Q3 | quoted | reorder |",
+    "| low | clarity | roadmap.md:30 | vague | quoted | name an owner |",
+    "| `critical` | risk | roadmap.md:44 | no fallback | quoted | add one |",
+    "", "## Correctness", "| high | this table is not the findings one | x | x | x | x |",
+    "RECOMMENDATION: fix-first",
+  ].join("\n");
+  assert.deepEqual(countFindings(report), { total: 3, serious: 2 });
+  assert.deepEqual(countFindings("## Findings\n\nNone.\n"), { total: 0, serious: 0 });
+  assert.equal(countFindings("no sections at all"), undefined);
+  assert.equal(countFindings(undefined), undefined);
+  assert.equal(stopSwarm("no-such-run"), false);
+});
+
+test("cite sources and flag unsourced claims: said to the reviewers and the handler only when ticked", async () => {
+  const { sourceLines } = await import("./swarm.js");
+  const { houndOptions } = await import("./hound.js");
+  assert.deepEqual(sourceLines(houndOptions({}), "reviewer"), []);
+  assert.equal(houndOptions({ citeSources: "yes" as never }).citeSources, false); // only a real true
+  const both = houndOptions({ citeSources: true, flagUnsourced: true });
+  const rev = sourceLines(both, "reviewer");
+  assert.equal(rev.length, 2);
+  assert.match(rev[0], /\[unsourced\]/);
+  assert.match(rev[0], /never invent a reference/);
+  assert.match(rev[0], /## Sources/);
+  assert.match(rev[1], /unsourced claim/);
+  const hand = sourceLines(both, "handler");
+  assert.match(hand[0], /Keep the reviewers' sources/);
+  assert.match(hand[1], /how many there were/);
+  assert.equal(sourceLines(houndOptions({ flagUnsourced: true }), "reviewer").length, 1);
+});

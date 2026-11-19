@@ -54,7 +54,7 @@ import { disconnect as leadpoetDisconnect, finishConnect as leadpoetFinish, fini
 import { linksAvailable, listLinks } from "./links.js";
 import { inspectRepo, listRepos, repoDiffStat, syncRepo, addRepo, linkedRepos, setRemote, findRepos } from "./repos.js";
 import { compareUrl, openPrFor, parseGithubRemote, requestDittoReview } from "./github.js";
-import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm } from "./swarm.js";
+import { FOCUS, getSwarm, listSwarms, publicSwarm, startSwarm, stopSwarm } from "./swarm.js";
 import { alphaModel, jobsFor, poundFor, ROLE_INFO, ROLES, setPound } from "./pound.js";
 import { benchState, startBench } from "./houndBench.js";
 import { disconnect as saygmDisconnect, finishConnect as saygmFinish, SAYGM_CALLBACK, saygmConnectState, startConnect as saygmConnect } from "./saygmConnect.js";
@@ -1193,6 +1193,13 @@ app.get("/api/swarm", (c) => c.json({ swarms: listSwarms(c.req.query("sessionId"
 app.get("/api/swarm/:id", (c) => {
   const s = getSwarm(c.req.param("id"));
   return s ? c.json({ swarm: publicSwarm(s) }) : c.json({ error: "not found" }, 404);
+});
+/** Stop a run that is going: the reviewers are halted and no verdict is written. */
+app.post("/api/swarm/:id/stop", (c) => {
+  const s = getSwarm(c.req.param("id"));
+  if (!s) return c.json({ error: "not found" }, 404);
+  stopSwarm(s.id);
+  return c.json({ swarm: publicSwarm(s) });
 });
 
 // ---------- storage (Hippius) ----------

@@ -16,7 +16,7 @@ const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
 
 const SEVERITY: Severity[] = ['low', 'medium', 'high', 'critical']
 const OPTS_KEY = 'bitbull-hound-options'
-const DEFAULTS: HoundOptions = { budgetUsd: 2, maxMinutes: 45, minSeverity: 'low', minConfidence: 70, include: [], exclude: [], pr: false, prBlocking: 'high', prApprove: false }
+const DEFAULTS: HoundOptions = { budgetUsd: 2, maxMinutes: 45, minSeverity: 'low', minConfidence: 70, include: [], exclude: [], pr: false, prBlocking: 'high', prApprove: false, citeSources: false, flagUnsourced: false }
 /** The last settings used, per browser: a convenience, the server checks them again. */
 function savedOptions(): HoundOptions {
   try {
@@ -308,6 +308,31 @@ export function SwarmDialog({
                 </label>
               ))}
             </div>
+          </div>
+          <div className="field">
+            <span>Sources</span>
+            <div className="checks hound-sources">
+              <label className="check">
+                <input type="checkbox" checked={!!opts.citeSources} onChange={(e) => set({ citeSources: e.target.checked })} />
+                <span>
+                  Cite a source for every factual claim{' '}
+                  <span className="muted small">The reviewers and the verdict give a file and line, or the web page they opened, after each fact; anything they can’t source is marked “unsourced”.</span>
+                </span>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={!!opts.flagUnsourced} onChange={(e) => set({ flagUnsourced: e.target.checked })} />
+                <span>
+                  Flag unsourced claims in the document{' '}
+                  <span className="muted small">Figures, dates and facts the target states without saying where they come from are listed as findings. Useful for a roadmap, a spec or a report.</span>
+                </span>
+              </label>
+            </div>
+            {(opts.citeSources || opts.flagUnsourced) && (
+              <span className="muted small">
+                These are instructions to the models. BitBull checks that a finding’s quote is in the file; it doesn’t open cited web pages, so check a source that matters. The reviewers reach the web
+                only through BitBull’s network allowlist.
+              </span>
+            )}
           </div>
           <div className="hound-opts">
             <div className="hound-opts-title">Limits and filters</div>

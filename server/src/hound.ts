@@ -31,6 +31,10 @@ export interface HoundOptions {
    * that has just read the code under review, and an approval is given under the owner's account.
    */
   prApprove: boolean;
+  /** every factual claim a reviewer or the verdict makes carries its source, or is marked unsourced */
+  citeSources: boolean;
+  /** factual claims in the target itself that give no source are listed as findings */
+  flagUnsourced: boolean;
   /** reviewers may run the target in a confidential Cathedral sandbox, network closed (cleanMachine.ts) */
   sandbox: boolean;
   /** that room's size */
@@ -49,6 +53,8 @@ export const DEFAULT_OPTIONS: HoundOptions = {
   pr: false,
   prBlocking: "high",
   prApprove: false,
+  citeSources: false,
+  flagUnsourced: false,
   sandbox: false,
   sandboxSize: DEFAULT_SANDBOX_SIZE,
   cleanMachine: { enabled: false, install: "", build: "", test: "", allowHosts: [], size: DEFAULT_CLEAN_SIZE },
@@ -116,6 +122,8 @@ export function houndOptions(raw: Partial<Record<keyof HoundOptions, unknown>> =
     pr: raw.pr === true,
     prBlocking: sev(raw.prBlocking, DEFAULT_OPTIONS.prBlocking),
     prApprove: raw.prApprove === true,
+    citeSources: raw.citeSources === true,
+    flagUnsourced: raw.flagUnsourced === true,
     sandbox: raw.sandbox === true,
     sandboxSize: size(raw.sandboxSize, DEFAULT_OPTIONS.sandboxSize),
     cleanMachine: cleanMachineOptions(raw.cleanMachine),

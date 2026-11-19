@@ -12,7 +12,23 @@ with evidence; then the chat's own model, the primary handler, weighs both round
 disputed point itself, and replies in the chat with a per-reviewer summary, a ranked table of
 verified issues and an overall recommendation (use as is / fix first / don't use). The
 reviewers' chats are in the sidebar as "QA Hound · …" and in the activity log, so their working
-is inspectable and exportable. Different model families catch different things; two reviewers
+is inspectable and exportable. While it runs, the inquiry window shows the three stages (Review, Challenge,
+Verdict) and which one it is on, time and spend against your limits, and each reviewer's card:
+what it is doing right now, how much it has read, and once its report is in, how many findings it
+lists and what it recommends. **Keep working** closes the window and the review carries on (the
+QA Hound button in the top bar shows progress); **Stop** halts the reviewers and no verdict is
+written. When it ends, the window shows the verdict with a button to the full write-up in the chat.
+A review runs in the project of the chat it was started from: click a project in the sidebar to
+go into it first. The verdict is written in that chat; one opened just for the review is named
+"QA Hound · <target> · verdict" so it sits with the reviewers' chats, and if a run ends without a
+verdict that chat says why and where the reviewers' reports are.
+
+**Sources** (two ticks in the QA Hound window). **Cite a source for every factual claim** makes
+the reviewers and the verdict put a file and line, or the web page they opened, after each fact,
+and mark what they can't source as "unsourced". **Flag unsourced claims in the document** lists
+the figures, dates and facts the target itself states without a source, as findings. Both are
+instructions to the models: BitBull checks a finding's quote against the file, but it doesn't open
+a cited web page. Different model families catch different things; two reviewers
 from one family mostly share blind spots. `POST /api/swarm` starts one from outside (the code and
 API keep the name *swarm*).
 

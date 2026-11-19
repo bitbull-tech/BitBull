@@ -84,8 +84,10 @@ export interface Swarm {
   options: HoundOptions;
   /** what the run has cost so far, live (reviewers and verdict) */
   spentUsd: number;
-  /** why it stopped early: the budget or the time limit */
+  /** why it stopped early: the budget, the time limit, or the owner */
   stopped?: string;
+  /** the owner pressed Stop: reviewers are halted and no verdict is written */
+  stopAsked?: boolean;
   verdict?: Verdict;
   /** the handler's findings, each shown or held back with the reason */
   findings?: Finding[];
@@ -133,6 +135,38 @@ const REVIEWER_TIME = 0.8;
 
 const swarms = new Map<string, Swarm>();
 const KEEP_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The owner's Stop. The run's own watcher (every two seconds) halts whatever is running; nothing
+ * further is started, and no verdict is written. What the reviewers had written stays in their chats.
+ */
+export function stopSwarm(id: string): boolean {
+  const s = swarms.get(id);
+  if (!s || s.phase === "done" || s.phase === "error") return false;
+  s.stopAsked = true;
+  s.stopped ??= "you stopped it";
+  return true;
+}
+
+/** How many findings a reviewer's report lists: the rows of its "## Findings" table, by the severity in each. */
+export function countFindings(report: string | undefined): { total: number; serious: number } | undefined {
+  if (!report) return undefined;
+  const m = /^##\s*Findings\b[^\n]*\n([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/im.exec(report);
+  if (!m) return undefined;
+  let total = 0;
+  let serious = 0;
+  for (const line of m[1].split("\n")) {
+    if (!line.trim().startsWith("|")) continue;
+    const sev = line
+      .split("|")
+      .map((c) => c.replace(/[*_`\s]/g, "").toLowerCase())
+      .find((c) => /^(critical|high|medium|low)$/.test(c));
+    if (!sev) continue;
+    total++;
+    if (sev === "critical" || sev === "high") serious++;
+  }
+  return { total, serious };
+}
 
 export function getSwarm(id: string) {
   return swarms.get(id);
@@ -230,6 +264,8 @@ export function publicSwarm(s: Swarm) {
         ...r,
         hasReport: !!report,
         hasRebuttal: !!rebuttal,
+        // what its own report lists, as soon as it has one (the verdict may weigh it differently)
+        found: countFindings(report),
         note: r.status === "reviewing" || r.status === "challenging" ? noteFor(r.turnId) : undefined,
         effort: { tools: r.toolCalls + live.tools, files: files.size },
       };
@@ -336,6 +372,7 @@ function reviewPrompt(s: Swarm, others: string[]) {
     // existed since the first commit, and the other was then marked down for reading it (2026-11).
     `File discovery can hide things: glob and directory listings may skip dot-files and dot-directories. Before saying anything is missing, read it by its exact path — in particular \`.github/\` (CI, permissions, action pins), \`.gitattributes\`, \`.dockerignore\`, \`.gitignore\` and \`.env.example\`. "I could not find X" and "X does not exist" are different claims; only make the second after a direct read fails.`,
     ...scopeLines(s.options),
+    ...sourceLines(s.options, "reviewer"),
     ...changedLines(s),
     `Assess it on: ${s.focus.map((f) => FOCUS_TEXT[f]).join(" ")}`,
     `Write the report in Markdown with exactly these sections: ## Summary (5 lines max) · ## Findings (a table: severity critical/high/medium/low, area, location, what, evidence, fix) · ${s.focus.map((f) => `## ${FOCUS_LABEL[f]}`).join(" · ")} (score 1–5 each with one paragraph) · ## What I could not verify · ## Questions for the other reviewers.`,
@@ -357,6 +394,28 @@ function changedLines(s: Swarm): string[] {
   ];
 }
 
+/**
+ * "Cite sources" and "Flag unsourced claims", said to the reviewers and the handler. An instruction
+ * to the models: BitBull checks the quotes of findings against the files (houndChecks.ts), it does
+ * not check a cited web page or that every claim got a source.
+ */
+export function sourceLines(o: HoundOptions, who: "reviewer" | "handler"): string[] {
+  const out: string[] = [];
+  if (o.citeSources)
+    out.push(
+      `Sources: every factual claim you make (a number, a date, what something does or says, what exists or doesn't, what a standard or a third party requires) carries its source right after it, in brackets: a file and line from the target or workspace (\`path:line\`), or the full web address of the page you actually opened. ` +
+        `General knowledge you did not look up is not a source: write \`[unsourced]\` after such a claim instead, and never invent a reference, a link or a quotation. Opinions and recommendations need no source, but say that is what they are.` +
+        (who === "handler" ? ` Keep the reviewers' sources with the claims you carry over, drop or mark \`[unsourced]\` any claim of theirs that has none, and end with a short **Sources** list.` : ` End your report with a **## Sources** list.`),
+    );
+  if (o.flagUnsourced)
+    out.push(
+      who === "handler"
+        ? `Unsourced claims in the target: the reviewers were asked to list factual claims the target itself makes without saying where they come from. Include the ones that matter in the verified issues (what the claim is, where it is, and what would count as a source), and say how many there were in all.`
+        : `Unsourced claims in the target: list the factual claims the target itself makes (figures, dates, market or technical facts, what others have agreed or will do) that give no source or evidence, each with its location and what would count as a source. Put them in the Findings table (area "unsourced claim", severity by how much rests on it) and count them in your summary. A plan's own intentions ("we will ship in Q2") are commitments, not factual claims.`,
+    );
+  return out;
+}
+
 /** The scope filters, said plainly to reviewers and the handler. */
 function scopeLines(o: HoundOptions): string[] {
   const out: string[] = [];
@@ -372,6 +431,7 @@ function challengePrompt(s: Swarm, me: SwarmReviewer, others: SwarmReviewer[]) {
     FENCE_NOTE,
     `For each of their findings: verify it against the code and say **agree** (with your own evidence), **refute** (with evidence of why it is wrong or overstated), or **can't tell**. Then list what they missed that you found, and anything you now withdraw or downgrade from your own report after reading theirs.`,
     `Finish with ## Final position: your consolidated findings (severity, location, one line each), scores 1–5 for ${s.focus.map((f) => FOCUS_LABEL[f]).join(", ")}, and your recommendation in one sentence: use as is / fix first (which) / do not use.`,
+    ...sourceLines(s.options, "reviewer"),
     RECOMMEND_LINE,
     reports,
   ].join("\n\n");
@@ -430,6 +490,7 @@ function finalPrompt(s: Swarm) {
     FENCE_NOTE,
     `A reviewer's authority comes from what it opened, not how it writes: a confident report produced from one or two tool calls is not evidence, and saying so is more useful to the owner than summarising it. Weigh the reports by the evidence line above each one.`,
     ...scopeLines(s.options),
+    ...sourceLines(s.options, "handler"),
     ...roomLines(s),
     `Produce, in Markdown: **1. Per reviewer**, 3–6 bullets each: their strongest verified findings, what the other side refuted, where they were wrong. **2. Verified issues**, one table ranked by severity (severity, location, what, who found it, status: confirmed by both / disputed / only one saw it). For any disputed item that matters, check the code yourself before ruling, read-only. **3. Overall recommendation**: use as is / fix first / do not use, with the 3–5 fixes to do first and why. **4. Blind spots**: what no reviewer covered. Keep the owner's time: lead with the verdict.`,
     [
@@ -464,6 +525,10 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
     if (isUnattended(session.id)) throw new Error(`${what} needs the owner at the screen to approve the room.`);
   }
   if (options.cleanMachine.enabled && !repoRootOf(ws, target)) throw new Error(`The clean-machine test needs ${target} to be in a git repo: the certificate is about a commit.`);
+
+  // A chat opened just for this review has no name yet: name it for what it will hold, so the
+  // verdict is easy to find next to the reviewers' chats ("QA Hound · roadmap.md · <model>").
+  if (!session.title || session.title === "New chat") sessions.update(session.id, { title: `QA Hound · ${path.basename(target) || target} · verdict` });
 
   const s: Swarm = {
     id: randomUUID(),
@@ -524,6 +589,11 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       }
       s.spentUsd = [...watched.values()].reduce((a, w) => a + w.cost, 0);
       const elapsed = Date.now() - s.startedAt;
+      if (s.stopAsked) {
+        stopReviewers("you stopped it");
+        if (s.phase === "final") abortTurn(session.id);
+        return;
+      }
       if (s.phase === "review" || s.phase === "challenge") {
         if (s.spentUsd >= o.budgetUsd * REVIEWER_SHARE) stopReviewers(`the reviewers used their share of the $${o.budgetUsd.toFixed(2)} budget`);
         else if (elapsed >= o.maxMinutes * 60_000 * REVIEWER_TIME) stopReviewers(`the reviewers ran out of their share of the ${o.maxMinutes}-minute limit`);
@@ -676,6 +746,7 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       // the reviewers are done with the room: close it, and wait for the clean-machine certificate (bounded by its deadline)
       await closeSandbox();
       if (cleanRun) await cleanRun;
+      if (s.stopAsked) throw new Error("You stopped the review, so no verdict was written. What the reviewers had written is in their chats.");
       if (!s.reviewers.some((r) => r.report)) throw new Error(s.stopped ? `stopped before any report: ${s.stopped}` : "every reviewer failed; nothing to summarise");
       await tick();
       if (s.spentUsd >= o.budgetUsd * 0.95) throw new Error(`the $${o.budgetUsd.toFixed(2)} budget was used up before the verdict`);
@@ -714,6 +785,24 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
       s.phase = "error";
       s.error = e instanceof Error ? e.message : String(e);
       record({ level: "error", source: "swarm", sessionId: session.id, message: `QA Hound failed: ${s.error}` });
+      // Never silence: if no verdict was written, the chat the review started from says so and
+      // says where the reviewers' work is. (A verdict turn that started writes its own reply.)
+      if (!s.finalTurnId && sessions.get(session.id)) {
+        const wrote = s.reviewers.filter((r) => r.report);
+        messages.add({ session_id: session.id, role: "user", content: `QA Hound on \`${target}\` (${models.join(" vs ")}): summarise and recommend.`, model: null, tools_json: null, usage_json: null });
+        messages.add({
+          session_id: session.id,
+          role: "assistant",
+          content:
+            `**QA Hound did not reach a verdict.** ${s.error}\n\n` +
+            (wrote.length
+              ? `${wrote.length === 1 ? "One reviewer" : `${wrote.length} reviewers`} had written a report before that. They are in ${wrote.length === 1 ? "its chat" : "their chats"} in the sidebar: ${wrote.map((r) => `"QA Hound · ${path.basename(target) || target} · ${r.model}"`).join(" and ")}. Ask me here to summarise them, or run QA Hound again.`
+              : `No reviewer finished a report. Check the models chosen and the Activity log, then run it again.`),
+          model: s.primaryModel,
+          tools_json: null,
+          usage_json: null,
+        });
+      }
     } finally {
       removePlanted(ws, s.id);
       // rooms always go, whatever ended the run (both never throw)
