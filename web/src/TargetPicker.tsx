@@ -18,7 +18,7 @@ interface Option {
 const SKIP = new Set(['node_modules', '.git', '.venv', 'venv', '__pycache__', '.cache', 'dist', 'build', '.next', 'target'])
 const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
-export function TargetPicker({ projectId, repos, value, onChange }: { projectId: string; repos: RepoInfo[]; value: string; onChange: (v: string) => void }) {
+export function TargetPicker({ projectId, repos, value, onChange, version = 0 }: { projectId: string; repos: RepoInfo[]; value: string; onChange: (v: string) => void; /** bump after adding files, so the listings are read again */ version?: number }) {
   const [open, setOpen] = useState(false)
   const [cursor, setCursor] = useState(0)
   // folder listings, by folder path ('' = the workspace itself); null while loading, [] when it isn't a folder
@@ -40,7 +40,7 @@ export function TargetPicker({ projectId, repos, value, onChange }: { projectId:
       .catch(() => setDirs((d) => ({ ...d, [dir]: [] })))
   }, [open, dir, dirs, projectId])
   // another project's workspace is a different set of folders
-  useEffect(() => setDirs({}), [projectId])
+  useEffect(() => setDirs({}), [projectId, version])
 
   const options = useMemo<Option[]>(() => {
     const out: Option[] = []

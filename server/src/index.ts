@@ -112,7 +112,9 @@ const buildInfo = (() => {
   }
 })();
 
-app.get("/api/health", (c) => c.json({ ok: true, build: buildInfo }));
+/** When this server started: a page loaded from an earlier one knows to load itself again (its scripts and pictures may be gone). */
+const startedAt = Date.now();
+app.get("/api/health", (c) => c.json({ ok: true, build: buildInfo, startedAt }));
 
 /** Name, logos and colour overrides (see docs/BRANDING.md). Public: the login screen needs it. */
 app.get("/api/brand", (c) => c.json(brand()));
@@ -143,7 +145,7 @@ app.get("/api/config", async (c) =>
     defaultEngine: config.agent.defaultEngine,
     defaultModel: config.agent.defaultModel,
     // which branch and commit this BitBull was built from: the page says so when it isn't the live one on main
-    build: { branch: buildInfo.branch, commit: buildInfo.commit, dirty: buildInfo.dirty, stack: buildInfo.stack },
+    build: { branch: buildInfo.branch, commit: buildInfo.commit, dirty: buildInfo.dirty, stack: buildInfo.stack, startedAt },
     // what a fresh install still needs: shown as "Finish setting up" on the home screen
     setup: { saygm: !!config.saygm.apiKey, ditto: dittoEnabled() },
     ditto: {

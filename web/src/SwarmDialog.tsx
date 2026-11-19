@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type HoundOptions, type HoundRoomOptions, type Model, type Project, type RepoInfo, type Session, type Severity, type Swarm, type HoundBench } from './api'
 import { IconX } from './icons'
 import { priceLabel } from './ModelPicker'
 import { TargetPicker } from './TargetPicker'
+import { fromInput, uploadItems } from './uploads'
 import houndArt from './assets/qa-hound.webp'
 
 const FOCUS: { id: Swarm['focus'][number]; label: string; hint: string }[] = [
@@ -58,6 +59,39 @@ export function SwarmDialog({
   onStarted: (s: Swarm) => void
 }) {
   const [target, setTarget] = useState('')
+  // "Upload a file to review": a one-off document (a roadmap, a spec, a script) that isn't in the workspace yet
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadNote, setUploadNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const [filesVersion, setFilesVersion] = useState(0)
+  const uploadForReview = async (list: FileList | null) => {
+    const items = fromInput(list)
+    if (!items.length) return
+    setUploading(true)
+    setUploadNote(null)
+    try {
+      // a folder of their own, so a review of several files has one thing to point at and nothing is overwritten
+      const d = new Date()
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const folder = `uploads/review-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+      const r = await uploadItems(project?.id ?? 'general', items, { target: folder })
+      if (!r.saved.length) throw new Error('nothing was saved')
+      setFilesVersion((v) => v + 1)
+      setTarget(r.saved.length === 1 ? r.saved[0] : folder)
+      const unread = r.saved.filter((p) => /\.(pdf|docx?|xlsx?|pptx?|odt|rtf|zip|png|jpe?g|gif|webp)$/i.test(p))
+      setUploadNote({
+        ok: !unread.length,
+        text:
+          (r.saved.length === 1 ? `Uploaded ${r.saved[0]}.` : `Uploaded ${r.saved.length} files to ${folder}.`) +
+          (unread.length ? ` The reviewers read text (Markdown, plain text, code, CSV, JSON): ${unread.length === 1 ? 'this file is' : `${unread.length} of these are`} a format they can't open as text, so paste or export the content as Markdown or text for a proper review.` : ''),
+      })
+    } catch (e) {
+      setUploadNote({ ok: false, text: `Couldn't upload: ${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
   const [repos, setRepos] = useState<RepoInfo[]>([])
   const [reposLoaded, setReposLoaded] = useState(false)
   const [a, setA] = useState('')
@@ -227,7 +261,15 @@ export function SwarmDialog({
           </div>
           <div className="field">
             <span>What to review (a repo, folder or file in this workspace)</span>
-            <TargetPicker projectId={project?.id ?? 'general'} repos={repos} value={target} onChange={setTarget} />
+            <TargetPicker projectId={project?.id ?? 'general'} repos={repos} value={target} onChange={setTarget} version={filesVersion} />
+            <div className="hound-upload">
+              <input ref={fileRef} type="file" multiple hidden onChange={(e) => void uploadForReview(e.target.files)} />
+              <button type="button" className="btn sm" disabled={uploading} onClick={() => fileRef.current?.click()}>
+                {uploading ? 'Uploading…' : 'Upload a file to review'}
+              </button>
+              <span className="muted small">For a one-off review of a document that isn't in the workspace: a roadmap, a spec, a script. Several files go in as one folder.</span>
+            </div>
+            {uploadNote && <span className={`small ${uploadNote.ok ? 'muted' : 'lv-error-text'}`}>{uploadNote.text}</span>}
             {reposLoaded && repos.length === 0 && (
               <span className="muted small">
                 No repos are cloned in {project ? `"${project.name}"` : 'the general workspace'}: clone one from Repositories, or pick a folder or file

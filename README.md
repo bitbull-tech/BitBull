@@ -233,6 +233,10 @@ A bar across the top of a test BitBull says so, with the branch and commit it wa
 the same bar appears on a live BitBull that was deployed from a branch other than `main`), so the
 two are never mistaken for each other.
 
+When BitBull is restarted by a deploy or an update, a window that was already open says
+"BitBull was updated" with a **Reload** button, and reloads on its own if it is hidden (the desktop
+window hides rather than closes, so it would otherwise keep showing the old version).
+
 It uses the same `.env`, so the same access token unlocks it, but its chats, workspaces and
 settings are entirely separate (`~/bitbull-data-test` in the distro). `-Port` and `-Name` let you
 run more than one.
@@ -969,7 +973,9 @@ Details, licences and privacy: [docs/VOICE.md](docs/VOICE.md).
 each other and summarise a verdict and recommendations.
 
 The **QA Hound** button (top bar, in any chat) points up to two *other* models at a repo, folder or
-file in the workspace. Each reviews it on its own in the sandbox, read-only, across the areas you tick
+file in the workspace. **Upload a file to review** in its window takes a one-off document that
+isn't in the workspace yet (a roadmap, a spec, a script) and points the review at it; the
+reviewers read text, so export a PDF or Word file as Markdown or text first. Each reviews it on its own in the sandbox, read-only, across the areas you tick
 (attack vectors, correctness, code quality, performance, user experience) and writes a report with
 evidence; then each reads the other's report and has to agree, refute or admit it can't tell,
 with evidence; then the chat's own model, the primary handler, weighs both rounds, checks any

@@ -45,6 +45,51 @@ const lsSet = (k: string, v: string) => {
   }
 }
 
+/**
+ * BitBull was restarted (a deploy, an update) after this page was loaded. The page's own scripts
+ * and pictures belong to the old build and may be gone, which shows as missing images and stale
+ * text; the desktop window makes it likely, because closing it only hides it. So: while nobody is
+ * looking the page loads itself again, and otherwise it says so and offers to.
+ */
+function StaleBar({ loadedFrom }: { loadedFrom?: number }) {
+  const [stale, setStale] = useState(false)
+  useEffect(() => {
+    if (!loadedFrom) return // an older server doesn't say when it started
+    let dead = false
+    const check = async () => {
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' })
+        const j = (await r.json()) as { startedAt?: number }
+        if (dead || !j.startedAt || j.startedAt === loadedFrom) return
+        if (document.hidden) location.reload()
+        else setStale(true)
+      } catch {
+        /* restarting right now: the next check will see it */
+      }
+    }
+    const t = setInterval(check, 60_000)
+    const onShow = () => void check()
+    document.addEventListener('visibilitychange', onShow)
+    window.addEventListener('focus', onShow)
+    return () => {
+      dead = true
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('focus', onShow)
+    }
+  }, [loadedFrom])
+  if (!stale) return null
+  return (
+    <div className="build-bar stale" role="status">
+      <b>BitBull was updated</b>
+      <span className="build-bar-text">This window is still showing the version from before. Reload to get the new one; a reply in progress carries on.</span>
+      <button className="btn" onClick={() => location.reload()}>
+        Reload
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [cfg, setCfg] = useState<AppConfig | null>(null)
@@ -811,6 +856,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
       <div className="scrim" onClick={() => setNavOpen(false)} />
 
       <main className="main">
+        <StaleBar loadedFrom={cfg.build?.startedAt} />
         {(() => {
           // Which code this is: said out loud whenever it isn't the live BitBull on main, so a test
           // stack or a branch being tried is never mistaken for the real one.
