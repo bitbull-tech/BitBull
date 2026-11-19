@@ -70,6 +70,7 @@
       <label>port <input type="number" id="port" min="1024" max="65535" style="width:84px"></label>
       <button id="save">Save</button>
     </div>
+    <p class="hint" id="stackNote" hidden></p>
     <div class="row" style="margin-top:8px">
       <label class="chk"><input type="checkbox" id="auto_token"> sign the BitBull window in with APP_TOKEN from the repo's .env</label>
       <label class="chk"><input type="checkbox" id="open_when_ready"> open BitBull as soon as it answers</label>
@@ -174,6 +175,11 @@ function nextStep(s) {
   if (!s.wsl.ok) return 'Install WSL 2 first: in an admin PowerShell run  wsl --install  and reboot.';
   if (!s.distro.ok) return 'Run the first-time setup below to create the bitbull distro.';
   if (!s.docker.ok) return 'The distro is there but Docker is not answering: press Start.';
+  if (s.test) {
+    if (!s.containers.ok && /no test containers/.test(s.containers.detail)) return `Test stack: press Start to copy this folder in, build it and start it on port ${settings.port}. The live BitBull is not touched.`;
+    if (!s.containers.ok || !s.healthy) return 'Test stack: press Start to rebuild and start it (or wait a moment if it has just started).';
+    return `The test BitBull is running on port ${settings.port}. Open it, or set the port back to 8787 and Save to go back to the live one.`;
+  }
   if (!s.containers.ok && /no containers/.test(s.containers.detail)) return 'Press Deploy to build and start the containers for the first time.';
   if (!s.containers.ok) return 'Containers are stopped: press Start (it brings them up), or Deploy after a code change.';
   if (!s.healthy) return 'Press Start (or wait: containers can take a minute after a reboot).';
@@ -227,8 +233,9 @@ function showNext(s) {
   const wait = needsSetup(s);
   document.querySelectorAll('button[data-action]').forEach((x) => {
     if (x.dataset.action === 'setup') return;
-    x.disabled = running || wait;
-    x.title = wait ? 'Set BitBull up first' : x.dataset.title ?? '';
+    const liveOnly = s.test && ['update', 'backup', 'install-at-login'].includes(x.dataset.action);
+    x.disabled = running || wait || liveOnly;
+    x.title = liveOnly ? 'For the live BitBull only: set the port back to 8787 and Save' : wait ? 'Set BitBull up first' : s.test && ['start', 'deploy'].includes(x.dataset.action) ? 'Copy this folder into the test stack, build it and start it' : x.dataset.title ?? '';
   });
   // and the set-up section is open when it is the next thing to do
   if (wait) document.querySelectorAll('details').forEach((d) => (d.open = true));
@@ -257,12 +264,19 @@ async function refresh() {
   check(
     $('c_build'),
     !!built && (current || !head),
-    !built
+    s.test
+      ? 'test stack: built from this folder each time you press Start or Deploy'
+      : !built
       ? (s.healthy ? 'this build predates version stamping — deploy once to record it' : 'unknown until BitBull answers')
       // "the same as your copy" says nothing about GitHub: Update is what fetches anything newer
       : built + (head ? (current ? '  ·  same as your copy of the code. Update gets anything newer from GitHub' : '  ·  your copy of the code is on ' + head + ': press Deploy to run it') : ''),
-    !built && !s.healthy, // only "not applicable" when there is nothing to ask yet
+    s.test || (!built && !s.healthy), // only "not applicable" when there is nothing to ask yet
   );
+  // Which BitBull the buttons below work on. A port other than 8787 is the test stack.
+  const note = $('stackNote');
+  note.hidden = !s.test;
+  if (s.test) note.textContent = `Test stack on port ${settings.port}. Start, Stop, Deploy, Logs and Open work on the test BitBull, built from this folder with its own containers and data. The live BitBull on 8787 is not touched. Update, Back up and Start at login are for the live one: set the port back to 8787 and Save.`;
+  $('open').textContent = s.test ? 'Open test BitBull' : 'Open BitBull';
   $('dot').className = 'dot ' + (s.healthy ? 'ok' : 'bad');
   $('headline').textContent = s.healthy ? 'running' : 'not running';
   $('headline').className = 'state ' + (s.healthy ? 'ok' : 'bad');

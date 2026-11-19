@@ -176,6 +176,8 @@ pub struct Status {
     pub containers: Check,
     /// BitBull answered /api/health on the configured port
     pub healthy: bool,
+    /// the launcher is on the test stack (a port other than the live one), not the live BitBull
+    pub test: bool,
     pub url: String,
     /// commit the running containers were built from (deploy.ps1 records it; the image has no .git)
     pub built: Option<String>,
@@ -187,7 +189,7 @@ pub struct Status {
 /// and independent, so one failing never hides the others.
 pub fn status(s: &Settings) -> Status {
     let platform = Platform::current();
-    let mut st = Status { url: s.bitbull_url(), platform: platform.id().into(), ..Default::default() };
+    let mut st = Status { url: s.bitbull_url(), platform: platform.id().into(), test: platform == Platform::Windows && is_test(s.port), ..Default::default() };
     if let Some(repo) = &s.repo {
         st.repo = Some(repo.display().to_string());
         st.repo_ok = is_repo(repo);
@@ -234,7 +236,14 @@ pub fn status(s: &Settings) -> Status {
             Err(e) => Check { ok: false, detail: e },
         };
     }
-    if st.docker.ok {
+    if st.docker.ok && is_test(s.port) {
+        // the test stack's containers, by name: its compose project needs test-stack.ps1's environment to ask
+        st.containers = match run_capture("wsl.exe", &["-d", &s.distro, "--exec", "docker", "ps", "-a", "--format", "{{.Names}} {{.State}}"], Duration::from_secs(20)) {
+            Ok((0, out)) => test_containers(&out),
+            Ok((_, out)) => Check { ok: false, detail: first_line(&out, "docker ps failed") },
+            Err(e) => Check { ok: false, detail: e },
+        };
+    } else if st.docker.ok {
         st.containers = match run_capture(
             "wsl.exe",
             &["-d", &s.distro, "--cd", "~/BitBull", "--exec", "docker", "compose", "ps", "-a", "--format", "{{.Name}} {{.State}}"],
@@ -355,6 +364,16 @@ pub fn summarise_compose_ps(out: &str) -> Check {
     Check { ok: running == rows.len(), detail }
 }
 
+/// `docker ps` lines (`name state`) narrowed to the test stack's containers.
+pub fn test_containers(out: &str) -> Check {
+    let suffix = format!("-{TEST_NAME}");
+    let mine: Vec<&str> = out.lines().filter(|l| l.split_whitespace().next().is_some_and(|n| n.starts_with("bitbull-") && n.ends_with(&suffix))).collect();
+    if mine.is_empty() {
+        return Check { ok: false, detail: "no test containers yet (press Start to build the test stack from this folder)".into() };
+    }
+    summarise_compose_ps(&mine.join("\n"))
+}
+
 fn first_line(out: &str, fallback: &str) -> String {
     out.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or(fallback).chars().take(160).collect()
 }
@@ -398,6 +417,15 @@ impl Action {
     }
 }
 
+/// The live stack's port. Any other port in the launcher means the test stack
+/// (scripts/bitbull-wsl/test-stack.ps1): its own containers, code and data, next to the live one.
+pub const LIVE_PORT: u16 = 8787;
+pub fn is_test(port: u16) -> bool {
+    port != LIVE_PORT
+}
+/// test-stack.ps1's default -Name: containers bitbull-*-test, code ~/BitBull-test, data ~/bitbull-data-test.
+pub const TEST_NAME: &str = "test";
+
 /// The program and argv for an action, for the scripts of `platform`. `source` is only used by
 /// Setup: on Windows the Ubuntu distro to build from (validated like a distro name), on a Mac the
 /// runtime, `colima` or `docker`. Nothing else from outside reaches an argument.
@@ -439,6 +467,25 @@ pub fn command_for(platform: Platform, action: Action, repo: &Path, distro: &str
         a.extend(extra.iter().map(|s| s.to_string()));
         ("powershell.exe".to_string(), a)
     };
+    // Windows, a port other than the live one: the buttons work on the test stack, never the live
+    // one. (Before this they always ran the live stack's scripts, whatever the port field said.)
+    if is_test(port) {
+        let p = port.to_string();
+        let live_only = |what: &str| Err(format!("{what} is for the live BitBull only. The launcher is on the test stack (port {port}): set the port back to {LIVE_PORT} and Save first."));
+        return match action {
+            // test-stack.ps1 copies this checkout, builds and starts: Start and Deploy are the same thing here
+            Action::Start | Action::Deploy => Ok(ps(script("test-stack"), &["-Port", &p])),
+            Action::Stop => Ok(ps(script("test-stack"), &["-Down"])),
+            Action::Logs => Ok((
+                "wsl.exe".to_string(),
+                ["-d", distro, "--exec", "docker", "logs", "--tail", "300", &format!("bitbull-agent-{TEST_NAME}")].iter().map(|s| s.to_string()).collect(),
+            )),
+            Action::Setup => live_only("Setup"),
+            Action::Update => live_only("Update"),
+            Action::Backup => live_only("Back up"),
+            Action::InstallAtLogin => live_only("Start at login"),
+        };
+    }
     Ok(match action {
         Action::Setup => {
             // No source distro: setup.ps1 downloads and verifies Canonical's WSL image instead,
@@ -588,6 +635,46 @@ mod tests {
         assert_eq!(a[1], "bitbull");
         assert!(command_for(w, Action::Start, &dir.join("nope"), "bitbull", 8787, None).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn windows_actions_follow_the_port_to_the_test_stack() {
+        let w = Platform::Windows;
+        let dir = std::env::temp_dir().join(format!("bitbull-desktop-test-stack-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("scripts/bitbull-wsl")).unwrap();
+        std::fs::write(dir.join("scripts/bitbull-wsl/start.ps1"), "").unwrap();
+        std::fs::write(dir.join("docker-compose.yml"), "").unwrap();
+        assert!(is_repo_for(w, &dir));
+        // the live port: the live scripts, as before
+        let (_, a) = command_for(w, Action::Start, &dir, "bitbull", 8787, None).unwrap();
+        assert!(a.iter().any(|x| x.ends_with("start.ps1")));
+        let (_, a) = command_for(w, Action::Deploy, &dir, "bitbull", 8787, None).unwrap();
+        assert!(a.iter().any(|x| x.ends_with("deploy.ps1")));
+        // any other port: only ever the test stack
+        for action in [Action::Start, Action::Deploy] {
+            let (p, a) = command_for(w, action, &dir, "bitbull", 8788, None).unwrap();
+            assert_eq!(p, "powershell.exe");
+            assert!(a.iter().any(|x| x.ends_with("test-stack.ps1")));
+            assert!(!a.iter().any(|x| x.ends_with("start.ps1") || x.ends_with("deploy.ps1")));
+            assert_eq!(&a[a.len() - 2..], &["-Port", "8788"]);
+        }
+        let (_, a) = command_for(w, Action::Stop, &dir, "bitbull", 8788, None).unwrap();
+        assert!(a.iter().any(|x| x.ends_with("test-stack.ps1")));
+        assert_eq!(a.last().unwrap(), "-Down");
+        let (p, a) = command_for(w, Action::Logs, &dir, "bitbull", 8788, None).unwrap();
+        assert_eq!(p, "wsl.exe");
+        assert_eq!(a.last().unwrap(), "bitbull-agent-test");
+        for action in [Action::Update, Action::Backup, Action::InstallAtLogin, Action::Setup] {
+            let e = command_for(w, action, &dir, "bitbull", 8788, None).unwrap_err();
+            assert!(e.contains("live BitBull only"), "{e}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        let ps = "bitbull-agent running\nbitbull-egress running\nbitbull-agent-test running\nbitbull-egress-test running\nbitbull-gateway-test exited\nother-test running\n";
+        let c = test_containers(ps);
+        assert!(!c.ok);
+        assert_eq!(c.detail, "bitbull-agent-test: running, bitbull-egress-test: running, bitbull-gateway-test: exited");
+        assert!(!test_containers("bitbull-agent running\n").ok);
     }
 
     #[test]
