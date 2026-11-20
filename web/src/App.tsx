@@ -282,7 +282,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   const [schedulesOpen, setSchedulesOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [projectDialog, setProjectDialog] = useState<Project | 'new' | 'new-pound' | null>(null)
-  // the Dog Pound of a project (Pound.tsx); 'mixed' = just created as a Dog Pound project
+  // the BitBull Pound of a project (Pound.tsx); 'mixed' = just created as a BitBull Pound project
   const [poundFor, setPoundFor] = useState<{ project: Project; startWith?: 'mixed' } | null>(null)
   // Files dialog: a project, or 'general' for the workspace of unfiled chats
   const [filesFor, setFilesFor] = useState<Project | 'general' | null>(null)
@@ -417,7 +417,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
   }, [])
 
   const newChat = (projectId: string | null = null) => {
-    // a project with a Dog Pound starts its chats on the Alpha Dog's model
+    // a project with a BitBull Pound starts its chats on the Alpha Dog's model
     if (projectId)
       void api
         .pound(projectId)
@@ -458,7 +458,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
     if (s) openSession(s)
   }
 
-  /** A chat by id, which may not be in the list yet (a Dog Pound dog's chat, made by the server). */
+  /** A chat by id, which may not be in the list yet (a BitBull Pound dog's chat, made by the server). */
   const openById = async (id: string) => {
     const s = (await guard(api.session(id)))?.session
     if (!s) return
@@ -768,8 +768,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
         <nav className="sessions">
           <div className="section-head">
             <span>Projects</span>
-            <button className="icon-btn sm pound-new" title="New Dog Pound project: a team of dogs, each on the model you choose for the job" onClick={() => setProjectDialog('new-pound')}>
-              <img src={POUND_ROLES[0].head} width={18} height={18} alt="New Dog Pound project" draggable={false} />
+            <button className="icon-btn sm pound-new" title="New BitBull Pound project: a team of dogs, each on the model you choose for the job" onClick={() => setProjectDialog('new-pound')}>
+              <img src={POUND_ROLES[0].head} width={18} height={18} alt="New BitBull Pound project" draggable={false} />
             </button>
             <button className="icon-btn sm" title="New project" onClick={() => setProjectDialog('new')}>
               <IconPlus size={14} />
@@ -973,8 +973,8 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             </button>
           )}
           {currentProject && (
-            <button className="btn files-btn pound-btn" aria-label="Dog Pound" title="Dog Pound: this project's team of dogs and the model each one runs on" onClick={() => setPoundFor({ project: currentProject })}>
-              <img src={POUND_ROLES[0].head} width={16} height={16} alt="" draggable={false} /> <span className="pound-btn-label">Dog Pound</span>
+            <button className="btn files-btn pound-btn" aria-label="BitBull Pound" title="BitBull Pound: this project's team of dogs and the model each one runs on" onClick={() => setPoundFor({ project: currentProject })}>
+              <img src={POUND_ROLES[0].head} width={16} height={16} alt="" draggable={false} /> <span className="pound-btn-label">BitBull Pound</span>
             </button>
           )}
           <ModelPicker models={models} value={model} onChange={setModel} />
@@ -1145,7 +1145,7 @@ function Shell({ cfg, onUnauthorized, onLogout }: { cfg: AppConfig; onUnauthoriz
             <IconPlus size={14} /> New chat in {ctx.p.name}
           </button>
           <button onClick={() => (setCtx(null), setPoundFor({ project: ctx.p }))}>
-            <img className="ctx-dog" src={POUND_ROLES[0].head} width={14} height={14} alt="" draggable={false} /> Dog Pound
+            <img className="ctx-dog" src={POUND_ROLES[0].head} width={14} height={14} alt="" draggable={false} /> BitBull Pound
           </button>
           <button onClick={() => (setCtx(null), setReposFor(ctx.p))}>
             <IconBranch size={14} /> Repositories

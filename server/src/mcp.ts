@@ -156,9 +156,9 @@ function build(sessionHint: string | undefined) {
   server.registerTool(
     "pound_delegate",
     {
-      title: "Hand a task to one of the Dog Pound's dogs",
+      title: "Hand a task to one of the BitBull Pound's dogs",
       description:
-        "Only in a project with a Dog Pound (your instructions list its dogs). Hands one task to another dog, which runs on the model the owner chose for that job, in this project's workspace: " +
+        "Only in a project with a BitBull Pound (your instructions list its dogs). Hands one task to another dog, which runs on the model the owner chose for that job, in this project's workspace: " +
         "coder (writes the change), reviewer (scrutinises, read-only), tester (writes and runs tests), researcher (reads code, docs and the web, read-only). " +
         "The dog has not seen this chat: the brief must stand on its own (the goal, the files or area it owns, what to leave alone, how to check the result). " +
         "A coder's work is reviewed by the reviewer before it comes back, when the pound has one. The call waits for the report (a few minutes); if the dog is still working it returns a job id for pound_wait. " +
@@ -180,7 +180,7 @@ function build(sessionHint: string | undefined) {
   server.registerTool(
     "pound_wait",
     {
-      title: "Wait for a Dog Pound job",
+      title: "Wait for a BitBull Pound job",
       description: "Get the result of a pound_delegate call that was still running: pass its job id. Waits a few minutes at most; call again if it is still working.",
       inputSchema: { job: z.string().describe("The job id pound_delegate gave, e.g. job_1a2b3c4d") },
     },

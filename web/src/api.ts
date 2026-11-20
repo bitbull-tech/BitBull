@@ -562,7 +562,7 @@ export interface ModelProbe {
   side: 'gateway' | 'bitbull' | 'key' | 'network' | 'unclear'
 }
 
-/** The Dog Pound (server/src/pound.ts): a project's dogs and the model each one runs on */
+/** The BitBull Pound (server/src/pound.ts): a project's dogs and the model each one runs on */
 export type PoundRole = 'alpha' | 'coder' | 'reviewer' | 'tester' | 'researcher'
 export interface PoundConfig {
   enabled: boolean

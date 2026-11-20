@@ -9,7 +9,7 @@ engines (**OpenCode** and the **Claude Agent SDK**) and its own web UI.
   chat picks up where it left off
 - Light and dark, with colour schemes for the background and sidebar (Settings → Appearance), and
   white-labelled from one `brand.json` — name, logo and every colour
-- **Dog Pound**: a team of dogs per project, each on the model you pick for its job: one plans
+- **BitBull Pound**: a team of dogs per project, each on the model you pick for its job: one plans
   and hands out the work, others code, review, test and research; the review can't be skipped
 - **QA Hound**: unleash multiple LLMs on a repo, folder or file to review it, challenge each other
   and summarise a verdict and recommendations
@@ -580,9 +580,9 @@ spending), a short test plan and a 7-day launch plan. Once you approve it, it is
 role runs on one of the subagents above, so it keeps their limits: read-only roles can't change
 anything. The `team-architect` skill holds the method.
 
-## The Dog Pound: a model for each job
+## The BitBull Pound: a model for each job
 
-A project can have a **Dog Pound**: a team of dogs, each running on the model you choose for its
+A project can have a **BitBull Pound**: a team of dogs, each running on the model you choose for its
 job. You talk to the Alpha Dog as you would to any chat; it plans the work, hands tasks to the
 others and reports back.
 
@@ -595,7 +595,7 @@ others and reports back.
 | **Dig Dog** (deerstalker) | Researches: code, docs, the web | no: read-only |
 
 **Set it up.** **Call the BitBull Pound** when you create a project (or on its home screen), or
-**Dog Pound** in the top bar of a project, or right-click the project. Tick **Use a Dog Pound in this project**
+**BitBull Pound** in the top bar of a project, or right-click the project. Tick **Use a BitBull Pound in this project**
 and tick the dogs you want, each with a model from its drop-down; an unticked dog isn't in the
 pound, and its model is remembered for when you tick it again. The Alpha Dog is always in: it
 starts on your default model.
@@ -1243,7 +1243,7 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/projects/:id/download` | `?path=` (repeat for several): one file as itself; a folder or several paths as one .zip (up to 5,000 files / 512 MB) |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
-| `GET/PUT` | `/api/projects/:id/pound` | A project's Dog Pound: `{enabled, models:{alpha,coder,reviewer,tester,researcher}, separateChats, autoReview}`. `GET /api/sessions/:id/pound` lists the jobs a chat has handed out |
+| `GET/PUT` | `/api/projects/:id/pound` | A project's BitBull Pound: `{enabled, models:{alpha,coder,reviewer,tester,researcher}, separateChats, autoReview}`. `GET /api/sessions/:id/pound` lists the jobs a chat has handed out |
 | `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA Hound run (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
 | `GET/POST` | `/api/vault`, `/api/vault/unlock {key}`, `/api/vault/lock` | Vault state; unlock with the 64-hex key (migrates secrets out of settings.local.json); lock |

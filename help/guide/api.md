@@ -50,7 +50,7 @@ container, and `/mcp/bitbull` only the engines (a token minted at startup).
 | `GET` | `/api/projects/:id/download` | `?path=` (repeat for several): one file as itself; a folder or several paths as one .zip (up to 5,000 files / 512 MB) |
 | `GET/POST` | `/api/projects/:id/files` | List a workspace folder (`?dir=`) / upload files (`file`, `path`, `target`); `general` = unfiled workspace |
 | `POST` | `/api/import/conversations` | Write chats into history (`{source, projectId?, conversations:[{id,title,createdAt,messages:[{role,content,createdAt}]}]}`); ids are `<source>-<id>`, so repeats are skipped |
-| `GET/PUT` | `/api/projects/:id/pound` | A project's Dog Pound: `{enabled, models:{alpha,coder,reviewer,tester,researcher}, separateChats, autoReview}`. `GET /api/sessions/:id/pound` lists the jobs a chat has handed out |
+| `GET/PUT` | `/api/projects/:id/pound` | A project's BitBull Pound: `{enabled, models:{alpha,coder,reviewer,tester,researcher}, separateChats, autoReview}`. `GET /api/sessions/:id/pound` lists the jobs a chat has handed out |
 | `POST/GET` | `/api/swarm`, `/api/swarm/:id` | Start a QA Hound run (`{sessionId, target, models[1..2], focus?}`) / its progress; reviewer chats are ordinary sessions |
 | `POST` | `/api/projects/:id/ditto-sync` | Start a Ditto seed/refresh run for the project in its own chat; `PATCH /api/projects/:id {dittoSync}` turns the standing sync on/off |
 | `GET/POST` | `/api/vault`, `/api/vault/unlock {key}`, `/api/vault/lock` | Vault state; unlock with the 64-hex key (migrates secrets out of settings.local.json); lock |

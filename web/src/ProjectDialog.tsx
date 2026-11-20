@@ -14,7 +14,7 @@ export function ProjectDialog({
   onDeleted,
 }: {
   project: Project | null
-  /** a new project that starts with a Dog Pound (the tick can still be cleared) */
+  /** a new project that starts with a BitBull Pound (the tick can still be cleared) */
   pound?: boolean
   onOpenPound?: (p: Project) => void
   onClose: () => void
@@ -65,7 +65,7 @@ export function ProjectDialog({
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal narrow" role="dialog" aria-label={project ? 'Edit project' : 'New project'}>
         <header className="modal-head">
-          <h2>{project ? 'Project settings' : pound ? 'New Dog Pound project' : 'New project'}</h2>
+          <h2>{project ? 'Project settings' : pound ? 'New BitBull Pound project' : 'New project'}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <IconX />
           </button>

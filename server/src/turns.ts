@@ -139,7 +139,7 @@ function finish(t: LiveTurn, status: TurnStatus) {
  */
 export function startTurn(
   session: SessionRow,
-  input: { prompt: string; model: string; attachments?: string[]; plan?: boolean; /** nobody is at the screen (schedule, Telegram) */ unattended?: boolean; /** QA Hound reviewer allowed its run's sealed room (RunInput.reviewSandbox) */ reviewSandbox?: boolean; /** a Dog Pound dog at work: it can't hand work on */ noDelegate?: boolean },
+  input: { prompt: string; model: string; attachments?: string[]; plan?: boolean; /** nobody is at the screen (schedule, Telegram) */ unattended?: boolean; /** QA Hound reviewer allowed its run's sealed room (RunInput.reviewSandbox) */ reviewSandbox?: boolean; /** a BitBull Pound dog at work: it can't hand work on */ noDelegate?: boolean },
 ): { turnId: string; status: TurnStatus; created: boolean } {
   const existing = activeBySession.get(session.id);
   if (existing) return { turnId: existing, status: "running", created: false };

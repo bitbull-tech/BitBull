@@ -467,7 +467,7 @@ export function promptTools(o: { plan?: boolean; reviewSandbox?: boolean; noDele
     // "cathedral_*": false above. Only when the project has Cathedral switched on.
     // Everywhere else it is off, including ordinary chats in a Cathedral project.
     cathedral_review_exec: !!(o.plan && o.reviewSandbox && enabled.has("cathedral")),
-    // A Dog Pound dog works on its own task and can't hand it on (pound.ts refuses too, when it can tell who asks).
+    // A BitBull Pound dog works on its own task and can't hand it on (pound.ts refuses too, when it can tell who asks).
     ...(o.noDelegate ? { bitbull_pound_delegate: false, bitbull_pound_wait: false, task: false } : {}),
   };
 }

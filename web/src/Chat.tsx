@@ -120,9 +120,9 @@ export function Chat({
   onPickModel?: (id: string) => void
   /** every model on offer, for "try again on another model" */
   models?: Model[]
-  /** open another chat by id (a Dog Pound dog's) */
+  /** open another chat by id (a BitBull Pound dog's) */
   onOpenChat?: (sessionId: string) => void
-  /** open this project's Dog Pound */
+  /** open this project's BitBull Pound */
   onOpenPound?: () => void
 }) {
   houndProject.id = project?.id ?? 'general'

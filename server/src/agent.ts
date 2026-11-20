@@ -61,7 +61,7 @@ function systemPrompt(project: ProjectRow | null | undefined, engine: EngineId, 
           ? `\n\nDitto sync is ON for this project: Ditto is the project's record. Before answering questions about it, search Ditto. At the end of any turn that produced a durable fact, decision, preference, lesson or change of status, save it to Ditto with save_memory (one concise memory each, source "bitbull", "Project: ${project.name}"), merging with related memories rather than duplicating. Material in uploads/claude-import/ (docs/, memory/) is the project's history from Claude.ai: treat it as already part of the record once a sync has run.`
           : ""),
     );
-    // the project's Dog Pound, for the chat that hands the work out (never for one of its dogs)
+    // the project's BitBull Pound, for the chat that hands the work out (never for one of its dogs)
     const pound = poundGuide(project.id, sessionId);
     if (pound) parts.push(pound);
   }

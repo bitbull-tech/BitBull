@@ -15,7 +15,7 @@ import researcherFull from './assets/pound/researcher.webp'
 import researcherHead from './assets/pound/researcher-head.webp'
 
 /**
- * The Dog Pound: a project's team of dogs, each on the model you pick for the job. The costume
+ * The BitBull Pound: a project's team of dogs, each on the model you pick for the job. The costume
  * is the job (suit, hoodie, judge's robes, hi-vis, deerstalker); the small detective beside a
  * chosen model is that model's own dog, by its maker's collar colour, as everywhere else.
  */
@@ -80,7 +80,7 @@ export function PoundDialog({
   project: Project
   models: Model[]
   defaultModel: string
-  /** open with the pound switched on and the mixed preset filled in (a new Dog Pound project) */
+  /** open with the pound switched on and the mixed preset filled in (a new BitBull Pound project) */
   startWith?: 'mixed'
   onClose: () => void
   onSaved: (p: PoundConfig) => void
@@ -144,10 +144,10 @@ export function PoundDialog({
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal pound-modal" role="dialog" aria-label="Dog Pound">
+      <div className="modal pound-modal" role="dialog" aria-label="BitBull Pound">
         <header className="modal-head">
           <h2>
-            Dog Pound <span className="muted pound-for">· {project.name}</span>
+            BitBull Pound <span className="muted pound-for">· {project.name}</span>
           </h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <IconX />
@@ -166,7 +166,7 @@ export function PoundDialog({
             <label className="int-row pound-on">
               <input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
               <div>
-                <b>Use a Dog Pound in this project</b>
+                <b>Use a BitBull Pound in this project</b>
                 <small>Off: chats here work as they always have. Nothing below applies.</small>
               </div>
             </label>
@@ -304,9 +304,9 @@ export function PoundStrip({ sessionId, busy, onOpen }: { sessionId: string; bus
   const total = runs.reduce((n, r) => n + r.costUsd, 0)
   const at = runs.filter((r) => r.status === 'running')
   return (
-    <div className="pound-strip" role="region" aria-label="Dog Pound">
+    <div className="pound-strip" role="region" aria-label="BitBull Pound">
       <button type="button" className="pound-strip-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <b>Dog Pound</b>
+        <b>BitBull Pound</b>
         <span className="muted">
           {at.length ? `${at.map((r) => r.label).join(', ')} working` : `${runs.length} task${runs.length === 1 ? '' : 's'} done`}
           {total > 0 ? ` · $${total.toFixed(total < 0.1 ? 3 : 2)}` : ''}

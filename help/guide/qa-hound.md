@@ -164,8 +164,8 @@ refused whole. QA Hound uses the same rooms for **Run it in a confidential sandb
 `skills/cathedral-sandbox/SKILL.md`; the risks are R13 in
 [docs/THREAT-MODEL.md](https://github.com/bitbull-tech/BitBull/blob/main/docs/THREAT-MODEL.md).
 
-## The Dog Pound: a model for each job
-A project can have a **Dog Pound**: a team of dogs, each running on the model you choose for its
+## The BitBull Pound: a model for each job
+A project can have a **BitBull Pound**: a team of dogs, each running on the model you choose for its
 job. You talk to the Alpha Dog as you would to any chat; it plans the work, hands tasks to the
 others and reports back.
 
@@ -178,7 +178,7 @@ others and reports back.
 | **Dig Dog** (deerstalker) | Researches: code, docs, the web | no: read-only |
 
 **Set it up.** **Call the BitBull Pound** when you create a project (or on its home screen), or
-**Dog Pound** in the top bar of a project, or right-click the project. Tick **Use a Dog Pound in this project**
+**BitBull Pound** in the top bar of a project, or right-click the project. Tick **Use a BitBull Pound in this project**
 and tick the dogs you want, each with a model from its drop-down; an unticked dog isn't in the
 pound, and its model is remembered for when you tick it again. The Alpha Dog is always in: it
 starts on your default model.

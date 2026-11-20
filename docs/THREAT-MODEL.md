@@ -239,7 +239,7 @@ skill used to be given to the agent in every chat; now only in projects that tic
 - **Owner actions are unchanged.** Repositories and QA Hound's pull request posting are BitBull's
   own calls with the token, started by the owner.
 
-### R14: The Dog Pound (only in projects that switch it on)
+### R14: The BitBull Pound (only in projects that switch it on)
 `server/src/pound.ts`, the `pound_delegate` and `pound_wait` tools on BitBull's MCP route. One chat
 (the Alpha Dog) hands tasks to other models, which BitBull runs as turns of their own.
 - **No new reach.** A dog is an ordinary turn in the same project workspace, behind the same

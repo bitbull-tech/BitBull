@@ -854,7 +854,7 @@ app.post("/api/sessions", async (c) => {
     .parse(await c.req.json().catch(() => ({})));
   const s = sessions.create({
     engine: (body.engine ?? config.agent.defaultEngine) as EngineId,
-    // a chat in a project with a Dog Pound starts on the Alpha Dog's model unless one was asked for
+    // a chat in a project with a BitBull Pound starts on the Alpha Dog's model unless one was asked for
     model: body.model ?? alphaModel(body.projectId) ?? config.agent.defaultModel,
     title: body.title,
     projectId: body.projectId && projects.get(body.projectId) ? body.projectId : null,
@@ -1150,7 +1150,7 @@ app.post("/api/swarm", async (c) => {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
   }
 });
-// The Dog Pound: a project's dogs and the model each runs on (pound.ts)
+// The BitBull Pound: a project's dogs and the model each runs on (pound.ts)
 app.get("/api/projects/:id/pound", (c) => {
   const p = projects.get(c.req.param("id"));
   if (!p) return c.json({ error: "project not found" }, 404);
@@ -1161,7 +1161,7 @@ app.put("/api/projects/:id/pound", async (c) => {
   if (!p) return c.json({ error: "project not found" }, 404);
   const body = await c.req.json().catch(() => ({}));
   const pound = setPound(p.id, body);
-  record({ level: "info", source: "config", message: `Dog Pound ${pound.enabled ? "on" : "off"} for ${p.name}${pound.enabled ? `: ${ROLES.filter((r) => pound.models[r] && (r === "alpha" || !pound.off.includes(r))).map((r) => `${ROLE_INFO[r].label} ${pound.models[r]}`).join(", ") || "no models chosen"}` : ""}` });
+  record({ level: "info", source: "config", message: `BitBull Pound ${pound.enabled ? "on" : "off"} for ${p.name}${pound.enabled ? `: ${ROLES.filter((r) => pound.models[r] && (r === "alpha" || !pound.off.includes(r))).map((r) => `${ROLE_INFO[r].label} ${pound.models[r]}`).join(", ") || "no models chosen"}` : ""}` });
   return c.json({ pound });
 });
 /** What this chat's dogs are doing and what they have cost. */

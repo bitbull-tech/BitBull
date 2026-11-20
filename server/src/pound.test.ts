@@ -1,4 +1,4 @@
-/** The Dog Pound, with a scripted turn runner in place of the engines. */
+/** The BitBull Pound, with a scripted turn runner in place of the engines. */
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -139,7 +139,7 @@ test("refusals: no pound, unknown dog, thin brief, a dog handing on, a chat outs
   const loose = sessions.create({ title: "x", engine: "opencode", model: "m", projectId: null });
   assert.match(no("coder", BRIEF, loose.id), /isn't in a project/);
   P.setPound(project.id, { ...P.poundFor(project.id), enabled: false });
-  assert.match(no("coder", BRIEF), /no Dog Pound switched on/);
+  assert.match(no("coder", BRIEF), /no BitBull Pound switched on/);
 });
 
 test("a dog can't hand work on, and its turn has the pound's tools switched off", async () => {

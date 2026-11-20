@@ -1,5 +1,5 @@
 /**
- * The Dog Pound: a project's own team of dogs, each on the model the owner chose for the job.
+ * The BitBull Pound: a project's own team of dogs, each on the model the owner chose for the job.
  *
  *   Alpha Dog   plans, splits the work and hands it out. It is the chat itself.
  *   Code Dog    writes the change.
@@ -123,9 +123,9 @@ export function poundGuide(projectId?: string | null, sessionId?: string): strin
   if (!roles.length) return "";
   const tool = "pound_delegate (BitBull's own tool: bitbull_pound_delegate or mcp__bitbull__pound_delegate)";
   return [
-    "\n## The Dog Pound",
+    "\n## The BitBull Pound",
     "",
-    "This project has a Dog Pound: other dogs, each on a model the owner chose for that job. You are the Alpha Dog. Plan the work, split it into tasks, hand each task to the right dog, check what comes back and report to the owner.",
+    "This project has a BitBull Pound: other dogs, each on a model the owner chose for that job. You are the Alpha Dog. Plan the work, split it into tasks, hand each task to the right dog, check what comes back and report to the owner.",
     "",
     ...roles.map((r) => `- **${ROLE_INFO[r].label}** (\`${r}\`, ${c.models[r]}): ${ROLE_INFO[r].does}.`),
     "",
@@ -211,7 +211,7 @@ export function dogPrompt(role: WorkRole, task: string, extra = ""): string {
   const info = ROLE_INFO[role];
   const base = info.subagent ? listSubagents().find((a) => a.name === info.subagent)?.prompt : undefined;
   return [
-    `You are the ${info.label} in this project's Dog Pound: one of a small team of AI agents working for one owner. The Alpha Dog (another model, which planned the work) has handed you the task below. You have not seen its conversation with the owner; the task is everything you get.`,
+    `You are the ${info.label} in this project's BitBull Pound: one of a small team of AI agents working for one owner. The Alpha Dog (another model, which planned the work) has handed you the task below. You have not seen its conversation with the owner; the task is everything you get.`,
     "",
     base ?? RESEARCHER_PROMPT,
     "",
@@ -285,9 +285,9 @@ export function startJob(input: { parentId: string; role: string; task: string }
   const parent = sessions.get(input.parentId);
   if (!parent) return { ok: false, text: "BitBull couldn't tell which chat is asking, so nothing was handed out." };
   if (isDogChat(parent.id)) return { ok: false, text: "You are one of the pound's dogs: you can't hand work on. Do the task yourself, or say in your report what you couldn't do." };
-  if (!parent.project_id) return { ok: false, text: "This chat isn't in a project, and a Dog Pound belongs to a project. Do the work yourself." };
+  if (!parent.project_id) return { ok: false, text: "This chat isn't in a project, and a BitBull Pound belongs to a project. Do the work yourself." };
   const cfg = poundFor(parent.project_id);
-  if (!cfg.enabled) return { ok: false, text: "This project has no Dog Pound switched on. Do the work yourself; the owner can switch one on in the project's settings." };
+  if (!cfg.enabled) return { ok: false, text: "This project has no BitBull Pound switched on. Do the work yourself; the owner can switch one on in the project's settings." };
   const role = input.role.trim().toLowerCase() as WorkRole;
   const roles = activeRoles(cfg);
   if (!roles.includes(role)) return { ok: false, text: `There is no "${input.role}" in this project's pound. ${roles.length ? `The dogs here: ${roles.join(", ")}.` : "No dog has a model chosen yet."}` };
@@ -317,7 +317,7 @@ export function startJob(input: { parentId: string; role: string; task: string }
         level: job.runs.some((r) => r.status === "error") ? "warn" : "info",
         source: "agent",
         sessionId: parent.id,
-        message: `Dog Pound: ${job.runs.map((r) => `${ROLE_INFO[r.role].label} (${r.model}) ${r.status}`).join(", then ")}${cost ? `, $${cost.toFixed(4)}` : ""}`,
+        message: `BitBull Pound: ${job.runs.map((r) => `${ROLE_INFO[r.role].label} (${r.model}) ${r.status}`).join(", then ")}${cost ? `, $${cost.toFixed(4)}` : ""}`,
       });
       const sweep = setTimeout(() => jobs.delete(job.id), KEEP_MS);
       sweep.unref?.();

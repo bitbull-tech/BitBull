@@ -49,7 +49,7 @@
   },
   {
     "slug": "qa-hound",
-    "title": "QA Hound, Dog Pound and subagents",
+    "title": "QA Hound, BitBull Pound and subagents",
     "description": "Set several models on a repo to review it, give each job in a project its own model, and run untrusted code in a Cathedral sandbox.",
     "order": 9
   },
