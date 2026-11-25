@@ -466,6 +466,19 @@ export interface RepoBranch {
   behind?: number
   last?: string
 }
+export interface DebatePoint {
+  /** A1, A2… for the first reviewer's findings, B1… for the second's */
+  id: string
+  owner: number
+  severity?: Severity
+  location?: string
+  what: string
+  /** 0 = from its owner's report; otherwise the round it was raised in as something the other missed */
+  raised: number
+  turns: Array<{ round: number; by: number; stance: 'agree' | 'refute' | 'cant-tell' | 'hold' | 'concede'; why: string }>
+  status: 'open' | 'confirmed' | 'dropped' | 'disputed'
+}
+
 export interface Swarm {
   id: string
   sessionId: string
@@ -504,6 +517,10 @@ export interface Swarm {
   stopped?: string
   /** you pressed Stop */
   stopAsked?: boolean
+  /** the cross-examination, point by point (server/src/houndDebate.ts) */
+  debate?: DebatePoint[]
+  /** which round of it is running, 1 to 3 */
+  round?: number
   /** what happened, in order */
   log?: Array<{ at: number; level: 'info' | 'warn' | 'error'; text: string }>
   resumedFrom?: string

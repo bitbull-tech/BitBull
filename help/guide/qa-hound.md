@@ -7,12 +7,21 @@ file in the workspace. **Upload a file to review** in its window takes a one-off
 isn't in the workspace yet (a roadmap, a spec, a script) and points the review at it; the
 reviewers read text, so export a PDF or Word file as Markdown or text first. Each reviews it on its own in the sandbox, read-only, across the areas you tick
 (attack vectors, correctness, code quality, performance, user experience) and writes a report with
-evidence; then each reads the other's report and has to agree, refute or admit it can't tell,
-with evidence; then the chat's own model, the primary handler, weighs both rounds, checks any
-disputed point itself, and replies in the chat with a per-reviewer summary, a ranked table of
+evidence. Then they **cross-examine** each other for up to three rounds. BitBull numbers each
+one's findings (A1, A2… and B1, B2…). In round 1 each has to try to break the other's findings
+(agree only where it checked, otherwise object or say it can't tell) and list what the other
+missed. In round 2 each defends what was attacked, with evidence that answers the objection, or
+concedes it. In round 3 each says whether the other's defence stands. It stops early once nothing
+is waiting for an answer, and a round is only put to a reviewer that has something to answer.
+BitBull keeps a ledger from their answers: every point ends **confirmed** (the other one checked
+it and agrees), **dropped** (whoever raised it conceded) or **still disputed**, and the inquiry
+window shows it as one back-and-forth per point. The first pass stays separate on purpose: models
+that read each other first tend to converge. Then the chat's own model, the primary handler,
+gets both reports, the exchange and the ledger, settles each disputed point by checking it
+itself, and replies in the chat with a per-reviewer summary, a ranked table of
 verified issues and an overall recommendation (use as is / fix first / don't use). The
 reviewers' chats are in the sidebar as "QA Hound · …" and in the activity log, so their working
-is inspectable and exportable. While it runs, the inquiry window shows the three stages (Review, Challenge,
+is inspectable and exportable. While it runs, the inquiry window shows the three stages (Review, Cross-examination,
 Verdict) and which one it is on, time and spend against your limits, and each reviewer's card:
 what it is doing right now, how much it has read, and once its report is in, how many findings it
 lists and what it recommends. **Keep working** closes the window and the review carries on (the

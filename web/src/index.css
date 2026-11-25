@@ -1702,3 +1702,33 @@ kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 6px; border: 1px
 .theatre-log li.error > span:last-child { color: var(--bad); }
 .theatre-steps li.failed { border-color: var(--bad); color: var(--text); }
 .theatre-steps li.failed .step-dot { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+/* QA Hound: the cross-examination as one back-and-forth (SwarmTheatre.tsx Debate) */
+.theatre-debate { margin: 2px 18px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); overflow: hidden; }
+.debate-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.debate-filter { display: flex; flex-wrap: wrap; gap: 4px; }
+.debate-filter button { border: 1px solid var(--line-2); background: none; color: var(--text-2); font: inherit; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.debate-filter button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.debate-list { max-height: 320px; overflow-y: auto; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.debate-group-title { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.debate-group-title .muted { font-weight: 400; }
+.debate-group.disputed .debate-group-title { color: var(--warn); }
+.debate-group.confirmed .debate-group-title { color: var(--ok); }
+.debate-point { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); margin-bottom: 5px; }
+.debate-point summary { display: flex; align-items: baseline; gap: 8px; padding: 6px 9px; cursor: pointer; font-size: 12.5px; list-style: none; min-width: 0; }
+.debate-point summary::-webkit-details-marker { display: none; }
+.point-id { flex: none; font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.debate-point .sev { flex: none; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); }
+.debate-point .sev.critical, .debate-point .sev.high { border-color: var(--bad); color: var(--bad); }
+.debate-point .sev.medium { border-color: var(--warn); color: var(--warn); }
+.point-what { min-width: 0; overflow-wrap: anywhere; }
+.debate-group.dropped .point-what { text-decoration: line-through; color: var(--muted); }
+.point-body { display: flex; flex-direction: column; gap: 5px; padding: 0 9px 8px 9px; }
+.point-turn { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr); gap: 10px; font-size: 12.5px; line-height: 1.4; padding: 5px 8px; border-radius: 8px; background: var(--panel-2); border-left: 3px solid var(--line-2); }
+.point-turn.other { margin-left: 18px; }
+.point-turn.refute, .point-turn.cant-tell { border-left-color: var(--warn); }
+.point-turn.agree, .point-turn.hold { border-left-color: var(--ok); }
+.point-turn.concede { border-left-color: var(--muted); }
+.turn-who { min-width: 0; overflow-wrap: anywhere; }
+.turn-why { min-width: 0; overflow-wrap: anywhere; color: var(--text-2); }
+@media (max-width: 620px) { .point-turn { grid-template-columns: 1fr; gap: 2px; } .point-turn.other { margin-left: 8px; } }

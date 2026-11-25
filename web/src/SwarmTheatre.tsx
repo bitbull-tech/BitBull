@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Model, type Swarm, type SwarmRooms } from './api'
+import { api, type DebatePoint, type Model, type Swarm, type SwarmRooms } from './api'
 import { IconX } from './icons'
 import { dogFor } from './dogs'
 
@@ -191,7 +191,7 @@ const thin = (e: { tools: number; files: number }) => e.files < 5 || e.tools < 8
 
 const PHASE_LINE: Record<Swarm['phase'], string> = {
   review: 'Working the case separately. Neither has seen the other’s notes.',
-  challenge: 'Cross-examination: each has read the other’s report and is trying to knock it down.',
+  challenge: 'Cross-examination: each is attacking the other’s findings point by point, and defending its own.',
   final: 'The Chief Inspector is weighing both files and writing the verdict.',
   done: 'Verdict delivered — it’s in the chat.',
   error: 'The investigation broke down.',
@@ -287,11 +287,11 @@ function RoomsPanel({ s }: { s: Swarm & SwarmRooms }) {
 
 const STEPS: Array<{ id: 'review' | 'challenge' | 'final'; label: string; hint: string }> = [
   { id: 'review', label: 'Review', hint: 'each works the case alone' },
-  { id: 'challenge', label: 'Challenge', hint: 'each tries to knock the other’s report down' },
+  { id: 'challenge', label: 'Cross-examination', hint: 'point by point, up to 3 rounds' },
   { id: 'final', label: 'Verdict', hint: 'the Chief Inspector weighs both' },
 ]
 const NEXT: Record<Swarm['phase'], string> = {
-  review: 'Next: they read each other’s reports and challenge them.',
+  review: 'Next: they cross-examine each other, point by point, for up to three rounds.',
   challenge: 'Next: the Chief Inspector weighs both files and writes the verdict in the chat.',
   final: 'Next: the verdict lands in the chat this started from.',
   done: '',
@@ -312,6 +312,84 @@ const VERDICT: Record<NonNullable<Swarm['verdict']>, { text: string; cls: string
 const SAYS: Record<NonNullable<Swarm['verdict']>, string> = { use: 'use it', 'fix-first': 'fix first', 'do-not-use': 'do not use' }
 const clock = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s` : `${sec}s`)
 const STATUS: Record<Swarm['reviewers'][number]['status'], string> = { pending: 'waiting for the brief', reviewing: 'reviewing', challenging: 'cross-examining', done: 'case closed', error: 'failed' }
+
+const STANCE: Record<DebatePoint['turns'][number]['stance'], string> = { agree: 'agrees', refute: 'objects', 'cant-tell': 'can’t tell', hold: 'holds', concede: 'concedes' }
+const POINT_GROUPS: Array<{ status: DebatePoint['status']; title: string; hint: string }> = [
+  { status: 'disputed', title: 'Still disputed', hint: 'They didn’t settle these. The Chief Inspector decides each one.' },
+  { status: 'open', title: 'In play', hint: 'Waiting for an answer in the next round.' },
+  { status: 'confirmed', title: 'Confirmed', hint: 'The other one checked it and agrees.' },
+  { status: 'dropped', title: 'Dropped', hint: 'Whoever raised it conceded.' },
+]
+
+/**
+ * The cross-examination as one back-and-forth: every point either reviewer raised, who attacked
+ * it, who held and who conceded. The full working is still in their two chats.
+ */
+function Debate({ s }: { s: Swarm }) {
+  const points = s.debate ?? []
+  const [show, setShow] = useState<DebatePoint['status'] | 'all'>('all')
+  if (!points.length) return null
+  const who = (i: number) => (s.reviewers[i] ? persona(s.reviewers[i].model) : `Reviewer ${i + 1}`)
+  const count = (st: DebatePoint['status']) => points.filter((p) => p.status === st).length
+  const running = s.phase === 'challenge'
+  return (
+    <section className="theatre-debate" aria-label="The cross-examination">
+      <div className="debate-head">
+        <b>The cross-examination</b>
+        <span className="muted small">
+          {running ? `round ${s.round ?? 1} of up to 3` : `${s.round ?? 1} round${(s.round ?? 1) === 1 ? '' : 's'}`} · {points.length} point{points.length === 1 ? '' : 's'}
+        </span>
+        <span className="grow" />
+        <div className="debate-filter" role="tablist" aria-label="Show">
+          <button type="button" role="tab" aria-selected={show === 'all'} className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>
+            All
+          </button>
+          {POINT_GROUPS.filter((g) => count(g.status) > 0).map((g) => (
+            <button type="button" role="tab" key={g.status} aria-selected={show === g.status} className={`${g.status} ${show === g.status ? 'on' : ''}`} onClick={() => setShow(g.status)} title={g.hint}>
+              {g.title} {count(g.status)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="debate-list">
+        {POINT_GROUPS.filter((g) => (show === 'all' || show === g.status) && count(g.status) > 0).map((g) => (
+          <div key={g.status} className={`debate-group ${g.status}`}>
+            <div className="debate-group-title">
+              {g.title} <span className="muted small">{g.hint}</span>
+            </div>
+            {points
+              .filter((p) => p.status === g.status)
+              .map((p) => (
+                <details key={p.id} className="debate-point" open={g.status === 'disputed' || g.status === 'open'}>
+                  <summary>
+                    <span className="point-id">{p.id}</span>
+                    {p.severity && <span className={`sev ${p.severity}`}>{p.severity}</span>}
+                    <span className="point-what">{p.what}</span>
+                  </summary>
+                  <div className="point-body">
+                    <span className="muted small">
+                      Raised by {who(p.owner)}
+                      {p.raised ? ` in round ${p.raised}, as something the other missed` : ' in its report'}
+                      {p.location ? ` · ${p.location}` : ''}
+                    </span>
+                    {p.turns.length === 0 && <span className="muted small">{running ? 'Not answered yet.' : 'The other one never answered it.'}</span>}
+                    {p.turns.map((t, i) => (
+                      <div key={i} className={`point-turn ${t.by === p.owner ? 'own' : 'other'} ${t.stance}`}>
+                        <span className="turn-who">
+                          <span className="muted">R{t.round}</span> {who(t.by)} <b>{STANCE[t.stance]}</b>
+                        </span>
+                        <span className="turn-why">{t.why || 'No reason given.'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 const CAUSE_TITLE: Record<NonNullable<Swarm['cause']>, string> = {
   network: 'The connection dropped',
@@ -591,6 +669,8 @@ export function SwarmTheatre({
             )
           })}
         </div>
+
+        <Debate s={s} />
 
         {s.phase === 'done' && (
           <div className={`theatre-verdict ${s.verdict ? VERDICT[s.verdict].cls : ''}`}>

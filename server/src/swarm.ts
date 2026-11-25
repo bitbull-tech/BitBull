@@ -12,6 +12,7 @@ import { findRepos, inspectRepo } from "./repos.js";
 import { headChecks, openPrFor, parseGithubRemote, postReview, prFiles, type GhRepo, type OpenPr } from "./github.js";
 import { agreementCheck, benchmarkCheck, ciCheck, commitCheck, coverageCheck, excerptPrompt, parsePosition, peopleCheck, plant, plantedCaught, plantedCheck, quotesCheck, removePlanted, safeName, secretsCheck, verifyFindings, PLANT_LABEL, type Check, type HeadChecks, type Planted, type PlantedResult } from "./houndChecks.js";
 import { gradeOf } from "./houndBench.js";
+import { applyReply, challengeLines, closeDebate, crossLines, ledgerText, MAX_ROUNDS, needsOf, parseReply, startDebate, tally, type DebatePoint, type Reply } from "./houndDebate.js";
 import { FINDINGS_FENCE, houndOptions, parseFindings, prBody, prEvent, type Finding, type HoundOptions, type Verdict } from "./hound.js";
 import { cathedralReady, createRoom, deleteRoom, grantRoom, helper, revokeRoom, roomFor } from "./cathedral.js";
 import { isUnattended } from "./mcp.js";
@@ -98,6 +99,10 @@ export interface Swarm {
   stopped?: string;
   /** the owner pressed Stop: reviewers are halted and no verdict is written */
   stopAsked?: boolean;
+  /** the cross-examination, point by point: who raised what, who attacked it, who conceded (houndDebate.ts) */
+  debate?: DebatePoint[];
+  /** which round of it is running (1 to 3) */
+  round?: number;
   /** what happened, in order: stages, retries, what failed and why (also in the Activity log) */
   log: RunLine[];
   /** the run this one picks up from, and the one that picked up from this */
@@ -582,12 +587,13 @@ function scopeLines(o: HoundOptions): string[] {
   return out;
 }
 
-function challengePrompt(s: Swarm, me: SwarmReviewer, others: SwarmReviewer[]) {
+function challengePrompt(s: Swarm, me: SwarmReviewer, others: SwarmReviewer[], debate: string[] = []) {
   const reports = others.map((o) => `### Report from ${o.model}\n\n${fence(o.report || "(no report: the reviewer failed)")}`).join("\n\n");
   return [
     `Challenge round. Below are the other reviewer(s)' reports on \`${s.target}\`. Same rules as before (read-only).${openRoom(s) ? ` The confidential sandbox is still open (cathedral_review_exec, sandbox_id ${openRoom(s)}): check a claim by running it there, and cite the command and exit code.` : ""}`,
     FENCE_NOTE,
-    `For each of their findings: verify it against the code and say **agree** (with your own evidence), **refute** (with evidence of why it is wrong or overstated), or **can't tell**. Then list what they missed that you found, and anything you now withdraw or downgrade from your own report after reading theirs.`,
+    `For each of their findings: verify it against the target and say **agree** (with your own evidence), **refute** (with evidence of why it is wrong or overstated), or **can't tell**. Then list what they missed that you found, and anything you now withdraw or downgrade from your own report after reading theirs.`,
+    ...debate,
     `Finish with ## Final position: your consolidated findings (severity, location, one line each), scores 1–5 for ${s.focus.map((f) => FOCUS_LABEL[f]).join(", ")}, and your recommendation in one sentence: use as is / fix first (which) / do not use.`,
     ...sourceLines(s.options, "reviewer"),
     RECOMMEND_LINE,
@@ -641,12 +647,19 @@ function roomLines(s: Swarm): string[] {
 function finalPrompt(s: Swarm) {
   const parts = s.reviewers.map(
     (r) =>
-      `## Reviewer: ${r.model}${r.status === "error" ? ` (failed: ${r.error ?? "unknown error"})` : ""}\n\n${effortLine(r, s.planted?.find((x) => x.model === r.model))}\n\n### Initial report\n\n${fence(r.report || "(none)")}\n\n### After the challenge round\n\n${fence(r.rebuttal || "(none)")}`,
+      `## Reviewer: ${r.model}${r.status === "error" ? ` (failed: ${r.error ?? "unknown error"})` : ""}\n\n${effortLine(r, s.planted?.find((x) => x.model === r.model))}\n\n### Initial report\n\n${fence(r.report || "(none)")}\n\n### In the cross-examination\n\n${fence(r.rebuttal || "(none)")}`,
   );
+  // the ledger carries the reviewers' own words: data, like their reports
+  const ledger = s.debate?.length ? fence(ledgerText(s.debate, s.reviewers.map((r) => r.model))) : "";
   return [
     `A QA Hound review just finished on \`${s.target}\` (${s.focus.map((f) => FOCUS_LABEL[f]).join(", ")}). ${s.reviewers.length} reviewer(s) on other models reviewed it independently and then challenged each other; their full chats are in the sidebar as "QA Hound · …". You are the primary handler: weigh their work and give the owner a verdict.`,
     FENCE_NOTE,
     `A reviewer's authority comes from what it opened, not how it writes: a confident report produced from one or two tool calls is not evidence, and saying so is more useful to the owner than summarising it. Weigh the reports by the evidence line above each one.`,
+    ...(ledger
+      ? [
+          `The reviewers cross-examined each other, and BitBull kept a ledger of every point (below, after the reports): confirmed, dropped, or still disputed. Use it as the spine of your verdict. Settle every disputed point yourself by checking the target and say who was right; don't split the difference. A point both agree on is strong evidence, not proof; a point its owner conceded stays out unless your own check says otherwise.`,
+        ]
+      : []),
     ...scopeLines(s.options),
     ...sourceLines(s.options, "handler"),
     ...roomLines(s),
@@ -659,6 +672,7 @@ function finalPrompt(s: Swarm) {
       `List every issue you verified or that is still open, at any severity: BitBull applies the thresholds. **confidence** is your own score, 0–100, that the finding is real after checking: 90+ only when you confirmed it in the code yourself; 70–89 when a reviewer gave concrete evidence and nobody refuted it; under 70 when it is disputed, unverified, or rests on thin evidence. Omit "line" when you don't know it. **quote** is one to three lines copied character for character from the file at "path" (open the file and copy them; use \\n between lines): BitBull looks for the quote in the file, and a finding whose quote isn't there is held back and counts against the whole verdict, so never write it from memory or from a reviewer's paraphrase. Leave "quote" out only when the finding is about something that is absent. Copy minSeverity and minConfidence as given.`,
     ].join("\n"),
     ...parts,
+    ...(ledger ? [ledger] : []),
   ].join("\n\n");
 }
 
@@ -731,6 +745,9 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
   // The challenge round stands only if nothing it was about has changed: every seat kept, each with its rebuttal.
   if (carry && s.reviewers.every((r) => r.kept) && carry.from.reviewers.every((r) => r.rebuttal)) {
     s.reviewers.forEach((r, i) => ((r.rebuttal = carry.from.reviewers[i].rebuttal), (r.final = carry.from.reviewers[i].final)));
+    // the ledger as it stood; what was still open when that run ended is a dispute for the verdict
+    if (carry.from.debate) s.debate = closeDebate(JSON.parse(JSON.stringify(carry.from.debate)) as DebatePoint[]);
+    s.round = carry.from.round;
   }
   swarms.set(s.id, s);
   if (carry) {
@@ -948,29 +965,64 @@ export function startSwarm(input: { sessionId: string; target: string; models: s
         note(s, "info", "The challenge round from before stands: nothing it was about has changed.");
         for (const r of alive) r.status = "done";
       } else if (alive.length > 1 && !s.stopped) {
+        // The cross-examination (houndDebate.ts): up to three rounds over a ledger of numbered points.
         s.phase = "challenge";
-        note(s, "info", `Challenge round: ${alive.map((r) => r.model).join(" and ")} read each other's reports.`);
+        const seat = (r: SwarmReviewer) => alive.indexOf(r);
+        s.debate = startDebate(alive.map((r) => r.report));
+        for (const r of alive) (r.status = "challenging"), (r.rebuttal = undefined);
+        note(s, "info", `Cross-examination: ${alive.map((r) => r.model).join(" and ")} go at each other's findings (${s.debate.length ? `${s.debate.length} numbered points` : "no findings table to number, so in prose"}), up to ${MAX_ROUNDS} rounds.`);
+        for (let round = 1; round <= MAX_ROUNDS && !s.stopped; round++) {
+          const debate = s.debate;
+          const needs = alive.map((r) => needsOf(debate, seat(r)));
+          const idle = (i: number) => round > 1 && !needs[i].defend.length && !needs[i].judge.length;
+          if (alive.every((_, i) => idle(i))) {
+            note(s, "info", `Nothing is left waiting for an answer after round ${round - 1}, so the cross-examination ends there.`);
+            break;
+          }
+          s.round = round;
+          saveRun(s);
+          const replies: Array<Reply | undefined> = alive.map(() => undefined);
+          let failed = false;
+          await Promise.all(
+            alive.map(async (r, i) => {
+              if (idle(i)) return; // nothing was put to this one
+              const rs = sessions.get(r.sessionId)!;
+              const other = alive.filter((x) => x !== r);
+              const prompt =
+                round === 1
+                  ? challengePrompt(s, r, other, challengeLines(debate, i))
+                  : [...crossLines(debate, i, round, needs[i]), ...sourceLines(s.options, "reviewer"), RECOMMEND_LINE].join("\n\n");
+              const out = await attempt(r, rs, prompt, round === 1 ? "challenge round" : `cross-examination, round ${round}`);
+              forgetTally(r.turnId);
+              r.turnId = undefined;
+              r.toolCalls += out.effort.tools;
+              r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
+              if (!out.text || !(out.ok || s.stopped)) {
+                failed = true;
+                // round 1 is the challenge itself: without it this reviewer has no say. Later rounds only lose its last answers.
+                if (round === 1) (r.status = "error"), (r.error = out.error ?? "no output");
+                note(s, "error", `${r.model} failed in round ${round} of the cross-examination: ${(out.error ?? "no output").slice(0, 300)}`);
+                return;
+              }
+              r.rebuttal = `${r.rebuttal ? `${r.rebuttal}\n\n---\n\n` : ""}### Round ${round}\n\n${out.text}`;
+              r.final = parsePosition(out.text) ?? r.final;
+              replies[i] = parseReply(out.text);
+              if (!replies[i]) note(s, "warn", `${r.model}'s round ${round} reply had no readable answer block, so its answers are not in the ledger (they are in its chat, and the verdict still reads them).`);
+            }),
+          );
+          // both replies go in together: neither saw the other's answers from this round
+          let changed = 0;
+          alive.forEach((_, i) => (changed += applyReply(debate, i, replies[i], round, needs[i], round < MAX_ROUNDS)));
+          const t = tally(debate);
+          note(s, "info", `Round ${round}: ${t.confirmed} confirmed, ${t.dropped} conceded, ${t.open} still open${alive.map((r) => (r.final ? `; ${r.model} says ${r.final}` : "")).join("")}.`);
+          saveRun(s);
+          if (failed || !changed) break;
+        }
+        closeDebate(s.debate);
+        const end = tally(s.debate);
+        if (s.debate.length) note(s, "info", `Cross-examination over after ${s.round ?? 1} round${s.round === 1 ? "" : "s"}: ${end.confirmed} confirmed, ${end.dropped} dropped, ${end.disputed} left for the verdict to settle.`);
+        for (const r of alive) if (r.status !== "error") r.status = "done";
         saveRun(s);
-        await Promise.all(
-          alive.map(async (r) => {
-            const rs = sessions.get(r.sessionId)!;
-            r.status = "challenging";
-            r.rebuttal = undefined;
-            const out = await attempt(r, rs, challengePrompt(s, r, alive.filter((x) => x !== r)), "challenge round");
-            forgetTally(r.turnId);
-            r.turnId = undefined;
-            r.toolCalls += out.effort.tools;
-            r.filesRead = [...new Set([...r.filesRead, ...out.effort.files])];
-            r.rebuttal = out.text;
-            r.final = parsePosition(out.text);
-            r.status = out.text && (out.ok || s.stopped) ? "done" : "error";
-            if (r.status === "error") {
-              r.error = out.error ?? "no output";
-              note(s, "error", `${r.model} failed in the challenge round: ${r.error.slice(0, 300)}`);
-            } else note(s, "info", `${r.model} finished the challenge round${r.final ? `: says ${r.final}` : ""}.`);
-            saveRun(s);
-          }),
-        );
       } else {
         for (const r of alive) r.status = "done";
       }
